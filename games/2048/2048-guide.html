@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2048 — strategy guide</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; padding: 1.2rem; max-width: 46rem;
+    font-family: system-ui, sans-serif; line-height: 1.55; background: #faf8ef; color: #776e65;
+  }
+  h1 { margin: 0 0 .2rem; font-size: 1.7rem; }
+  h2 { margin: 2.2rem 0 .4rem; font-size: 1.15rem; border-bottom: 2px solid #bbada0; padding-bottom: .25rem; }
+  p { margin: .6rem 0; }
+  a { color: #8f7a66; }
+  .lead { font-size: 1.05rem; }
+  em { font-style: normal; font-weight: 700; color: #8f7a66; }
+  .figs { display: flex; flex-wrap: wrap; gap: 1.2rem; margin: 1rem 0; }
+  figure { margin: 0; flex: 1 1 190px; max-width: 230px; }
+  figcaption { font-size: .85rem; margin-top: .4rem; }
+  figure.good figcaption b { color: #4c9a2a; }
+  figure.bad  figcaption b { color: #c0392b; }
+  .board {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+    background: #bbada0; padding: 4px; border-radius: 6px; aspect-ratio: 1;
+  }
+  .board div {
+    display: flex; align-items: center; justify-content: center; background: #cdc1b4;
+    border-radius: 4px; font-weight: 700; font-size: clamp(.7rem, 3.6vw, 1.1rem); color: #776e65;
+  }
+  .board div[data-v="2"]    { background: #eee4da; }
+  .board div[data-v="4"]    { background: #ede0c8; }
+  .board div[data-v="8"]    { background: #f2b179; color: #f9f6f2; }
+  .board div[data-v="16"]   { background: #f59563; color: #f9f6f2; }
+  .board div[data-v="32"]   { background: #f67c5f; color: #f9f6f2; }
+  .board div[data-v="64"]   { background: #f65e3b; color: #f9f6f2; }
+  .board div[data-v="128"]  { background: #edcf72; color: #f9f6f2; }
+  .board div[data-v="256"]  { background: #edcc61; color: #f9f6f2; }
+  .board div[data-v="512"]  { background: #edc850; color: #f9f6f2; }
+  .board div[data-v="1024"] { background: #edc53f; color: #f9f6f2; }
+  .board div[data-v="2048"] { background: #edc22e; color: #f9f6f2; }
+  details { background: #eee4da; border-radius: 6px; padding: .6rem .9rem; margin: .6rem 0; }
+  summary { cursor: pointer; font-weight: 700; }
+  footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 2px solid #bbada0; }
+</style>
+</head>
+<body>
+<h1>2048 — strategy guide</h1>
+<p class="lead">2048 isn't won by clever single moves. It's won by <em>never undoing your own progress</em>. Everything below follows from three rules.</p>
+
+<h2>The one idea</h2>
+<p>Your biggest tile is your whole board. Every move either feeds it or hurts it. You lose when that tile gets dragged out of its corner and buried, not when the board fills up.</p>
+
+<h2>Rule 1 — Claim a corner</h2>
+<p>Put your largest tile in a corner and treat that corner as home. A corner tile has only two neighbours, and — if you're careful with directions — it can never be moved. Anchor it bottom-left.</p>
+<div class="figs">
+  <figure class="good">
+    <div class="board" data-tiles="0,0,0,0, 0,2,0,0, 4,8,16,4, 128,32,8,2"></div>
+    <figcaption><b>✓ Good.</b> 128 parked in the corner, smaller tiles fanning out from it.</figcaption>
+  </figure>
+</div>
+
+<h2>Rule 2 — Only ever swipe Left and Down</h2>
+<p>With home in the bottom-left, swiping <em>Left</em> or <em>Down</em> keeps the anchor where it is. Swiping <em>Up</em> or <em>Right</em> drags it out of the corner. So from here on, those are your only two moves — even when another swipe looks tempting.</p>
+<div class="figs">
+  <figure class="good">
+    <div class="board" data-tiles="0,0,0,0, 0,2,0,4, 4,0,8,0, 128,0,0,2"></div>
+    <figcaption><b>✓ Swipe Left.</b> Tiles pack toward the corner; the 128 stays put.</figcaption>
+  </figure>
+  <figure class="bad">
+    <div class="board" data-tiles="0,0,0,0, 0,0,2,4, 0,0,4,8, 0,0,128,2"></div>
+    <figcaption><b>✗ Then Swipe Right.</b> The gap after the 128 let it slide off the corner. Home is lost.</figcaption>
+  </figure>
+</div>
+
+<h2>Rule 3 — Build a staircase</h2>
+<p>Keep your rows and columns getting smaller as they leave the corner. Then two big tiles can only ever slide into each other — they never get walled off by a small tile in between. This ordered layout is the classic "snake", and it's the shape you want most of the time.</p>
+<div class="figs">
+  <figure class="good">
+    <div class="board" data-tiles="0,0,0,0, 0,4,2,0, 32,16,8,4, 128,64,32,16"></div>
+    <figcaption><b>✓ Staircase.</b> Every row and column shrinks away from the 128. New tiles land in the top-right and get worked down into the chain.</figcaption>
+  </figure>
+</div>
+
+<h2>The most common mistake</h2>
+<p>Two small tiles want to merge in a column. You can reach them with <em>Up</em> or <em>Down</em> — both merge them. Pick the direction that doesn't move your anchor.</p>
+<div class="figs">
+  <figure class="bad">
+    <div class="board" data-tiles="128,64,32,4, 0,0,0,4, 0,0,0,0, 0,0,0,0"></div>
+    <figcaption><b>✗ Swiped Up.</b> The 2s merged into a 4 … and the 128 yanked all the way to the top-left. One merge, whole position gone.</figcaption>
+  </figure>
+  <figure class="good">
+    <div class="board" data-tiles="0,0,0,0, 0,0,0,0, 0,0,0,4, 128,64,32,4"></div>
+    <figcaption><b>✓ Swiped Down.</b> Same merge, but the 128 stays home. Same board, opposite direction — only one is right.</figcaption>
+  </figure>
+</div>
+<p>That pair started as <code>0,0,0,2 / 0,0,0,2 / 0,0,0,0 / 128,64,32,4</code>. The lesson: when two directions both merge, the tie-breaker is always "which one keeps the anchor?".</p>
+
+<h2>Practice</h2>
+<p>Anchor is the 128, bottom-left. Which way, and why?</p>
+
+<p><strong>1.</strong> Two 2s sit in the top row: <code>2,0,0,2 / 0,0,0,0 / 0,0,0,0 / 128,64,4,0</code></p>
+<details><summary>Answer</summary>
+<p><em>Left.</em> It merges the two 2s into a 4 <em>and</em> keeps the 128 in its corner. Right would merge them too, but it slides the anchor off the corner. Down keeps the corner but leaves the two 2s stranded apart.</p>
+</details>
+
+<p><strong>2.</strong> A column of pairs: <code>0,0,2,0 / 0,0,2,0 / 0,0,4,0 / 128,64,4,0</code></p>
+<details><summary>Answer</summary>
+<p><em>Down.</em> Both pairs merge into the bottom two rows (2+2→4, 4+4→8) close to the anchor. Up does the same merges but lifts the 128 to the top — never trade the anchor for a merge.</p>
+</details>
+
+<p><strong>3.</strong> A tempting horizontal pair: <code>0,0,0,0 / 0,0,0,4 / 0,0,8,8 / 128,0,4,2</code></p>
+<details><summary>Answer</summary>
+<p><em>Left.</em> It merges the two 8s into a 16 and leaves the 128 at home. Right merges them too, but the gap after the 128 lets the anchor drift right, off the corner. Rule 2 saves you here: Right is simply never an option.</p>
+</details>
+
+<h2>When it goes wrong</h2>
+<p>If the anchor does leave the corner, stop chasing merges and spend two or three moves shoving it back with <em>Left</em> and <em>Down</em> alone. Better to lose a little score than to lose the whole game.</p>
+
+<footer><a href="2048.html">← Back to the game</a></footer>
+
+<script>
+document.querySelectorAll('.board').forEach(b => {
+  (b.dataset.tiles || '').split(',').forEach(v => {
+    const d = document.createElement('div');
+    v = +v;
+    d.textContent = v || '';
+    d.dataset.v = v || '';
+    b.append(d);
+  });
+});
+</script>
+</body>
+</html>

@@ -31,3 +31,19 @@ Both mirror with `rsync --delete` and skip `.git/`.
 
 Then, you can review the changes in `~/workspaces/your-github-slug/repo-name` with VSCode or whatever floats your goat.  
 And that's pretty cool!
+
+## Games
+
+| game | controls |
+|---|---|
+| [2048](games/2048/2048.html) | arrow keys / WASD / swipe. Includes a [strategy guide](games/2048/2048-guide.html). |
+| [icewall](games/icewall/icewall.html) | drag a shape from the tray onto the board. |
+
+Preview, and share to your phone:
+
+    node serve.mjs                                   # http://localhost:8000 (serves games/ only)
+    cloudflared tunnel --url http://localhost:8000   # public https url for the phone
+
+Run the game logic tests:
+
+    node --test
