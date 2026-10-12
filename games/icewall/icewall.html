@@ -23,8 +23,7 @@
     --w: 10; --h: 16;
     position: relative; width: min(94vw, 40vh); aspect-ratio: 10 / 16;
     background: linear-gradient(#0a1122, #16233f); border-radius: 8px;
-    touch-action: none; box-shadow: 0 20px 45px rgba(0, 0, 0, .5);
-    transform: perspective(1100px) rotateX(12deg); transform-style: preserve-3d;
+    touch-action: none; box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
   }
   .slot, .block { position: absolute; width: calc(100% / var(--w)); height: calc(100% / var(--h)); }
   .slot { border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(90, 130, 190, .16); }
@@ -32,9 +31,13 @@
 
   .block { transition: left .28s cubic-bezier(.3, .8, .4, 1), top .28s cubic-bezier(.3, .8, .4, 1); will-change: left, top; }
   .block::after {
-    content: ''; position: absolute; inset: 6%; border-radius: 3px;
-    background: linear-gradient(160deg, #d6f4ff 0%, #7fd6ff 45%, #2f8fd0 100%);
-    box-shadow: inset 0 2px 0 rgba(255, 255, 255, .85), inset 0 -4px 7px rgba(0, 40, 80, .5), 0 3px 5px rgba(0, 0, 0, .4);
+    content: ''; position: absolute; inset: 5%; border-radius: 4px;
+    background: linear-gradient(160deg, #f2fbff 0%, #b6e9ff 18%, #7fd6ff 46%, #3f9fd8 74%, #2a6fae 100%);
+    box-shadow:
+      inset 0 3px 2px -1px rgba(255, 255, 255, .95),
+      inset 3px 0 3px -2px rgba(255, 255, 255, .6),
+      inset -3px -4px 6px -1px rgba(0, 35, 70, .65),
+      0 4px 6px rgba(0, 0, 0, .5);
   }
   .block.freeze { animation: freeze .22s ease-out; }
   @keyframes freeze { from { transform: scale(1.16); filter: brightness(2.4); } to { transform: scale(1); filter: none; } }
@@ -50,9 +53,12 @@
   }
   .shape { position: relative; cursor: grab; }
   .pc {
-    position: absolute; width: var(--pc); height: var(--pc); border-radius: 3px;
-    background: linear-gradient(160deg, #d6f4ff, #7fd6ff 45%, #2f8fd0);
-    box-shadow: inset 0 2px 0 rgba(255, 255, 255, .85), 0 2px 4px rgba(0, 0, 0, .4);
+    position: absolute; width: var(--pc); height: var(--pc); border-radius: 4px;
+    background: linear-gradient(160deg, #f2fbff 0%, #b6e9ff 18%, #7fd6ff 46%, #3f9fd8 74%, #2a6fae 100%);
+    box-shadow:
+      inset 0 2px 1px -1px rgba(255, 255, 255, .95),
+      inset -2px -3px 4px -1px rgba(0, 35, 70, .6),
+      0 3px 4px rgba(0, 0, 0, .45);
   }
 
   #ghost { position: fixed; z-index: 10; pointer-events: none; opacity: .8; }
@@ -203,7 +209,7 @@ function renderTray() {
       pc.style.top = `calc(var(--pc) * ${r})`;
       box.append(pc);
     }
-    box.addEventListener('pointerdown', e => startDrag(e, i));
+    box.addEventListener('pointerdown', e => onDown(e, i));
     el.append(box);
   });
 }
@@ -227,7 +233,9 @@ function init() {
 }
 
 // --- drag and drop (pointer events cover mouse and touch) --------------------------
-let drag = null, hinted = [];
+// A tap on a tray shape rotates it; a drag places it. We only start dragging once the
+// finger has moved past a threshold, so a tap never creates a ghost.
+let drag = null, pending = null, hinted = [];
 
 function highlight(list) {
   for (const i of hinted) slots[i].className = 'slot';
@@ -235,9 +243,51 @@ function highlight(list) {
   for (const i of hinted) slots[i].className = 'slot hint';
 }
 
-function startDrag(e, index) {
-  if (over || busy) return;
+const rotate = shape => {
+  const h = Math.max(...shape.map(p => p[0]));
+  const cells = shape.map(([r, c]) => [c, h - r]);
+  const r0 = Math.min(...cells.map(p => p[0])), c0 = Math.min(...cells.map(p => p[1]));
+  return cells.map(([r, c]) => [r - r0, c - c0]);
+};
+
+function onDown(e, index) {
+  if (over || busy || !tray[index]) return;
   e.preventDefault();
+  pending = { index, x: e.clientX, y: e.clientY };
+  addEventListener('pointermove', onMove);
+  addEventListener('pointerup', onUp);
+  addEventListener('pointercancel', onCancel);
+}
+
+function onMove(e) {
+  if (!drag && pending) {
+    if (Math.hypot(e.clientX - pending.x, e.clientY - pending.y) < 8) return;
+    beginDrag(e, pending.index);
+  }
+  if (drag) moveDrag(e);
+}
+
+const endListeners = () => {
+  removeEventListener('pointermove', onMove);
+  removeEventListener('pointerup', onUp);
+  removeEventListener('pointercancel', onCancel);
+};
+
+function onUp() {
+  endListeners();
+  if (drag) endDrag();
+  else if (pending) { tray[pending.index] = rotate(tray[pending.index]); renderTray(); }
+  pending = null;
+}
+
+// gesture interrupted (e.g. the OS takes over): drop everything, place nothing
+function onCancel() {
+  endListeners();
+  if (drag) { drag.ghost.remove(); highlight([]); drag = null; }
+  pending = null;
+}
+
+function beginDrag(e, index) {
   const shape = tray[index];
   const rect = boardEl.getBoundingClientRect(), cell = rect.width / W;
   const ghost = document.createElement('div');
@@ -253,8 +303,6 @@ function startDrag(e, index) {
   document.body.append(ghost);
   drag = { index, shape, ghost, cell, rect, r: 0, c: 0 };
   moveDrag(e);
-  addEventListener('pointermove', moveDrag);
-  addEventListener('pointerup', endDrag);
 }
 
 function moveDrag(e) {
@@ -271,8 +319,6 @@ function moveDrag(e) {
 }
 
 function endDrag() {
-  removeEventListener('pointermove', moveDrag);
-  removeEventListener('pointerup', endDrag);
   if (!drag) return;
   const { index, shape, r, c, ghost } = drag;
   ghost.remove();

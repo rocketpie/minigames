@@ -122,3 +122,38 @@ test('a drop with a used slot still reports game state (no null crash)', () => {
   ev('drop(0, [[0,0]], 0, 0)');
   assert.equal(ev('typeof over'), 'boolean');
 });
+
+const connected = cells => {
+  const set = new Set(cells.map(p => p.join(',')));
+  const seen = new Set([cells[0].join(',')]);
+  const queue = [cells[0]];
+  while (queue.length) {
+    const [r, c] = queue.pop();
+    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const k = `${r + dr},${c + dc}`;
+      if (set.has(k) && !seen.has(k)) { seen.add(k); queue.push([r + dr, c + dc]); }
+    }
+  }
+  return seen.size === set.size;
+};
+
+test('rotating a shape keeps it connected and normalised', () => {
+  for (let i = 0; i < ev('SHAPES.length'); i++) {
+    const before = Array.from(ev(`SHAPES[${i}]`));
+    const after = Array.from(ev(`rotate(SHAPES[${i}])`), p => Array.from(p));
+    assert.equal(after.length, before.length, `shape ${i} cell count`);
+    assert.equal(Math.min(...after.map(p => p[0])), 0, `shape ${i} normalised row`);
+    assert.equal(Math.min(...after.map(p => p[1])), 0, `shape ${i} normalised col`);
+    assert.ok(connected(after), `shape ${i} stays connected`);
+  }
+});
+
+test('four rotations return the original shape', () => {
+  const key = cells => cells.map(p => p.join(',')).sort().join(' ');
+  for (let i = 0; i < ev('SHAPES.length'); i++) {
+    let cells = Array.from(ev(`SHAPES[${i}]`), p => Array.from(p));
+    const start = key(cells);
+    for (let k = 0; k < 4; k++) cells = Array.from(ev(`rotate(${JSON.stringify(cells)})`), p => Array.from(p));
+    assert.equal(key(cells), start, `shape ${i} is order-4`);
+  }
+});
