@@ -17,7 +17,7 @@ createServer(async (req, res) => {
   if (!file.startsWith(root)) return res.writeHead(403).end('forbidden');
   try {
     const body = await readFile(file);
-    res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' }).end(body);
+    res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-store' }).end(body);
   } catch {
     res.writeHead(404).end('not found');
   }

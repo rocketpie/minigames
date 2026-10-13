@@ -46,7 +46,15 @@ test('a tray holds three shapes from the set', () => {
   const shapes = Array.from(ev('SHAPES'));
   const tray = Array.from(ev('newTray()'));
   assert.equal(tray.length, 3);
-  assert.ok(tray.every(s => shapes.includes(s)), 'each drawn from SHAPES');
+  assert.ok(tray.every(s => shapes.includes(s.cells)), 'each drawn from SHAPES');
+});
+
+test('tray shapes carry a palette colour that rotation preserves', () => {
+  const palette = ev('PALETTE.length');
+  assert.ok(Array.from(ev('newTray()')).every(s => s.color >= 0 && s.color < palette), 'colour in range');
+  ev('tray = newTray(); globalThis.c0 = tray[0].color;');
+  ev('tray[0] = { cells: rotate(tray[0].cells), color: tray[0].color };');
+  assert.equal(ev('tray[0].color'), ev('c0'), 'rotation keeps the colour');
 });
 
 test('fits respects the board edges and occupied cells', () => {
@@ -83,16 +91,17 @@ test('a placement that does not fit is rejected', () => {
 
 test('multiplier grows on multi-clears and decays on single clears', () => {
   ev('mult = 1; score = 0');
-  assert.equal(ev('award(2)'), 2 * W * 10 * 2);
+  assert.equal(ev('award(2, 0)'), 2 * W * 10 * 2);
   assert.equal(ev('mult'), 2);
-  assert.equal(ev('award(3)'), 3 * W * 10 * 4, '2 + (3-1) rows');
+  assert.equal(ev('award(3, 0)'), 3 * W * 10 * 4, '2 + (3-1) lines');
   assert.equal(ev('mult'), 4);
-  assert.equal(ev('award(1)'), 1 * W * 10 * 3);
-  assert.equal(ev('award(1)'), 1 * W * 10 * 2);
-  assert.equal(ev('award(1)'), 1 * W * 10 * 1);
-  assert.equal(ev('award(1)'), 1 * W * 10 * 1, 'never below ×1');
-  assert.equal(ev('award(0)'), 0, 'no clear, no points');
+  assert.equal(ev('award(1, 0)'), 1 * W * 10 * 3);
+  assert.equal(ev('award(1, 0)'), 1 * W * 10 * 2);
+  assert.equal(ev('award(1, 0)'), 1 * W * 10 * 1);
+  assert.equal(ev('award(1, 0)'), 1 * W * 10 * 1, 'never below ×1');
+  assert.equal(ev('award(0, 0)'), 0, 'no clear, no points');
   assert.equal(ev('mult'), 1);
+  assert.equal(ev('award(0, 1)'), H * 10 * 1, 'a column scores per cell too');
 });
 
 test('canPlace finds a home or reports none', () => {
@@ -101,6 +110,50 @@ test('canPlace finds a home or reports none', () => {
   ev('grid[7 * W + 3] = 0');
   assert.equal(ev('canPlace([[0,0]])'), true);
   assert.equal(ev('canPlace([[0,0],[0,1]])'), false, 'needs two adjacent cells');
+});
+
+test('a full column is detected and cleared, freeing its cells', () => {
+  ev('grid = new Uint8Array(SIZE)');
+  ev('for (let r = 0; r < H - 1; r++) grid[r * W + 3] = 1');
+  assert.equal(ev('fullCols().length'), 0, 'not full yet');
+  ev('grid[(H - 1) * W + 3] = 1');
+  assert.deepEqual(Array.from(ev('fullCols()')), [3]);
+  assert.equal(ev('clearCols([3])'), 1);
+  assert.equal(ev('grid.every(v => !v)'), true, 'column cells freed');
+});
+
+test('a drop that completes a column clears it and scores', () => {
+  ev('grid = new Uint8Array(SIZE); blocks = Array(SIZE).fill(null); score = 0; mult = 1;');
+  ev('for (let r = 0; r < H - 1; r++) { grid[r * W + 4] = 1; addBlock(r, 4); }');
+  ev('tray = newTray();');
+  ev('drop(0, [[0,0]], H - 1, 4)');
+  assert.equal(ev('grid.every(v => !v)'), true, 'the full column was cleared');
+  assert.equal(ev('blocks.every(b => b === null)'), true, 'block layer matches the empty grid');
+  assert.equal(ev('score'), H * 10, 'scored 10 per cleared cell at ×1');
+});
+
+test('fuzz: after every drop no full line remains and the block layer matches the grid', () => {
+  ev('init()');
+  const fail = ev(`
+    (() => {
+      for (let n = 0; n < 3000; n++) {
+        if (over) init();
+        const idx = tray.findIndex(Boolean);
+        if (idx < 0) continue;
+        const shape = tray[idx].cells;
+        const spots = [];
+        for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) if (fits(shape, r, c)) spots.push([r, c]);
+        if (!spots.length) { tray[idx] = null; continue; }
+        const [r, c] = spots[(Math.random() * spots.length) | 0];
+        drop(idx, shape, r, c);
+        if (fullRows().length || fullCols().length) return 'line left uncleared at step ' + n;
+        for (let i = 0; i < SIZE; i++)
+          if ((blocks[i] !== null) !== (grid[i] === 1)) return 'block layer desync at cell ' + i + ', step ' + n;
+      }
+      return '';
+    })()
+  `);
+  assert.equal(fail, '', fail || 'ok');
 });
 
 test('clearing rows keeps the block layer in sync with the grid', () => {
@@ -115,6 +168,7 @@ test('clearing rows keeps the block layer in sync with the grid', () => {
   // survivors fall by the number of cleared rows below them: 8->10, 11->12, 14 stays
   assert.ok(ev(`blocks[10*W] && blocks[12*W] && blocks[14*W]`), 'survivors moved to their new rows');
   assert.ok(ev(`!blocks[8*W] && !blocks[11*W]`), 'old positions vacated');
+  assert.equal(ev('blocks[10*W].style.top'), `${(10 * 100) / H}%`, 'survivor repositioned for the slide');
 });
 
 test('a drop with a used slot still reports game state (no null crash)', () => {
