@@ -13,7 +13,7 @@ const el = () => ({
 });
 const store = new Map();
 const ctx = { document: { getElementById: el, createElement: el }, addEventListener() {}, setTimeout: fn => fn(), console,
-  prompt: () => 'ana', alert() {},
+  prompt: () => 'ana',
   localStorage: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) } };
 vm.createContext(ctx);
 vm.runInContext(code, ctx);

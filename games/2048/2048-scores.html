@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2048 — high scores</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; padding: 1.2rem; max-width: 46rem;
+    font-family: system-ui, sans-serif; line-height: 1.55; background: #faf8ef; color: #776e65;
+  }
+  h1 { margin: 0 0 .2rem; font-size: 1.7rem; }
+  p { margin: .6rem 0; }
+  a { color: #8f7a66; }
+  .lead { font-size: 1.05rem; }
+  ol { max-width: 24rem; padding-left: 1.8rem; font-size: 1.2rem; }
+  li { padding: .3rem 0; border-bottom: 1px solid #eee4da; }
+  li::marker { color: #bbada0; font-weight: 700; }
+  footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 2px solid #bbada0; }
+</style>
+</head>
+<body>
+<h1>2048 — high scores</h1>
+<p class="lead">Your ten best games in this browser.</p>
+<ol id="list"></ol>
+<p id="empty" hidden>Nothing here yet. <a href="2048.html">Play a game →</a></p>
+
+<footer><a href="2048.html">← Back to the game</a></footer>
+
+<script>
+let scores = [];
+try {
+  const stored = JSON.parse(localStorage.getItem('2048-scores'));
+  if (Array.isArray(stored)) scores = stored.filter(e => e && typeof e.name === 'string' && Number.isFinite(e.score));
+} catch { /* no storage: just show the empty list */ }
+
+const list = document.getElementById('list');
+if (!scores.length) document.getElementById('empty').hidden = false;
+for (const e of scores) {
+  const li = document.createElement('li');
+  li.textContent = `${e.name} — ${e.score}`;   // textContent, not innerHTML: names are user input
+  list.append(li);
+}
+</script>
+</body>
+</html>
