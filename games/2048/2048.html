@@ -58,7 +58,7 @@
 <body>
 <header>
   <h1>2048</h1>
-  <div class="score">Score<b id="score">0</b></div>
+  <button class="score" id="scores" title="High scores">Score ▾<b id="score">0</b></button>
   <button id="reset">Reset</button>
 </header>
 <div id="wrap">
@@ -72,6 +72,36 @@ const N = 4, $ = id => document.getElementById(id);
 const pos = n => `calc(var(--gap) * ${n + 1} + var(--cell) * ${n})`;
 
 let board, tiles, score, won, over, busy, absorbed;
+
+const KEY = '2048';
+const save = () => localStorage.setItem(KEY, JSON.stringify({ cells: board.map(t => t ? t.v : 0), score, won, over }));
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } };
+
+const SKEY = '2048-scores';
+const loadScores = () => {
+  try {
+    const s = JSON.parse(localStorage.getItem(SKEY));
+    return Array.isArray(s) ? s.filter(e => e && typeof e.name === 'string' && Number.isFinite(e.score)) : [];
+  } catch { return []; }
+};
+let scores = loadScores();
+
+function addScore(name, points) {
+  scores.push({ name, score: points });
+  scores.sort((a, b) => b.score - a.score);
+  scores = scores.slice(0, 10);
+  localStorage.setItem(SKEY, JSON.stringify(scores));
+}
+
+const showScores = () => alert(scores.length
+  ? 'High scores\n' + scores.map((e, i) => `${i + 1}. ${e.name} — ${e.score}`).join('\n')
+  : 'No high scores yet.');
+
+const askName = () => {
+  const name = (prompt(`Game over — score ${score}. Name for the high score list?`) || '').trim().slice(0, 20) || 'anon';
+  addScore(name, score);
+  showScores();
+};
 
 const lines = dir => Array.from({ length: N }, (_, i) => Array.from({ length: N }, (_, j) => {
   const [r, c] = dir === 'left'  ? [i, j]
@@ -162,14 +192,22 @@ const canMove = () => board.some((t, i) =>
 const drawScore = () => $('score').textContent = score;
 const show = msg => { $('msg').textContent = msg; $('overlay').style.display = 'flex'; };
 
-function init() {
+function init(saved) {
   board = Array(N * N).fill(null);
   tiles = []; absorbed = [];
   score = 0; won = over = busy = false;
   $('board').querySelectorAll('.tile').forEach(el => el.remove());
-  addTile(); addTile();
+  if (saved && Array.isArray(saved.cells) && saved.cells.length === N * N && saved.cells.every(v => !v || v >= 2)) {
+    saved.cells.forEach((v, i) => { if (v) board[i] = createTile(v, (i / N) | 0, i % N); });
+    score = saved.score || 0; won = !!saved.won; over = !!saved.over;
+  } else {
+    addTile(); addTile();
+  }
   $('overlay').style.display = 'none';
   drawScore();
+  if (won) show('You win!');
+  else if (over) show('Game over');
+  save();
 }
 
 function turn(dir) {
@@ -181,7 +219,8 @@ function turn(dir) {
     drawScore();
     busy = false;
     if (!won && board.some(t => t && t.v >= 2048)) { won = true; show('You win!'); }
-    else if (!canMove()) { over = true; show('Game over'); }
+    else if (!canMove()) { over = true; show('Game over'); askName(); }
+    save();
   }, 250);
 }
 
@@ -205,9 +244,11 @@ for (let i = 0; i < N * N; i++) {
   $('board').append(s);
 }
 
-$('reset').addEventListener('click', init);
-$('restart').addEventListener('click', init);
-init();
+const newGame = () => init(null);
+$('reset').addEventListener('click', newGame);
+$('restart').addEventListener('click', newGame);
+$('scores').addEventListener('click', showScores);
+init(load());
 </script>
 </body>
 </html>
