@@ -38,6 +38,7 @@ And that's pretty cool!
 |---|---|
 | [2048](games/2048/2048.html) | arrow keys / WASD / swipe. Includes a [strategy guide](games/2048/2048-guide.html). |
 | [icewall](games/icewall/icewall.html) | drag a shape from the tray onto the board. |
+| [drone printer](games/drone-printer/drone-printer.html) | tap a glowing drone to send it, the dimmer one to bring the next forward; tap a parked drone to send it out again. |
 
 Preview, and share to your phone:
 

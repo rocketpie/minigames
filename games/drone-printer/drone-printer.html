@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>drone printer</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: system-ui, sans-serif; color: #ede7ff;
+    display: flex; flex-direction: column; align-items: center; gap: .6rem;
+    padding: .7rem; user-select: none; -webkit-user-select: none;
+    background: radial-gradient(120% 80% at 50% 0%, #5b34a8 0%, #210f45 72%);
+  }
+  header { width: min(94vw, 58vh); display: flex; align-items: center; gap: .5rem; }
+  h1 { margin: 0 auto 0 0; font-size: 1rem; letter-spacing: .12em; }
+  .stat { background: #3a2566; padding: .3rem .55rem; border-radius: 6px; font-size: .62rem; text-align: center; line-height: 1.25; }
+  .stat b { display: block; font-size: .95rem; color: #cdb4ff; }
+
+  #canvasWrap { position: relative; width: min(94vw, 58vh); }
+  canvas { width: 100%; aspect-ratio: 1; display: block; border-radius: 12px; background: #ffffff; touch-action: none;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .18), 0 14px 30px rgba(0, 0, 0, .45); }
+
+  #dock { width: min(94vw, 58vh); display: flex; gap: .5rem; align-items: stretch; }
+  .lanes { display: flex; gap: .5rem; flex: 1; }
+  .lane { position: relative; flex: 1; height: 6.1rem; overflow: hidden; border-radius: 8px;
+    background: rgba(20, 8, 44, .5); display: flex; flex-direction: column; gap: .35rem; padding: .35rem; }
+  .drone { flex: 0 0 2.5rem; border-radius: 7px; background: var(--c, #666); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-weight: 800; color: #0b0f18; font-size: .9rem;
+    box-shadow: inset 0 -3px 6px rgba(0, 0, 0, .35); }
+  .drone.next { opacity: .5; }
+  .drone.front { box-shadow: 0 0 0 2px #9fe8ff, inset 0 -3px 6px rgba(0, 0, 0, .35); }
+  /* a drone whose colour is on the print frontier can fire right now */
+  .drone.ready, .drone.front.ready { box-shadow: 0 0 0 2px #57e08a, 0 0 12px rgba(87, 224, 138, .85), inset 0 -3px 6px rgba(0, 0, 0, .35); }
+
+  .park { display: flex; flex-direction: column; gap: .35rem; }
+  .pad { width: 2.4rem; flex: 1; border-radius: 7px; border: 1px dashed rgba(159, 232, 255, .35);
+    display: flex; align-items: center; justify-content: center; font-weight: 800; color: #0b0f18; font-size: .85rem; }
+  .pad.full { background: var(--c, #666); border-style: solid; cursor: pointer; }
+  .pad.ready { box-shadow: 0 0 0 2px #57e08a, 0 0 12px rgba(87, 224, 138, .85); }
+
+  #hint { margin: 0; width: min(94vw, 58vh); text-align: center; font-size: .72rem; color: rgba(237, 231, 255, .72); }
+
+  #overlay { position: fixed; inset: 0; display: none; flex-direction: column; z-index: 20;
+    align-items: center; justify-content: center; gap: 1rem; text-align: center; padding: 1.5rem;
+    background: rgba(6, 9, 18, .86); font-size: 1.2rem; font-weight: 700; }
+  button { font: inherit; font-size: .9rem; padding: .55rem .9rem; border: 0; border-radius: 8px; background: #3d6ea8; color: #eaf6ff; cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>DRONE PRINTER</h1>
+  <div class="stat">Level<b id="level">1/3</b></div>
+  <div class="stat">Score<b id="score">0</b></div>
+</header>
+<div id="canvasWrap"><canvas id="view"></canvas></div>
+<div id="dock">
+  <div class="lanes">
+    <div class="lane" id="lane0"></div>
+    <div class="lane" id="lane1"></div>
+    <div class="lane" id="lane2"></div>
+  </div>
+  <div class="park">
+    <i class="pad" id="pad0"></i>
+    <i class="pad" id="pad1"></i>
+    <i class="pad" id="pad2"></i>
+  </div>
+</div>
+<p id="hint">Glowing drones can print right now. Tap the front one to send it; tap the dimmer one to bring it forward.</p>
+<div id="overlay"><p id="msg"></p><button id="restart">Play again</button></div>
+
+<script>
+const G = 16, KEYS = ['r', 'b', 'g', 'w', 'k'];
+const TAU = Math.PI * 2;
+const HEX = { r: '#e8453c', b: '#3f7be0', g: '#45b95a', w: '#f0f0f0', k: '#232833' };
+const idxOf = {}; KEYS.forEach((k, i) => idxOf[k] = i);
+const hexA = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+};
+
+const FLIGHT = 4.5;   // seconds for one lap around the canvas
+const SHOT_GAP = 0.05; // seconds between shots
+const LEAVE_T = 0.6;  // seconds a spent drone takes to fly offscreen
+
+// The final image of each level, one string per row. '.' is background: it is never
+// painted, so drones only ever cover the actual motif.
+const LEVELS = [
+  { name: 'Rubik\'s cube', art: [
+    '................',
+    '.rrrrkbbbbkgggg.',
+    '.rrrrkbbbbkgggg.',
+    '.rrrrkbbbbkgggg.',
+    '.rrrrkbbbbkgggg.',
+    '.kkkkkkkkkkkkkk.',
+    '.bbbbkggggkwwww.',
+    '.bbbbkggggkwwww.',
+    '.bbbbkggggkwwww.',
+    '.bbbbkggggkwwww.',
+    '.kkkkkkkkkkkkkk.',
+    '.ggggkwwwwkrrrr.',
+    '.ggggkwwwwkrrrr.',
+    '.ggggkwwwwkrrrr.',
+    '.ggggkwwwwkrrrr.',
+    '................',
+  ] },
+  { name: 'Superhero', art: [
+    '................',
+    '................',
+    '.....wwwwww.....',
+    '....wwwwwwww....',
+    '....wwkwwkww....',
+    '....wwwwwwww....',
+    '.....wwwwww.....',
+    '..rrbbbbbbbbrr..',
+    '..rrbbbbbbbbrr..',
+    '..rrbbbbbbbbrr..',
+    '..rrbbbbbbbbrr..',
+    '...bbbbbbbbbb...',
+    '....bbbbbbbb....',
+    '.....bb..bb.....',
+    '.....kk..kk.....',
+    '................',
+  ] },
+  { name: 'House', art: [
+    '................',
+    '................',
+    '................',
+    '......rrrr......',
+    '.....rrrrrr.....',
+    '....rrrrrrrr....',
+    '...rrrrrrrrrr...',
+    '..rrrrrrrrrrrr..',
+    '.wwwwwwwwwwwwww.',
+    '.wwkkwwwwwwkkww.',
+    '.wwkkwwwwwwkkww.',
+    '.wwwwwwwwwwwwww.',
+    '.wwwwwwkkwwwwww.',
+    '.wwwwwwkkwwwwww.',
+    '.wwwwwwkkwwwwww.',
+    '................',
+  ] },
+];
+
+// --- level building (pure) ----------------------------------------------------
+// Turn the art into a target grid (colour index per cell, -1 empty) plus colour counts.
+function parseArt(art) {
+  const target = new Int8Array(G * G).fill(-1);
+  const counts = new Array(KEYS.length).fill(0);
+  for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+    const i = idxOf[art[y][x]];
+    if (i === undefined) continue;
+    target[y * G + x] = i;
+    counts[i]++;
+  }
+  return { target, counts };
+}
+
+// Split each colour's total into drone magazines. The aim sizes cycle for variety;
+// magazines land in the 10-20 range and levels in the 10-40 drone range.
+function splitCounts(counts) {
+  const targets = [11, 12, 10, 13, 11, 12, 10];
+  let ti = 0;
+  const drones = [];
+  counts.forEach((total, color) => {
+    if (!total) return;
+    const n = Math.max(1, Math.round(total / targets[ti++ % targets.length]));
+    const base = Math.floor(total / n), extra = total % n;
+    for (let i = 0; i < n; i++) drones.push({ color, mag: base + (i < extra ? 1 : 0) });
+  });
+  return drones;
+}
+
+// Deterministic shuffle so a level always looks the same and tests stay stable.
+function shuffle(a, seed) {
+  let s = seed >>> 0;
+  const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = (rnd() * (i + 1)) | 0;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// --- aiming (pure) ------------------------------------------------------------
+// Each cell belongs to a small angular wedge around the direction from the centre
+// to its middle. A drone at angle `a` reaches the cells whose wedge covers `a`,
+// nearest first. (A per-pixel raycast would make some pixels reachable only at a
+// single exact angle, which no discrete sweep ever hits.)
+const CELL_ANG = new Float64Array(G * G), CELL_R2 = new Float64Array(G * G), CELL_HALF = new Float64Array(G * G);
+{
+  const c = (G - 1) / 2;
+  for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+    const i = y * G + x, dx = x - c, dy = y - c, r = Math.hypot(dx, dy);
+    CELL_ANG[i] = Math.atan2(dy, dx);
+    CELL_R2[i] = dx * dx + dy * dy;
+    CELL_HALF[i] = Math.min(0.5, 0.8 / Math.max(1, r) + 0.02);
+  }
+  CELL_HALF[Math.floor(G / 2) * G + Math.floor(G / 2)] = Math.PI; // the centre is reachable from every direction
+}
+
+// The wedge for every heading is the same for every level, so build them once.
+const NBINS = 360, RAYS = new Array(NBINS);
+{
+  for (let k = 0; k < NBINS; k++) {
+    const a = k * TAU / NBINS, out = [];
+    for (let i = 0; i < G * G; i++) {
+      let d = CELL_ANG[i] - a;
+      if (d > Math.PI) d -= TAU; else if (d < -Math.PI) d += TAU;
+      if (d > -CELL_HALF[i] && d < CELL_HALF[i]) out.push(i);
+    }
+    RAYS[k] = out.sort((p, q) => CELL_R2[p] - CELL_R2[q]);
+  }
+}
+const binOf = a => Math.round((a - TAU * Math.floor(a / TAU)) / TAU * NBINS) % NBINS;
+const rayCells = a => RAYS[binOf(a)];
+
+const firstUnpainted = ray => {
+  for (const i of ray) if (target[i] >= 0 && !paint[i]) return i;
+  return -1;
+};
+
+// The one cell a drone may print right now: the most central unpainted cell along
+// its ray, and only if that cell is its own colour (you cannot print past a gap).
+const shootTargetAt = (d, a) => {
+  const i = firstUnpainted(rayCells(a));
+  return i >= 0 && target[i] === d.color ? i : -1;
+};
+const shootTarget = d => shootTargetAt(d, d.ang);
+
+// As it sweeps, a drone also aims at the neighbouring headings. A pixel can sit in a
+// sliver between two sampled headings and, since every lap samples the same ones, it
+// would jam the print forever. The exact heading is tried first; the fan is fallback.
+function aimTarget(d) {
+  const b = binOf(d.ang);
+  for (let j = 0; j <= 3; j++) for (const o of (j === 0 ? [0] : [j, -j])) {
+    const i = firstUnpainted(RAYS[(b + o + NBINS) % NBINS]);
+    if (i >= 0 && target[i] === d.color) return i;
+  }
+  return -1;
+}
+
+// Colours sitting on the current print frontier, sampled over a full circle.
+function frontierColors() {
+  const s = new Set();
+  for (let k = 0; k < NBINS; k++) {
+    const i = firstUnpainted(RAYS[k]);
+    if (i >= 0) s.add(target[i]);
+  }
+  return s;
+}
+
+// --- game state ---------------------------------------------------------------
+let target, paint, lanes, flying, parked, particles;
+let phase, paintedCount, totalTargets, totalDrones, level, score, best;
+let readyColors = new Set(), readyT = 0;
+
+const HINT = 'Glowing drones can print right now. Tap the front one to send it; tap the dimmer one to bring it forward.';
+const $ = id => document.getElementById(id);
+const setHint = t => { const h = $('hint'); if (h) h.textContent = t; };
+const KEY = 'drone-printer';
+const save = () => { try { best = Math.max(best, score); localStorage.setItem(KEY, JSON.stringify({ level, score, best })); } catch {} };
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+
+function loadLevel(n) {
+  level = n;
+  const parsed = parseArt(LEVELS[n].art);
+  target = parsed.target;
+  paint = new Uint8Array(G * G);
+  paintedCount = 0;
+  totalTargets = 0;
+  for (let i = 0; i < G * G; i++) if (target[i] >= 0) totalTargets++;
+
+  const arsenal = splitCounts(parsed.counts);
+  totalDrones = arsenal.length;
+  shuffle(arsenal, 1337 + n * 911);
+  lanes = [[], [], []];
+  arsenal.forEach((d, i) => lanes[i % 3].push(d));
+
+  flying = []; parked = [null, null, null]; particles = [];
+  phase = 'play';
+  readyColors = frontierColors();
+  hideOverlay();
+  setHint(HINT);
+  renderLanes(); renderPads(); updateHud();
+}
+
+function startFlight(d) {
+  d.ang = -Math.PI / 2 + flying.length * 0.35;
+  d.swept = 0; d.cd = 0; d.t = 0; d.state = 'fly';
+  flying.push(d);
+}
+
+function launchFromLane(li) {
+  if (phase !== 'play' || flying.length >= 3 || !lanes[li] || !lanes[li].length) return false;
+  startFlight(lanes[li].shift());
+  return true;
+}
+
+function relaunchParked(pi) {
+  if (phase !== 'play' || flying.length >= 3 || !parked[pi]) return false;
+  const d = parked[pi];
+  parked[pi] = null;
+  startFlight(d);
+  renderPads();
+  return true;
+}
+
+// Bring the next drone in a lane forward without spending a landing pad. This is
+// what lets any colour be reached, so a level's winning order is always sendable.
+function cycleLane(li) {
+  if (phase !== 'play' || !lanes[li] || lanes[li].length < 2) return false;
+  lanes[li].push(lanes[li].shift());
+  return true;
+}
+
+function land(d) {
+  if (phase !== 'play') return;
+  const free = parked.indexOf(null);
+  if (free < 0) { crash(); return; }
+  parked[free] = d;
+  renderPads();
+}
+
+// A drone finished a lap with shots left. If no landing pad is free, it crashes.
+function maybeStuck() {
+  if (phase !== 'play' || flying.length || paintedCount >= totalTargets) return;
+  const need = frontierColors();
+  const canWork = [...lanes.flat(), ...parked.filter(Boolean)].some(d => d.mag > 0 && need.has(d.color));
+  if (!canWork) { phase = 'over'; showOverlay('Stuck: no drone can print the next dots.', 'Retry level', () => loadLevel(level)); }
+}
+
+function crash() {
+  phase = 'over';
+  save();
+  showOverlay('Drone crash! Every landing pad was full.', 'Retry level', () => loadLevel(level));
+}
+
+function winLevel() {
+  if (phase !== 'play') return;
+  phase = 'won';
+  const gained = 100 * totalDrones;
+  score += gained;
+  const last = level >= LEVELS.length - 1;
+  save(); updateHud();
+  if (last) showOverlay(`You printed everything! Final score ${score}.`, 'Play again', () => { score = 0; best = Math.max(best, score); loadLevel(0); });
+  else showOverlay(`${LEVELS[level].name} printed — +${gained}`, 'Next level', () => loadLevel(level + 1));
+}
+
+// --- simulation ---------------------------------------------------------------
+function advance(dt) {
+  if (phase !== 'play') return;
+  const w = (Math.PI * 2) / FLIGHT;
+  const landers = [];
+  flying = flying.filter(d => {
+    if (d.state === 'leave') { d.t += dt; return d.t < LEAVE_T; }
+    d.ang += w * dt; d.swept += w * dt; d.cd -= dt;
+    if (d.cd <= 0) {
+      const i = aimTarget(d);
+      if (i >= 0) {
+        paint[i] = 1; paintedCount++; d.mag--; d.cd = SHOT_GAP;
+        spawnShot(d, i);
+      }
+    }
+    if (d.mag <= 0) { d.state = 'leave'; d.t = 0; return true; }
+    if (d.swept >= Math.PI * 2) { landers.push(d); return false; }
+    return true;
+  });
+  for (const d of landers) land(d);
+  if (paintedCount >= totalTargets) winLevel();
+  else if (!flying.length) maybeStuck();
+}
+
+// --- rendering ----------------------------------------------------------------
+const view = $('view');
+const g2 = view && typeof view.getContext === 'function' ? view.getContext('2d') : null;
+
+function layout() {
+  const size = (view && view.width) || 320;
+  const grid = size * 0.72;
+  return { size, grid, cell: grid / G, ox: (size - grid) / 2, oy: (size - grid) / 2, orbit: grid / 2 + size * 0.085, cx: size / 2, cy: size / 2 };
+}
+
+function cellRect(g, i, L, fill, stroke) {
+  const inset = L.cell * 0.06;
+  const x = L.ox + (i % G) * L.cell + inset;
+  const y = L.oy + ((i / G) | 0) * L.cell + inset;
+  const s = L.cell - 2 * inset;
+  g.fillStyle = fill;
+  g.fillRect(x, y, s, s);
+  g.strokeStyle = stroke;
+  g.strokeRect(x, y, s, s);
+}
+
+function dronePos(d, L) {
+  const r = d.state === 'leave' ? L.orbit + (d.t / LEAVE_T) * L.size * 0.35 : L.orbit;
+  return { x: L.cx + Math.cos(d.ang) * r, y: L.cy + Math.sin(d.ang) * r };
+}
+
+function spawnShot(d, i) {
+  const L = layout();
+  const p = dronePos(d, L);
+  particles.push({
+    x: p.x, y: p.y, t: 0, dur: 0.18, c: HEX[KEYS[d.color]],
+    tx: L.ox + ((i % G) + 0.5) * L.cell, ty: L.oy + (((i / G) | 0) + 0.5) * L.cell,
+  });
+}
+
+function drawScene(dt) {
+  if (!g2) return;
+  const L = layout();
+  g2.clearRect(0, 0, L.size, L.size);
+
+  g2.strokeStyle = 'rgba(90, 60, 160, .22)';
+  g2.lineWidth = Math.max(1, L.size * 0.004);
+  g2.beginPath(); g2.arc(L.cx, L.cy, L.orbit, 0, Math.PI * 2); g2.stroke();
+
+  // The pre-image projection: a faint wash of each target colour. White targets get
+  // a grey wash so they still read on the white canvas.
+  for (let i = 0; i < G * G; i++) if (target[i] >= 0 && !paint[i]) {
+    const k = KEYS[target[i]];
+    cellRect(g2, i, L, k === 'w' ? 'rgba(150, 140, 180, .30)' : hexA(HEX[k], .20), 'rgba(70, 45, 130, .16)');
+  }
+  for (let i = 0; i < G * G; i++) if (paint[i]) cellRect(g2, i, L, HEX[KEYS[target[i]]], 'rgba(60, 35, 120, .30)');
+
+  for (const p of particles) {
+    p.t += dt;
+    const k = Math.min(1, p.t / p.dur);
+    g2.globalAlpha = 1 - k * 0.5;
+    g2.fillStyle = p.c;
+    g2.strokeStyle = 'rgba(50, 30, 90, .5)';
+    g2.lineWidth = Math.max(1, L.size * 0.003);
+    g2.beginPath(); g2.arc(p.x + (p.tx - p.x) * k, p.y + (p.ty - p.y) * k, Math.max(1.2, L.size * 0.008 * (1 - k * 0.5)), 0, Math.PI * 2); g2.fill(); g2.stroke();
+  }
+  g2.globalAlpha = 1;
+  particles = particles.filter(p => p.t < p.dur);
+
+  for (const d of flying) {
+    const p = dronePos(d, L);
+    g2.globalAlpha = d.state === 'leave' ? 1 - d.t / LEAVE_T : 1;
+    g2.fillStyle = HEX[KEYS[d.color]];
+    g2.beginPath(); g2.arc(p.x, p.y, L.size * 0.022, 0, Math.PI * 2); g2.fill();
+    g2.lineWidth = L.size * 0.006; g2.strokeStyle = 'rgba(50, 30, 90, .6)'; g2.stroke();
+  }
+  g2.globalAlpha = 1;
+}
+
+function renderLanes() {
+  lanes.forEach((lane, li) => {
+    const el = $('lane' + li);
+    if (!el) return;
+    el.textContent = '';
+    lane.slice(0, 2).forEach((d, k) => {
+      const div = document.createElement('div');
+      div.className = 'drone ' + (k === 0 ? 'front' : 'next') + (readyColors.has(d.color) ? ' ready' : '');
+      div.style.setProperty('--c', HEX[KEYS[d.color]]);
+      div.textContent = d.mag;
+      div.addEventListener('pointerdown', e => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (k === 0) { if (!launchFromLane(li)) setHint('Three drones are already in the air.'); }
+        else cycleLane(li);
+        renderLanes();
+      });
+      el.append(div);
+    });
+  });
+}
+
+function renderPads() {
+  parked.forEach((d, pi) => {
+    const el = $('pad' + pi);
+    if (!el) return;
+    el.className = 'pad' + (d ? ' full' : '') + (d && readyColors.has(d.color) ? ' ready' : '');
+    el.style.setProperty('--c', d ? HEX[KEYS[d.color]] : 'transparent');
+    el.textContent = d ? d.mag : '';
+    el.onpointerdown = d ? () => relaunchParked(pi) : null;
+  });
+}
+
+// Recompute which colours can print right now and update the glow. Cheap enough to
+// poll a few times a second; the frontier only moves when a dot lands.
+function refreshReady(dt) {
+  readyT -= dt;
+  if (readyT > 0 || phase !== 'play') return;
+  readyT = 0.15;
+  const next = frontierColors();
+  let changed = next.size !== readyColors.size;
+  if (!changed) for (const c of next) if (!readyColors.has(c)) { changed = true; break; }
+  if (changed) { readyColors = next; renderLanes(); renderPads(); }
+}
+
+function updateHud() {
+  $('level').textContent = (level + 1) + '/' + LEVELS.length;
+  $('score').textContent = score;
+}
+
+function showOverlay(msg, label, fn) {
+  $('msg').textContent = msg;
+  const b = $('restart');
+  b.textContent = label;
+  b.onclick = fn;
+  $('overlay').style.display = 'flex';
+}
+const hideOverlay = () => { $('overlay').style.display = 'none'; };
+
+function resize() {
+  if (!view || !g2) return;
+  const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
+  const s = view.clientWidth || 320;
+  view.width = Math.round(s * dpr);
+  view.height = Math.round(s * dpr);
+}
+
+let last = 0;
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - last) / 1000 || 0);
+  last = ts;
+  advance(dt);
+  refreshReady(dt);
+  drawScene(dt);
+  requestAnimationFrame(frame);
+}
+
+// --- boot ---------------------------------------------------------------------
+const saved = load();
+score = Number.isFinite(saved.score) ? saved.score : 0;
+best = Number.isFinite(saved.best) ? saved.best : 0;
+const start = Number.isInteger(saved.level) && saved.level >= 0 && saved.level < LEVELS.length ? saved.level : 0;
+if (typeof addEventListener === 'function') addEventListener('resize', resize);
+loadLevel(start);
+resize();
+if (g2 && typeof requestAnimationFrame === 'function') requestAnimationFrame(frame);
+</script>
+</body>
+</html>
