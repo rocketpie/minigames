@@ -1,0 +1,2280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>lights, please!</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: ui-rounded, "Avenir Next", system-ui, sans-serif; color: #e9e1d2;
+    display: flex; flex-direction: column; align-items: center; gap: .55rem;
+    padding: .65rem .6rem 1rem; user-select: none; -webkit-user-select: none;
+    background: radial-gradient(120% 90% at 50% -10%, #202a40 0%, #0b0e17 62%), #080b12;
+  }
+  header { width: min(94vw, 78vh); display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  h1 {
+    font-family: Georgia, "Times New Roman", serif; font-weight: 600; margin: 0 auto 0 0;
+    font-size: clamp(.9rem, 2.5vw, 1.15rem); letter-spacing: .16em; color: #f1e7d4; white-space: nowrap;
+  }
+  .bulb { color: #f3c46b; margin-right: .1rem; text-shadow: 0 0 9px #f3c46b, 0 0 24px rgba(243, 196, 107, .5); }
+  .stats { display: flex; gap: .3rem; }
+  .stat {
+    min-width: 3rem; text-align: center; line-height: 1.12; padding: .2rem .42rem; border-radius: 6px;
+    border: 1px solid rgba(243, 196, 107, .18); background: rgba(255, 255, 255, .045);
+    font-size: .5rem; letter-spacing: .1em; color: #a39a8b;
+  }
+  .stat b { display: block; font-size: .82rem; letter-spacing: 0; color: #f3e6cf; }
+  #stage { width: min(94vw, 78vh); position: relative; }
+  canvas {
+    width: 100%; aspect-ratio: 10 / 7; display: block; border-radius: 14px; background: #0b1220;
+    touch-action: manipulation; box-shadow: 0 0 0 1px rgba(243, 196, 107, .14), 0 18px 45px rgba(0, 0, 0, .55);
+  }
+  #board {
+    width: min(94vw, 78vh); display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr));
+    gap: .4rem; padding: .45rem; border-radius: 12px;
+    background: linear-gradient(180deg, #4a3324, #2a1a12 70%);
+    box-shadow: inset 0 1px 0 #7b5c3d, inset 0 -3px 8px #0008, 0 10px 24px rgba(0, 0, 0, .4);
+  }
+  .switch {
+    position: relative; min-width: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: .16rem;
+    appearance: none; -webkit-appearance: none;
+    padding: .32rem .12rem .26rem; border: 0; border-radius: 7px; color: #3d2a14; font: inherit;
+    background: linear-gradient(180deg, #e8d7ae, #b89c6c 55%, #9c7f52);
+    box-shadow: inset 0 1px 0 #fff8df, inset 0 -2px 2px #0003, 0 2px 0 #5a4026, 0 3px 6px #0007;
+    transition: transform .08s;
+  }
+  .switch::before, .switch::after {
+    content: ""; position: absolute; top: 4px; width: 3px; height: 3px; border-radius: 50%; background: #6b5433;
+  }
+  .switch::before { left: 4px; }
+  .switch::after { right: 4px; }
+  .switch:active { transform: translateY(1px); }
+  .switch { -webkit-tap-highlight-color: transparent; }
+  .switch:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+  .switch:disabled { opacity: .45; cursor: default; }
+  .letter { font-size: .5rem; font-weight: 800; letter-spacing: .1em; color: #4c351b; }
+  .plate {
+    position: relative; display: block; width: 1.5rem; max-width: 100%; aspect-ratio: 1; height: auto;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 28%, #f7eccd, #c6ab77 58%, #8f754b);
+    box-shadow: inset 0 0 0 1px rgba(123, 98, 60, .4), inset 0 -2px 3px rgba(0, 0, 0, .25);
+  }
+  .lever {
+    position: absolute; left: 40%; top: 16%; width: 20%; height: 68%;
+    border-radius: .2rem; background: linear-gradient(180deg, #fff7df, #c0ab83 60%, #8f7952);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .5); transform: rotate(-26deg);
+    transition: transform .15s cubic-bezier(.3, 1.4, .5, 1);
+  }
+  .switch.on .lever { transform: rotate(26deg); }
+  .switch.on .plate { box-shadow: inset 0 0 0 1px rgba(123, 98, 60, .4), inset 0 0 9px #ffe7a3, 0 0 8px rgba(255, 214, 122, .35); }
+  .lamps { height: .55rem; line-height: .55rem; font-size: .46rem; letter-spacing: .12em; color: #5a4224; }
+  #trail {
+    width: min(94vw, 78vh); min-height: 1.05em; text-align: center;
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: .55rem;
+    letter-spacing: .16em; color: #8f8576;
+  }
+  #under { width: min(94vw, 78vh); display: flex; align-items: center; gap: .5rem; }
+  #hint { flex: 1; margin: 0; min-height: 2.1em; font-size: .69rem; line-height: 1.35; color: #b9b0a2; }
+  .tools { display: flex; gap: .35rem; }
+  .tool {
+    font: inherit; font-size: .61rem; letter-spacing: .06em; padding: .4rem .55rem; border-radius: 6px;
+    border: 1px solid rgba(243, 196, 107, .22); background: rgba(243, 196, 107, .06); color: #e6d8bd; cursor: pointer;
+  }
+  .tool:hover { background: rgba(243, 196, 107, .14); }
+  .tool:disabled { opacity: .38; cursor: default; }
+  .tool:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+  #overlay {
+    position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; padding: 1.2rem;
+    background: radial-gradient(circle at 50% 40%, rgba(40, 31, 21, .6), rgba(5, 7, 12, .92)); backdrop-filter: blur(5px);
+  }
+  .panel {
+    width: min(90vw, 25rem); text-align: center; padding: 1.5rem 1.4rem 1.35rem; border-radius: 16px;
+    border: 1px solid rgba(243, 196, 107, .35); background: linear-gradient(180deg, #1c1d27, #10121a);
+    box-shadow: 0 24px 70px #000b, inset 0 1px 0 rgba(255, 255, 255, .08);
+  }
+  .eyebrow { margin: 0; font-size: .56rem; letter-spacing: .22em; color: #9d8d71; text-transform: uppercase; }
+  .panel h2 { margin: .35rem 0 .4rem; font-family: Georgia, "Times New Roman", serif; font-size: 1.65rem; font-weight: 500; color: #ffe6b0; }
+  #sub { margin: 0 0 1rem; font-size: .82rem; line-height: 1.45; color: #c5bba9; }
+  #next {
+    font: inherit; font-size: .78rem; font-weight: 700; letter-spacing: .05em; padding: .62rem 1.05rem; border: 0; border-radius: 8px;
+    color: #2d2111; cursor: pointer; background: linear-gradient(180deg, #f8d995, #d9ab55);
+    box-shadow: 0 2px 0 #8b6528, 0 6px 18px rgba(0, 0, 0, .4);
+  }
+  #next:active { transform: translateY(1px); }
+  @media (prefers-reduced-motion: reduce) { .lever { transition: none; } }
+  @media (max-width: 430px) {
+    h1 { font-size: .82rem; letter-spacing: .1em; }
+    .stat { min-width: 2.6rem; font-size: .46rem; padding: .16rem .34rem; }
+    .stat b { font-size: .74rem; }
+    #hint { font-size: .63rem; }
+    .tool { font-size: .56rem; padding: .36rem .44rem; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="bulb" aria-hidden="true">✦</span> LIGHTS, PLEASE!</h1>
+  <div class="stats">
+    <div class="stat">HOUSE<b id="level">1/5</b></div>
+    <div class="stat">MOVES<b id="moves">0</b></div>
+    <div class="stat">LIT<b id="lit">0/0</b></div>
+  </div>
+</header>
+<div id="stage"><canvas id="view" role="img" aria-label="A cutaway floor plan of the house at night."></canvas></div>
+<div id="board" role="group" aria-label="Light switches"></div>
+<div id="trail" aria-hidden="true"></div>
+<div id="under">
+  <p id="hint" aria-live="polite">Flip switches until every room agrees.</p>
+  <div class="tools">
+    <button class="tool" id="undo" type="button">↶ Undo</button>
+    <button class="tool" id="reset" type="button">↻ Reset</button>
+  </div>
+</div>
+<div id="overlay" role="dialog" aria-modal="true" aria-labelledby="msg">
+  <div class="panel">
+    <p class="eyebrow" id="eyebrow">house complete</p>
+    <h2 id="msg">Lights, please!</h2>
+    <p id="sub"></p>
+    <button id="next" type="button">Next house</button>
+  </div>
+</div>
+
+<script>
+const W = 1000, H = 700, TAU = Math.PI * 2, SIDES = ['n', 's', 'w', 'e'], PAD = 14;
+const KEY = 'lights-please';
+const $ = id => document.getElementById(id);
+const view = $('view');
+const g2 = view && typeof view.getContext === 'function' ? view.getContext('2d') : null;
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const f = c => clamp(Math.round(c + 255 * amt), 0, 255);
+  return `rgb(${f((n >> 16) & 255)}, ${f((n >> 8) & 255)}, ${f(n & 255)})`;
+}
+function hash01(n) {
+  n = Math.imul(n ^ 61, 0x27d4eb2d);
+  n = Math.imul(n ^ (n >>> 15), 0x85ebca6b);
+  return ((n ^ (n >>> 13)) >>> 0) / 4294967296;
+}
+function rng(seed) {
+  let s = seed >>> 0;
+  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+}
+function rr(g, x, y, w, h, r) {
+  r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+function fillRR(g, x, y, w, h, r, fill) { rr(g, x, y, w, h, r); g.fillStyle = fill; g.fill(); }
+function strokeRR(g, x, y, w, h, r, stroke, lw) {
+  rr(g, x, y, w, h, r); g.strokeStyle = stroke; g.lineWidth = lw; g.stroke();
+}
+function circle(g, x, y, r, fill, stroke, lw) {
+  g.beginPath(); g.arc(x, y, Math.max(0.1, r), 0, TAU);
+  if (fill) { g.fillStyle = fill; g.fill(); }
+  if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw || 1; g.stroke(); }
+}
+function line(g, x1, y1, x2, y2, color, lw, cap) {
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2);
+  g.strokeStyle = color; g.lineWidth = lw || 1; g.lineCap = cap || 'butt'; g.stroke();
+}
+
+// --- room styles -------------------------------------------------------------
+const STYLES = {
+  living: { floor: 'wood', co: '#9c6a44', co2: '#855634', wall: '#e7d4b4', accent: '#b6513e', textile: '#d8b069', rug: '#9d3e35', rug2: '#e3c28b' },
+  bedroom: { floor: 'wood', co: '#a47550', co2: '#8d6040', wall: '#e6d3b8', accent: '#7188a9', textile: '#d7c3a1', rug: '#7f93ad', rug2: '#e8d7b7' },
+  kitchen: { floor: 'tile', co: '#ddcfb5', co2: '#b95f4b', wall: '#ebdcc2', accent: '#4f7c72', textile: '#e2b05e', rug: '#b45c4a', rug2: '#f0d7a9' },
+  bath: { floor: 'tile', co: '#d4e3dd', co2: '#9fbfb8', wall: '#e8f0e9', accent: '#5b8b93', textile: '#e9e2cf', rug: '#8fb3ad', rug2: '#f4efe2' },
+  dining: { floor: 'wood', co: '#8d5f3d', co2: '#754b30', wall: '#e2cfae', accent: '#b0823d', textile: '#8c4c43', rug: '#8c4c43', rug2: '#e0bd7c' },
+  hall: { floor: 'wood', co: '#a67b53', co2: '#8c6340', wall: '#e6d5b9', accent: '#9a6242', textile: '#c7a76f', rug: '#a95d45', rug2: '#e7c48e' },
+  study: { floor: 'wood', co: '#7d573b', co2: '#68462f', wall: '#ddccb0', accent: '#536e5e', textile: '#b89054', rug: '#5e7563', rug2: '#c8a56a' },
+  conservatory: { floor: 'tile', co: '#c8b697', co2: '#9c7f5e', wall: '#e7dcc2', accent: '#4f7a55', textile: '#d8c48e', rug: '#7e9b68', rug2: '#e3d3a3' },
+  nursery: { floor: 'wood', co: '#b08660', co2: '#966d4b', wall: '#ecdfca', accent: '#7f9bba', textile: '#e2c57c', rug: '#9cb3c9', rug2: '#f0dfb2' },
+  playroom: { floor: 'wood', co: '#a97a55', co2: '#8f6342', wall: '#e9d8bb', accent: '#d08a5a', textile: '#7fa8a2', rug: '#7fa8a2', rug2: '#eed09a' },
+};
+
+// --- levels ------------------------------------------------------------------
+// The lit rooms are the starting picture. Switches toggle fixed groups of lamps;
+// the house is finished when every room is lit, or every room is dark.
+const LEVELS = [
+  {
+    name: 'Little Cabin',
+    theme: {
+      kind: 'forest', ground: ['#0b1d20', '#123330'], path: '#6b5841', path2: '#4d3e2c',
+      tree1: '#1d4a39', tree2: '#2a6448', leaf: '#3b7b55', stone: '#7c715e', trim: '#6c5a44',
+    },
+    rooms: [
+      { type: 'living', name: 'Living room', x: 220, y: 120, w: 300, h: 220 },
+      { type: 'bedroom', name: 'Bedroom', x: 520, y: 120, w: 260, h: 220 },
+      { type: 'kitchen', name: 'Kitchen', x: 220, y: 340, w: 300, h: 180 },
+      { type: 'bath', name: 'Bathroom', x: 520, y: 340, w: 260, h: 180 },
+    ],
+    doors: [
+      { x: 508, y: 246, w: 24, h: 64 }, { x: 300, y: 328, w: 64, h: 24 },
+      { x: 620, y: 328, w: 64, h: 24 }, { x: 508, y: 430, w: 24, h: 64 },
+      { x: 330, y: 508, w: 64, h: 24 },
+    ],
+    switches: [[0, 2], [1, 3], [0, 1, 3], [2]],
+    lit: [1, 2, 3],
+    garden: {
+      path: [[362, 566], [390, 620], [420, 700]],
+      porch: { x: 296, y: 530, w: 148, h: 42 },
+      trees: [[80, 150, 72, 'pine'], [920, 190, 80, 'pine'], [70, 560, 58, 'pine'], [920, 520, 66, 'pine'], [540, 62, 48, 'pine']],
+      bushes: [[190, 560, 28], [812, 140, 30], [780, 570, 24], [160, 110, 26]],
+      props: [['stump', 120, 470, 1], ['cat', 500, 620, 1], ['mailbox', 250, 612, 1], ['lantern', 640, 600, .9]],
+    },
+  },
+  {
+    name: 'Garden Flat',
+    theme: {
+      kind: 'garden', ground: ['#0d2422', '#164034'], path: '#79654a', path2: '#564632',
+      tree1: '#1e4c3a', tree2: '#2d6b49', leaf: '#4a8b58', stone: '#877a66', trim: '#6f5d46',
+    },
+    rooms: [
+      { type: 'living', name: 'Living room', x: 180, y: 100, w: 320, h: 260 },
+      { type: 'kitchen', name: 'Kitchen', x: 500, y: 100, w: 320, h: 160 },
+      { type: 'bath', name: 'Bathroom', x: 500, y: 260, w: 140, h: 100 },
+      { type: 'bedroom', name: 'Bedroom', x: 640, y: 260, w: 180, h: 100 },
+      { type: 'dining', name: 'Dining room', x: 180, y: 360, w: 460, h: 200 },
+      { type: 'hall', name: 'Hallway', x: 640, y: 360, w: 180, h: 200 },
+    ],
+    doors: [
+      { x: 488, y: 170, w: 24, h: 64 }, { x: 550, y: 248, w: 64, h: 24 },
+      { x: 628, y: 290, w: 24, h: 64 }, { x: 690, y: 348, w: 64, h: 24 },
+      { x: 628, y: 450, w: 24, h: 64 }, { x: 300, y: 348, w: 64, h: 24 },
+      { x: 280, y: 548, w: 64, h: 24 },
+    ],
+    switches: [[0, 4], [1, 3], [2, 3, 5], [0, 1, 5], [2, 4, 5]],
+    lit: [3, 4, 5],
+    garden: {
+      path: [[312, 600], [330, 650], [340, 700]],
+      porch: { x: 250, y: 570, w: 124, h: 32 },
+      pond: { x: 865, y: 618, rx: 95, ry: 30 },
+      fence: { y: 665, gaps: [[276, 396]] },
+      trees: [[70, 140, 62, 'round'], [930, 130, 70, 'round'], [90, 420, 52, 'round']],
+      bushes: [[210, 585, 30], [390, 590, 26], [820, 590, 28], [880, 540, 24], [160, 300, 26]],
+      props: [['doghouse', 900, 500, 1], ['bike', 900, 570, .9], ['cat', 440, 650, 1], ['flowers', 820, 660, 1]],
+    },
+  },
+  {
+    name: 'Townhouse',
+    theme: {
+      kind: 'town', ground: ['#141b28', '#232b39'], path: '#6b6257', path2: '#4b443c',
+      tree1: '#1b3a34', tree2: '#28564a', leaf: '#39705e', stone: '#7d776b', trim: '#5e574c',
+    },
+    rooms: [
+      { type: 'study', name: 'Study', x: 280, y: 80, w: 240, h: 180 },
+      { type: 'bedroom', name: 'Bedroom', x: 520, y: 80, w: 200, h: 180 },
+      { type: 'hall', name: 'Hallway', x: 280, y: 260, w: 440, h: 80 },
+      { type: 'living', name: 'Living room', x: 280, y: 340, w: 240, h: 220 },
+      { type: 'dining', name: 'Dining room', x: 520, y: 340, w: 200, h: 120 },
+      { type: 'kitchen', name: 'Kitchen', x: 520, y: 460, w: 100, h: 100 },
+      { type: 'bath', name: 'Bathroom', x: 620, y: 460, w: 100, h: 100 },
+    ],
+    doors: [
+      { x: 380, y: 248, w: 64, h: 24 }, { x: 590, y: 248, w: 64, h: 24 },
+      { x: 380, y: 328, w: 64, h: 24 }, { x: 600, y: 328, w: 64, h: 24 },
+      { x: 550, y: 448, w: 64, h: 24 }, { x: 608, y: 490, w: 24, h: 64 },
+      { x: 508, y: 480, w: 24, h: 64 }, { x: 360, y: 548, w: 64, h: 24 },
+    ],
+    switches: [[0, 1], [1, 2, 4], [2, 3], [3, 5], [4, 6], [5, 6], [0, 4]],
+    lit: [0, 1, 2, 6],
+    garden: {
+      path: [[392, 594], [392, 640], [392, 700]],
+      porch: { x: 340, y: 570, w: 84, h: 28 },
+      street: { y: 620 },
+      trees: [[160, 160, 44, 'round'], [840, 160, 44, 'round']],
+      bushes: [[240, 570, 24], [760, 570, 24], [240, 120, 22], [760, 120, 22]],
+      props: [['streetlamp', 190, 620, 1], ['streetlamp', 810, 620, 1], ['bike', 745, 665, .9], ['pot', 330, 590, .9], ['pot', 470, 590, .9], ['cat', 225, 680, 1]],
+    },
+  },
+  {
+    name: 'Courtyard House',
+    theme: {
+      kind: 'court', ground: ['#1b1f1a', '#2b3025'], path: '#8b7c63', path2: '#6a5d49',
+      tree1: '#254635', tree2: '#3a6043', leaf: '#5a7c4d', stone: '#9a8b70', trim: '#6f6048',
+    },
+    rooms: [
+      { type: 'kitchen', name: 'Kitchen', x: 160, y: 100, w: 200, h: 180 },
+      { type: 'living', name: 'Living room', x: 160, y: 280, w: 200, h: 280 },
+      { type: 'hall', name: 'Hallway', x: 360, y: 100, w: 140, h: 180 },
+      { type: 'study', name: 'Study', x: 500, y: 100, w: 140, h: 180 },
+      { type: 'bedroom', name: 'Bedroom', x: 640, y: 100, w: 200, h: 180 },
+      { type: 'dining', name: 'Dining room', x: 640, y: 280, w: 200, h: 160 },
+      { type: 'bath', name: 'Bathroom', x: 640, y: 440, w: 100, h: 120 },
+      { type: 'nursery', name: 'Nursery', x: 740, y: 440, w: 100, h: 120 },
+    ],
+    doors: [
+      { x: 220, y: 268, w: 64, h: 24 }, { x: 348, y: 170, w: 24, h: 64 },
+      { x: 488, y: 170, w: 24, h: 64 }, { x: 628, y: 170, w: 24, h: 64 },
+      { x: 700, y: 268, w: 64, h: 24 }, { x: 670, y: 428, w: 64, h: 24 },
+      { x: 728, y: 470, w: 24, h: 64 }, { x: 770, y: 428, w: 64, h: 24 },
+      { x: 400, y: 268, w: 80, h: 24 }, { x: 348, y: 340, w: 24, h: 64 },
+    ],
+    switches: [[0, 2, 6], [1, 3], [2, 4, 7], [3, 5], [0, 4], [5, 6], [1, 6, 7]],
+    lit: [1, 5, 6, 7],
+    garden: {
+      path: [[520, 700], [520, 560], [500, 480], [450, 330], [440, 290]],
+      courtyard: { x: 360, y: 280, w: 280, h: 280 },
+      trees: [[90, 160, 58, 'cypress'], [90, 460, 50, 'cypress'], [910, 160, 58, 'cypress'], [910, 460, 50, 'cypress'], [570, 380, 46, 'olive']],
+      bushes: [[150, 590, 26], [850, 590, 26], [250, 70, 24], [750, 70, 24]],
+      props: [['fountain', 430, 450, 1], ['bench', 600, 520, .9], ['lantern', 390, 300, .9], ['lantern', 610, 300, .9], ['cat', 520, 620, 1]],
+      lights: [{ from: [365, 320], to: [635, 320] }, { from: [365, 500], to: [635, 500] }],
+    },
+  },
+  {
+    name: 'Seaside Villa',
+    theme: {
+      kind: 'sea', ground: ['#10242a', '#1d3b3b'], path: '#8c7656', path2: '#675239',
+      tree1: '#1c463c', tree2: '#2b6653', leaf: '#4c8a68', stone: '#95866d', trim: '#6c5d46',
+    },
+    rooms: [
+      { type: 'conservatory', name: 'Conservatory', x: 120, y: 90, w: 220, h: 200 },
+      { type: 'bedroom', name: 'Bedroom', x: 120, y: 290, w: 220, h: 290 },
+      { type: 'living', name: 'Living room', x: 340, y: 90, w: 260, h: 240 },
+      { type: 'hall', name: 'Hallway', x: 340, y: 330, w: 260, h: 90 },
+      { type: 'study', name: 'Study', x: 340, y: 420, w: 260, h: 160 },
+      { type: 'kitchen', name: 'Kitchen', x: 600, y: 90, w: 140, h: 160 },
+      { type: 'dining', name: 'Dining room', x: 740, y: 90, w: 140, h: 160 },
+      { type: 'bath', name: 'Bathroom', x: 600, y: 250, w: 280, h: 90 },
+      { type: 'playroom', name: 'Family room', x: 600, y: 340, w: 280, h: 240 },
+    ],
+    doors: [
+      { x: 190, y: 278, w: 64, h: 24 }, { x: 328, y: 150, w: 24, h: 64 },
+      { x: 420, y: 318, w: 64, h: 24 }, { x: 420, y: 408, w: 64, h: 24 },
+      { x: 588, y: 150, w: 24, h: 64 }, { x: 728, y: 150, w: 24, h: 64 },
+      { x: 650, y: 238, w: 64, h: 24 }, { x: 790, y: 238, w: 64, h: 24 },
+      { x: 588, y: 360, w: 24, h: 64 }, { x: 700, y: 328, w: 64, h: 24 },
+      { x: 680, y: 568, w: 64, h: 24 },
+    ],
+    switches: [[0, 2, 5], [0, 1, 4], [2, 3, 6], [3, 4, 8], [5, 6, 7], [1, 4, 7], [0, 5, 8], [2, 4, 6, 8]],
+    lit: [2, 3, 4, 6, 8],
+    garden: {
+      path: [[712, 614], [712, 650], [700, 700]],
+      porch: { x: 650, y: 590, w: 124, h: 28 },
+      beach: { y: 596 }, ocean: { y: 642 },
+      trees: [[60, 180, 48, 'round'], [940, 180, 48, 'round'], [60, 470, 44, 'round'], [940, 470, 44, 'round']],
+      bushes: [[160, 570, 26], [520, 570, 24], [860, 570, 26], [250, 80, 26], [750, 80, 26]],
+      props: [['lighthouse', 85, 650, 1], ['boat', 870, 650, 1], ['shells', 780, 625, .9], ['shells', 640, 630, .9], ['dune', 560, 610, 1], ['dune', 820, 610, 1], ['cat', 520, 640, 1]],
+    },
+  },
+];
+
+const HINT = 'Flip a switch and watch which rooms change. Make every room agree: all lit, or all dark.';
+
+// --- level runtime -----------------------------------------------------------
+let level = 0, rooms = [], doors = [], windows = [], switches = [], switchEls = [];
+let history = [], moves = 0, phase = 'play', winT = 0, overlayShown = false;
+let time = 0, fireflies = [], fx = [], best = [];
+let staticCv = null, staticKey = '';
+
+const litRooms = () => rooms.reduce((n, r) => n + (r.on ? 1 : 0), 0);
+const uniform = () => rooms.length > 0 && (litRooms() === 0 || litRooms() === rooms.length);
+const sideLen = (r, side) => (side === 'n' || side === 's') ? r.w : r.h;
+const sideLine = (r, side) => side === 'n' ? r.y : side === 's' ? r.y + r.h : side === 'w' ? r.x : r.x + r.w;
+const horizontalSide = side => side === 'n' || side === 's';
+
+// How much of a room side has no room behind it (the outside of the house).
+function exteriorGaps(room, all, side) {
+  const a = horizontalSide(side) ? room.x : room.y;
+  const b = a + (horizontalSide(side) ? room.w : room.h);
+  const lineAt = sideLine(room, side);
+  const covered = [];
+  for (const o of all) {
+    if (o === room) continue;
+    const other = side === 'n' ? o.y + o.h : side === 's' ? o.y : side === 'w' ? o.x + o.w : o.x;
+    if (Math.abs(other - lineAt) > 0.6) continue;
+    const oa = horizontalSide(side) ? o.x : o.y;
+    const ob = oa + (horizontalSide(side) ? o.w : o.h);
+    const lo = Math.max(a, oa), hi = Math.min(b, ob);
+    if (hi > lo) covered.push([lo, hi]);
+  }
+  covered.sort((p, q) => p[0] - q[0]);
+  const gaps = [];
+  let cur = a;
+  for (const [lo, hi] of covered) {
+    if (lo > cur) gaps.push([cur, lo]);
+    cur = Math.max(cur, hi);
+  }
+  if (cur < b) gaps.push([cur, b]);
+  return gaps;
+}
+
+// Convert a world interval into a side-local interval (for drawing/furniture).
+function toLocal(r, side, a, b) {
+  const len = sideLen(r, side);
+  if (side === 'n') return [a - r.x, b - r.x];
+  if (side === 's') return [r.x + len - b, r.x + len - a];
+  if (side === 'w') return [r.y + len - b, r.y + len - a];
+  return [a - r.y, b - r.y];
+}
+
+function doorSpan(room, side, d) {
+  const horiz = d.w >= d.h;
+  if (horizontalSide(side)) {
+    if (!horiz) return null;
+    const lineAt = sideLine(room, side);
+    if (Math.abs((d.y + d.h / 2) - lineAt) > 17) return null;
+    const a = Math.max(room.x, d.x), b = Math.min(room.x + room.w, d.x + d.w);
+    return b > a ? [a, b] : null;
+  }
+  if (horiz) return null;
+  const lineAt = sideLine(room, side);
+  if (Math.abs((d.x + d.w / 2) - lineAt) > 17) return null;
+  const a = Math.max(room.y, d.y), b = Math.min(room.y + room.h, d.y + d.h);
+  return b > a ? [a, b] : null;
+}
+
+// Windows are placed automatically on every long outside wall, clear of doors.
+function computeWindows(all, ds) {
+  const out = [];
+  const subtract = (spans, cuts) => {
+    let free = spans.slice();
+    for (const [ca, cb] of cuts) {
+      free = free.flatMap(([a, b]) => {
+        if (cb <= a || ca >= b) return [[a, b]];
+        const parts = [];
+        if (ca > a) parts.push([a, ca]);
+        if (cb < b) parts.push([cb, b]);
+        return parts;
+      });
+    }
+    return free;
+  };
+  for (const room of all) {
+    for (const side of SIDES) {
+      const gaps = room.ext[side];
+      const cuts = [];
+      for (const d of ds) {
+        const s = doorSpan(room, side, d);
+        if (s) cuts.push([s[0] - 14, s[1] + 14]);
+      }
+      for (const [a, b] of subtract(gaps, cuts)) {
+        if (b - a < 120) continue;
+        const count = (b - a) >= 300 ? 2 : 1;
+        const len = Math.min(76, (b - a) / count - 30);
+        if (len < 46) continue;
+        for (let k = 0; k < count; k++) {
+          const c = a + (b - a) * (k + 1) / (count + 1);
+          if (horizontalSide(side)) {
+            const y = sideLine(room, side);
+            out.push({ x: c - len / 2, y: y - 9, w: len, h: 18, side, room: room.idx });
+          } else {
+            const x = sideLine(room, side);
+            out.push({ x: x - 9, y: c - len / 2, w: 18, h: len, side, room: room.idx });
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// Blocked stretches of wall, so furniture and art avoid openings. Big furniture may
+// sit under a window, but not in a doorway.
+function wallBlocks(room, ds, wins, withWindows) {
+  const blocks = { n: [], s: [], w: [], e: [] };
+  for (const side of SIDES) {
+    for (const d of ds) {
+      const s = doorSpan(room, side, d);
+      if (s) blocks[side].push(toLocal(room, side, s[0] - 10, s[1] + 10));
+    }
+    if (withWindows) for (const w of wins) {
+      if (w.room !== room.idx || w.side !== side) continue;
+      const a = horizontalSide(side) ? w.x : w.y;
+      const b = a + (horizontalSide(side) ? w.w : w.h);
+      blocks[side].push(toLocal(room, side, a - 8, b + 8));
+    }
+    blocks[side].sort((p, q) => p[0] - q[0]);
+  }
+  return blocks;
+}
+
+function freeGaps(len, blocks, margin) {
+  const pad = margin ?? 20;
+  let gaps = [[pad, len - pad]];
+  for (const [a, b] of blocks) {
+    gaps = gaps.flatMap(([lo, hi]) => {
+      if (b <= lo || a >= hi) return [[lo, hi]];
+      const parts = [];
+      if (a > lo) parts.push([lo, a]);
+      if (b < hi) parts.push([b, hi]);
+      return parts;
+    });
+  }
+  return gaps.filter(([a, b]) => b - a > 8);
+}
+
+function bestWall(room, need, prefer, depth) {
+  const margin = clamp(Math.min(room.w, room.h) * .13, 10, 20);
+  for (const side of prefer) {
+    const along = sideLen(room, side), across = horizontalSide(side) ? room.h : room.w;
+    if (across < depth + margin * 2) continue;
+    const blocks = room.doorBlocks[side].concat(room.taken[side]).sort((p, q) => p[0] - q[0]);
+    for (const [a, b] of freeGaps(along, blocks, margin)) {
+      if (b - a >= need + 8) {
+        room.usedSides.add(side);
+        const start = a + (b - a - need) / 2;
+        room.taken[side].push([start - 4, start + need + 4]);
+        return { side, along: start };
+      }
+    }
+  }
+  return null;
+}
+
+function bestWallSized(room, sizes, prefer, depth) {
+  for (const need of sizes) {
+    const hit = bestWall(room, need, prefer, depth);
+    if (hit) return { ...hit, len: need };
+  }
+  return null;
+}
+
+// Local wall coordinates: x runs along the wall, y runs into the room.
+function onWall(g, room, side, along, len, depth, fn) {
+  g.save();
+  if (side === 'n') { g.transform(1, 0, 0, 1, room.x + along, room.y + PAD); }
+  else if (side === 's') { g.transform(-1, 0, 0, -1, room.x + room.w - along, room.y + room.h - PAD); }
+  else if (side === 'w') { g.transform(0, -1, 1, 0, room.x + PAD, room.y + room.h - along); }
+  else { g.transform(0, 1, -1, 0, room.x + room.w - PAD, room.y + along); }
+  fn(len, depth);
+  g.restore();
+}
+
+function loadLevel(n) {
+  level = clamp(n | 0, 0, LEVELS.length - 1);
+  const spec = LEVELS[level];
+  rooms = spec.rooms.map((r, idx) => ({
+    ...r, idx, ext: {}, blocks: { n: [], s: [], w: [], e: [] }, doorBlocks: { n: [], s: [], w: [], e: [] },
+    taken: { n: [], s: [], w: [], e: [] }, usedSides: new Set(),
+    on: spec.lit.includes(idx), v: spec.lit.includes(idx) ? 1 : 0, target: spec.lit.includes(idx) ? 1 : 0,
+    flash: 0, lamp: { x: r.x + r.w * 0.52, y: r.y + r.h * 0.46 },
+  }));
+  for (const r of rooms) for (const side of SIDES) r.ext[side] = exteriorGaps(r, rooms, side);
+  doors = spec.doors.map(d => ({ ...d }));
+  windows = computeWindows(rooms, doors);
+  for (const r of rooms) {
+    r.blocks = wallBlocks(r, doors, windows, true);
+    r.doorBlocks = wallBlocks(r, doors, windows, false);
+  }
+  switches = spec.switches.map((group, i) => ({ group: group.slice(), letter: String.fromCharCode(65 + i), on: false }));
+  history = []; moves = 0; phase = 'play'; winT = 0; overlayShown = false; time = 0; fx = [];
+  fireflies = makeFireflies(rooms, level + 1);
+  staticKey = '';
+  if (view && typeof view.setAttribute === 'function') view.setAttribute('aria-label', `Night floor plan of the ${spec.name}.`);
+  buildSwitchPanel();
+  hideOverlay();
+  updateHud();
+  setStatus(HINT);
+  saveState();
+}
+
+function makeFireflies(all, seed) {
+  const r = rng(seed * 991 + 17);
+  const out = [];
+  for (let i = 0; i < 18 && out.length < 18; i++) {
+    const x = 30 + r() * (W - 60), y = 35 + r() * (H - 70);
+    if (all.some(q => x > q.x - 12 && x < q.x + q.w + 12 && y > q.y - 12 && y < q.y + q.h + 12)) continue;
+    out.push({ x, y, p: r() * TAU, s: .6 + r() * .8 });
+  }
+  return out;
+}
+
+function toggleGroup(sw) {
+  for (const i of sw.group) {
+    const r = rooms[i];
+    r.on = !r.on; r.target = r.on ? 1 : 0; r.flash = Math.max(r.flash, .16);
+  }
+  sw.on = !sw.on;
+}
+
+function addSwitchFx(sw, dir) {
+  for (const i of sw.group) {
+    const l = rooms[i].lamp;
+    fx.push({ kind: 'ring', x: l.x, y: l.y, t: 0, dur: .55 });
+    fx.push({ kind: 'tag', x: l.x, y: l.y - 18, t: 0, dur: 1.15, letter: sw.letter });
+    if (dir > 0) fx.push({ kind: 'bolt', x: l.x, y: l.y, t: 0, dur: .28, seed: hash01(rooms[i].idx * 31 + moves) });
+  }
+}
+
+function pressSwitch(i) {
+  if (phase !== 'play') return false;
+  const sw = switches[i];
+  if (!sw) return false;
+  toggleGroup(sw);
+  history.push(i);
+  moves++;
+  addSwitchFx(sw, 1);
+  updateHud();
+  updateSwitchEls();
+  setStatus(`Switch ${sw.letter} flips ${listNames(sw.group.map(j => rooms[j].name))}.`);
+  if (uniform()) {
+    phase = 'won'; winT = 0; overlayShown = false;
+    best[level] = best[level] ? Math.min(best[level], moves) : moves;
+    saveState();
+    switchEls.forEach(el => { el.disabled = true; });
+    updateHud();
+    setStatus(uniformOn() ? 'Every room is glowing.' : 'Every room is dark. The house agrees.');
+  }
+  return true;
+}
+
+const uniformOn = () => rooms.length > 0 && rooms.every(r => r.on);
+
+function undoTurn() {
+  if (phase !== 'play' || !history.length) return false;
+  const i = history.pop();
+  const sw = switches[i];
+  toggleGroup(sw);
+  moves = Math.max(0, moves - 1);
+  addSwitchFx(sw, -1);
+  updateHud();
+  updateSwitchEls();
+  setStatus(`Undid switch ${sw.letter}. ${litRooms()} of ${rooms.length} rooms lit.`);
+  return true;
+}
+
+function resetLevel() {
+  loadLevel(level);
+  setStatus('Start over. ' + HINT);
+}
+
+function listNames(names) {
+  if (!names.length) return 'nothing';
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return names[0] + ' and ' + names[1];
+  return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+}
+
+function setStatus(text) {
+  const el = $('hint');
+  if (el) el.textContent = text;
+}
+
+function updateHud() {
+  const l = $('level'), m = $('moves'), s = $('lit'), u = $('undo'), t = $('trail');
+  if (l) l.textContent = (level + 1) + '/' + LEVELS.length;
+  if (m) m.textContent = String(moves);
+  if (s) s.textContent = litRooms() + '/' + rooms.length;
+  if (u) u.disabled = history.length === 0 || phase !== 'play';
+  if (t) t.textContent = history.length ? 'ORDER  ' + history.map(i => switches[i].letter).join(' · ') : '';
+}
+
+function updateSwitchEls() {
+  switchEls.forEach((el, i) => {
+    const on = !!(switches[i] && switches[i].on);
+    el.classList.toggle('on', on);
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    const dots = el.querySelector('.lamps');
+    if (dots) dots.textContent = '•'.repeat(switches[i] ? switches[i].group.length : 0);
+  });
+}
+
+function buildSwitchPanel() {
+  const board = $('board');
+  if (!board) return;
+  board.textContent = '';
+  board.style.setProperty('--n', String(switches.length));
+  switchEls = switches.map((sw, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'switch';
+    b.title = `Switch ${sw.letter} (key ${i + 1})`;
+    b.setAttribute('aria-label', `Switch ${sw.letter}, flips ${sw.group.length} lamps`);
+    b.setAttribute('aria-keyshortcuts', String(i + 1));
+    b.setAttribute('aria-pressed', 'false');
+    const letter = document.createElement('span');
+    letter.className = 'letter'; letter.textContent = sw.letter;
+    const plate = document.createElement('span');
+    plate.className = 'plate';
+    const lever = document.createElement('span');
+    lever.className = 'lever';
+    plate.appendChild(lever);
+    const lamps = document.createElement('span');
+    lamps.className = 'lamps'; lamps.textContent = '•'.repeat(sw.group.length);
+    b.append(letter, plate, lamps);
+    b.addEventListener('click', () => { pressSwitch(i); });
+    board.appendChild(b);
+    return b;
+  });
+}
+
+function saveState() {
+  try { localStorage.setItem(KEY, JSON.stringify({ level, best })); } catch {}
+}
+function loadState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY)) || {};
+    return {
+      level: Number.isInteger(s.level) && s.level >= 0 && s.level < LEVELS.length ? s.level : 0,
+      best: Array.isArray(s.best) ? s.best.map(v => Number.isFinite(v) ? v : 0) : [],
+    };
+  } catch { return { level: 0, best: [] }; }
+}
+
+function hideOverlay() {
+  const o = $('overlay');
+  if (o) o.style.display = 'none';
+}
+function showOverlay() {
+  if (!overlayShown) return;
+  const allOn = uniformOn();
+  const msg = $('msg'), sub = $('sub'), next = $('next'), eyebrow = $('eyebrow');
+  if (eyebrow) eyebrow.textContent = LEVELS[level].name + ' complete';
+  if (msg) msg.textContent = allOn ? 'Lights, please!' : 'Lights out.';
+  const b = best[level] || moves;
+  if (sub) sub.textContent = (allOn ? 'The whole house is glowing.' : 'Every room went dark together.') +
+    ` ${moves} ${moves === 1 ? 'move' : 'moves'} · best ${b}.`;
+  if (next) {
+    const last = level >= LEVELS.length - 1;
+    next.textContent = last ? 'Play again' : 'Next house';
+    next.onclick = () => {
+      if (last) loadLevel(0); else loadLevel(level + 1);
+    };
+  }
+  const o = $('overlay');
+  if (o) o.style.display = 'flex';
+  if (next && typeof next.focus === 'function') next.focus();
+}
+
+// --- view / animation --------------------------------------------------------
+function resize() {
+  if (!view) return;
+  const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
+  const cssW = view.clientWidth || 320;
+  view.width = Math.round(cssW * dpr);
+  view.height = Math.round(cssW * (H / W) * dpr);
+  staticKey = '';
+}
+
+function update(dt) {
+  time += dt;
+  for (const r of rooms) {
+    if (r.v < r.target) r.v = Math.min(1, r.v + dt * 5.2);
+    else if (r.v > r.target) r.v = Math.max(0, r.v - dt * 6.4);
+    if (r.flash > 0) r.flash = Math.max(0, r.flash - dt * 3.4);
+  }
+  for (const f of fx) f.t += dt;
+  fx = fx.filter(f => f.t < f.dur);
+  if (phase === 'won') {
+    winT += dt;
+    if (!overlayShown && winT > 1.05) { overlayShown = true; showOverlay(); }
+  }
+}
+
+function staticLayer() {
+  if (!view) return null;
+  const w = view.width || 1000, h = view.height || 700;
+  const key = w + 'x' + h + ':' + level;
+  if (staticCv && staticKey === key) return staticCv;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  if (g) {
+    g.setTransform(w / W, 0, 0, h / H, 0, 0);
+    paintStatic(g);
+  }
+  staticCv = c; staticKey = key;
+  return c;
+}
+
+function drawScene() {
+  if (!g2) return;
+  const w = view.width || 1000, h = view.height || 700;
+  g2.setTransform(w / W, 0, 0, h / H, 0, 0);
+  g2.clearRect(0, 0, W, H);
+  g2.drawImage(staticLayer(), 0, 0, W, H);
+  drawLighting(g2);
+  drawFixtures(g2);
+  drawFireflies(g2);
+  drawFx(g2);
+  if (phase === 'won') drawWin(g2);
+}
+
+let last = 0;
+function frame(ts) {
+  const dt = last ? Math.min(.05, (ts - last) / 1000) : 0;
+  last = ts;
+  update(dt);
+  drawScene();
+  requestAnimationFrame(frame);
+}
+
+// --- static painting ---------------------------------------------------------
+function paintStatic(g) {
+  const spec = LEVELS[level];
+  g.save();
+  paintGround(g, spec);
+  paintGardenBack(g, spec);
+  paintHouseShadow(g);
+  for (const r of rooms) paintRoom(g, r);
+  drawWalls(g, spec);
+  drawWindows(g);
+  drawDoors(g);
+  drawWallArt(g);
+  paintGardenFront(g, spec);
+  g.restore();
+}
+
+function paintGround(g, spec) {
+  const th = spec.theme;
+  const grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, th.ground[0]);
+  grad.addColorStop(1, th.ground[1]);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, H);
+
+  if (th.kind === 'town') {
+    const streetY = spec.garden.street ? spec.garden.street.y : 600;
+    g.fillStyle = '#1b222e'; g.fillRect(0, streetY, W, H - streetY);
+    g.fillStyle = '#2a303b'; g.fillRect(0, streetY - 14, W, 20);
+    for (let y = streetY + 4; y < H; y += 17) {
+      const off = ((y / 17) % 2) * 17;
+      for (let x = -20 + off; x < W; x += 38) {
+        fillRR(g, x + 2, y + 2, 32, 12, 4, 'rgba(120,125,133,.15)');
+        strokeRR(g, x + 2, y + 2, 32, 12, 4, 'rgba(5,8,12,.3)', 1);
+      }
+    }
+    g.fillStyle = 'rgba(210,190,150,.07)';
+    g.fillRect(0, streetY - 14, W, 2);
+  }
+
+  if (th.kind === 'sea') {
+    const beachY = spec.garden.beach ? spec.garden.beach.y : 586;
+    const oceanY = spec.garden.ocean ? spec.garden.ocean.y : beachY + 50;
+    g.fillStyle = '#bea380'; g.fillRect(0, beachY, W, oceanY - beachY);
+    g.fillStyle = 'rgba(255,238,200,.08)'; g.fillRect(0, beachY, W, 3);
+    const sea = g.createLinearGradient(0, oceanY, 0, H);
+    sea.addColorStop(0, '#23536b'); sea.addColorStop(.45, '#173c56'); sea.addColorStop(1, '#0c2338');
+    g.fillStyle = sea; g.fillRect(0, oceanY, W, H - oceanY);
+    for (let i = 0; i < 16; i++) {
+      const y = oceanY + 8 + i * 3.8, x = 20 + hash01(i + 90) * 760;
+      line(g, x, y, x + 40 + hash01(i + 200) * 120, y, `rgba(150,210,225,${.04 + hash01(i + 2) * .1})`, 1.2);
+    }
+    g.fillStyle = 'rgba(240,235,205,.18)';
+    for (let i = 0; i < 10; i++) {
+      const y = oceanY + 10 + i * 4.5;
+      g.beginPath(); g.ellipse(760 + Math.sin(i) * 16, y, 22 - i, 1.2, 0, 0, TAU); g.fill();
+    }
+  }
+
+  const rnd = rng(level * 97 + 13);
+  for (let i = 0; i < 260; i++) {
+    const x = rnd() * W, y = rnd() * H, r = .6 + rnd() * 1.8;
+    const light = th.kind === 'sea' && y > 636;
+    g.fillStyle = light ? `rgba(200,235,240,${rnd() * .08})` : `rgba(200,225,200,${rnd() * .055})`;
+    circle(g, x, y, r, g.fillStyle);
+  }
+
+  const vg = g.createRadialGradient(W / 2, H * .44, H * .2, W / 2, H * .5, H * .8);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,.34)');
+  g.fillStyle = vg; g.fillRect(0, 0, W, H);
+}
+
+function paintGardenBack(g, spec) {
+  const gd = spec.garden, th = spec.theme;
+  if (gd.courtyard) drawCourtyard(g, gd.courtyard, th);
+  if (gd.pond) drawPond(g, gd.pond);
+  if (gd.path) drawPath(g, gd.path, th);
+  for (const t of gd.trees || []) drawTree(g, t[0], t[1], t[2], t[3], th);
+}
+
+function drawCourtyard(g, c, th) {
+  g.save();
+  g.beginPath(); g.rect(c.x, c.y, c.w, c.h); g.clip();
+  g.fillStyle = '#4b493d'; g.fillRect(c.x, c.y, c.w, c.h);
+  for (let y = c.y + 6; y < c.y + c.h; y += 30) {
+    const off = ((y / 30) | 0) % 2 ? 16 : 0;
+    for (let x = c.x - 30 + off; x < c.x + c.w; x += 34) {
+      fillRR(g, x + 2, y + 2, 30, 26, 6, 'rgba(196,182,150,.13)');
+      strokeRR(g, x + 2, y + 2, 30, 26, 6, 'rgba(20,24,18,.24)', 1);
+    }
+  }
+  g.restore();
+  strokeRR(g, c.x, c.y, c.w, c.h, 2, 'rgba(30,26,18,.45)', 2);
+}
+
+function drawPond(g, p) {
+  const bank = g.createRadialGradient(p.x, p.y, p.rx * .6, p.x, p.y, p.rx * 1.08);
+  bank.addColorStop(0, 'rgba(80,100,80,.2)'); bank.addColorStop(1, 'rgba(40,60,45,0)');
+  g.fillStyle = bank; g.beginPath(); g.ellipse(p.x, p.y, p.rx * 1.15, p.ry * 1.2, 0, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(p.x, p.y, p.rx, p.ry, 0, 0, TAU); g.fillStyle = '#183b45'; g.fill();
+  const w = g.createLinearGradient(p.x, p.y - p.ry, p.x, p.y + p.ry);
+  w.addColorStop(0, 'rgba(50,95,105,.85)'); w.addColorStop(1, '#0c2634');
+  g.fillStyle = w; g.beginPath(); g.ellipse(p.x, p.y - 2, p.rx - 6, p.ry - 5, 0, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(160,210,215,.16)'; g.lineWidth = 1;
+  for (let i = 0; i < 5; i++) {
+    g.beginPath(); g.ellipse(p.x + Math.sin(i * 2.1) * p.rx * .4, p.y - p.ry * .25 + i * 6, p.rx * .25, 2, 0, 0, TAU); g.stroke();
+  }
+  for (let i = 0; i < 3; i++) {
+    const lx = p.x - p.rx * .45 + i * p.rx * .38, ly = p.y + p.ry * .12 + Math.sin(i * 2) * 8;
+    circle(g, lx, ly, 8, 'rgba(90,130,70,.85)', 'rgba(40,70,45,.5)', 1);
+    line(g, lx, ly, lx + 6, ly - 2, 'rgba(50,80,45,.8)', 1);
+  }
+  for (let i = 0; i < 4; i++) {
+    const rx = p.x - p.rx * .75 + i * 9, ry = p.y - p.ry * .45 + (i % 2) * 8;
+    line(g, rx, ry, rx + (i % 2 ? 5 : -4), ry - 16, 'rgba(80,115,80,.7)', 1.5);
+  }
+}
+
+function drawPath(g, pts, th) {
+  if (!pts || pts.length < 2) return;
+  g.save();
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const trace = () => {
+    g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const nx = (pts[i][0] + pts[i + 1][0]) / 2, ny = (pts[i][1] + pts[i + 1][1]) / 2;
+      g.quadraticCurveTo(pts[i][0], pts[i][1], nx, ny);
+    }
+    g.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
+  };
+  trace(); g.strokeStyle = th.path2; g.lineWidth = 50; g.stroke();
+  trace(); g.strokeStyle = th.path; g.lineWidth = 41; g.stroke();
+
+  const boardwalk = th.kind === 'sea';
+  const r = rng(level * 51 + 7);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+    const dist = Math.hypot(x2 - x1, y2 - y1), n = Math.max(1, Math.floor(dist / 28));
+    for (let k = 0; k < n; k++) {
+      const t = (k + .5) / n;
+      const x = x1 + (x2 - x1) * t + (r() - .5) * 16;
+      const y = y1 + (y2 - y1) * t + (r() - .5) * 8;
+      if (boardwalk) {
+        fillRR(g, x - 20, y - 4, 40, 8, 2, 'rgba(130,98,60,.75)');
+        line(g, x - 20, y, x + 20, y, 'rgba(60,40,24,.3)', 1);
+      } else {
+        g.beginPath(); g.ellipse(x, y, 10 + r() * 5, 5 + r() * 3, (r() - .5) * .4, 0, TAU);
+        g.fillStyle = th.kind === 'town' ? 'rgba(120,120,118,.55)' : 'rgba(170,155,125,.5)'; g.fill();
+        g.strokeStyle = 'rgba(45,38,26,.24)'; g.lineWidth = 1; g.stroke();
+      }
+    }
+  }
+  g.restore();
+}
+
+function drawTree(g, x, y, rad, kind, th) {
+  g.save();
+  g.fillStyle = 'rgba(0,0,0,.28)';
+  g.beginPath(); g.ellipse(x + 6, y + 8, rad * .92, rad * .58, .1, 0, TAU); g.fill();
+  if (kind === 'pine') {
+    g.fillStyle = th.tree1;
+    star(g, x, y, rad, 11, .58);
+    g.fillStyle = th.tree2;
+    star(g, x - rad * .06, y - rad * .08, rad * .7, 11, .55);
+    g.strokeStyle = hexA(th.leaf, .35); g.lineWidth = 1;
+    for (let i = 0; i < 9; i++) {
+      const a = i * TAU / 9 + .2;
+      line(g, x, y, x + Math.cos(a) * rad * .72, y + Math.sin(a) * rad * .72, g.strokeStyle, 1);
+    }
+  } else if (kind === 'cypress') {
+    g.fillStyle = th.tree1;
+    g.beginPath(); g.ellipse(x, y, rad * .5, rad, 0, 0, TAU); g.fill();
+    g.fillStyle = th.tree2;
+    g.beginPath(); g.ellipse(x - rad * .08, y - rad * .08, rad * .34, rad * .78, 0, 0, TAU); g.fill();
+    g.strokeStyle = hexA(th.leaf, .28); g.lineWidth = 1;
+    for (let i = -2; i <= 2; i++) line(g, x + i * 8, y - rad * .65, x + i * 5, y + rad * .65, g.strokeStyle, 1);
+  } else if (kind === 'olive') {
+    circle(g, x, y, rad * .23, '#5b482f', 'rgba(30,24,16,.4)', 1);
+    for (let i = 0; i < 7; i++) {
+      const a = i * TAU / 7, rr2 = rad * (.34 + hash01(i + level * 9) * .34);
+      circle(g, x + Math.cos(a) * rr2, y + Math.sin(a) * rr2, rad * .32, i % 2 ? th.tree2 : th.leaf);
+    }
+    g.fillStyle = 'rgba(225,225,190,.16)';
+    circle(g, x - rad * .2, y - rad * .28, rad * .22, g.fillStyle);
+  } else {
+    circle(g, x, y, rad * .16, '#4a3524');
+    for (let i = 0; i < 6; i++) {
+      const a = i * TAU / 6 + .3, rr2 = rad * .36;
+      circle(g, x + Math.cos(a) * rr2, y + Math.sin(a) * rr2, rad * .46, i % 2 ? th.tree1 : th.tree2);
+    }
+    circle(g, x - rad * .18, y - rad * .24, rad * .34, th.tree2);
+    g.fillStyle = hexA(th.leaf, .45);
+    for (let i = 0; i < 9; i++) circle(g, x + (hash01(i + level) - .5) * rad * 1.2, y + (hash01(i + 4 + level) - .5) * rad, 1.4, g.fillStyle);
+  }
+  g.restore();
+}
+
+function star(g, x, y, r, points, inner) {
+  g.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / points, rr2 = i % 2 ? r * inner : r;
+    const px = x + Math.cos(a) * rr2, py = y + Math.sin(a) * rr2;
+    i ? g.lineTo(px, py) : g.moveTo(px, py);
+  }
+  g.closePath(); g.fill();
+}
+
+function drawBush(g, x, y, rad, th) {
+  g.fillStyle = 'rgba(0,0,0,.22)';
+  g.beginPath(); g.ellipse(x + 3, y + 4, rad * .95, rad * .6, 0, 0, TAU); g.fill();
+  for (let i = 0; i < 5; i++) {
+    const a = i * TAU / 5 + .4, rr2 = rad * .42;
+    circle(g, x + Math.cos(a) * rr2, y + Math.sin(a) * rr2, rad * .48, i % 2 ? th.tree1 : th.tree2);
+  }
+  circle(g, x - rad * .15, y - rad * .18, rad * .4, th.leaf);
+  g.fillStyle = 'rgba(240,200,120,.65)';
+  for (let i = 0; i < 4; i++) circle(g, x + (hash01(i + level * 3) - .5) * rad * 1.2, y + (hash01(i + 9) - .5) * rad, 1.7, g.fillStyle);
+}
+
+function drawFlowers(g, x, y, th) {
+  const cols = ['#e6b35e', '#e58b8b', '#f0dfae', '#b58bc6'];
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.4, rr2 = 4 + (i % 4) * 5;
+    const px = x + Math.cos(a) * rr2, py = y + Math.sin(a) * rr2;
+    line(g, px, py, px, py + 5, 'rgba(70,110,65,.7)', 1);
+    circle(g, px, py, 2.2, cols[i % cols.length]);
+  }
+}
+
+function drawFence(g, x1, x2, y, gaps, th) {
+  const gap = gaps || [];
+  for (let x = x1 + 8; x < x2; x += 22) {
+    if (gap.some(([a, b]) => x > a && x < b)) continue;
+    fillRR(g, x - 2, y - 16, 5, 24, 2, th.kind === 'town' ? '#5a5e62' : '#c7b99b');
+    line(g, x - 2, y - 16, x - 2, y + 8, 'rgba(40,32,22,.25)', 1);
+  }
+  for (const yy of [y - 11, y - 2]) {
+    for (let x = x1; x < x2; x += 22) {
+      const xe = Math.min(x + 22, x2);
+      if (!gap.some(([ga, gb]) => x < gb && xe > ga)) line(g, x, yy, xe, yy, 'rgba(120,100,74,.7)', 2);
+    }
+  }
+}
+
+function paintHouseShadow(g) {
+  g.save();
+  g.beginPath();
+  for (const r of rooms) g.rect(r.x, r.y, r.w, r.h);
+  g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 28; g.shadowOffsetX = 8; g.shadowOffsetY = 13;
+  g.fillStyle = 'rgba(0,0,0,.38)';
+  g.fill();
+  g.restore();
+}
+
+function paintGardenFront(g, spec) {
+  const gd = spec.garden, th = spec.theme;
+  if (gd.porch) drawPorch(g, gd.porch, th);
+  for (const b of gd.bushes || []) drawBush(g, b[0], b[1], b[2], th);
+  for (const p of gd.props || []) drawProp(g, p[0], p[1], p[2], p[3], th);
+  if (gd.fence) drawFence(g, 0, W, gd.fence.y, gd.fence.gaps, th);
+  if (gd.lights) drawStringLights(g, gd.lights);
+}
+
+function drawPorch(g, p, th) {
+  g.fillStyle = 'rgba(0,0,0,.3)';
+  fillRR(g, p.x + 4, p.y + 6, p.w, p.h, 4, g.fillStyle);
+  fillRR(g, p.x, p.y, p.w, p.h, 4, th.kind === 'sea' ? '#a88b67' : '#8f6b47');
+  for (let y = p.y + 8; y < p.y + p.h; y += 11) line(g, p.x + 3, y, p.x + p.w - 3, y, 'rgba(50,35,22,.25)', 1);
+  for (const x of [p.x + 7, p.x + p.w - 7]) {
+    circle(g, x, p.y + 7, 4.5, '#e2d0ae', 'rgba(50,40,28,.4)', 1);
+    circle(g, x, p.y + p.h - 7, 4.5, '#e2d0ae', 'rgba(50,40,28,.4)', 1);
+  }
+  fillRR(g, p.x + p.w * .18, p.y + p.h, p.w * .64, 12, 2, 'rgba(150,132,108,.65)');
+  fillRR(g, p.x + p.w * .12, p.y + p.h + 9, p.w * .76, 10, 2, 'rgba(115,100,82,.5)');
+}
+
+function drawStringLights(g, lights) {
+  g.save();
+  for (const l of lights) {
+    const mx = (l.from[0] + l.to[0]) / 2, my = (l.from[1] + l.to[1]) / 2 + 20;
+    g.beginPath(); g.moveTo(l.from[0], l.from[1]); g.quadraticCurveTo(mx, my, l.to[0], l.to[1]);
+    g.strokeStyle = 'rgba(35,30,22,.7)'; g.lineWidth = 1.5; g.stroke();
+    for (let i = 1; i < 10; i++) {
+      const t = i / 10, it = 1 - t;
+      const x = it * it * l.from[0] + 2 * it * t * mx + t * t * l.to[0];
+      const y = it * it * l.from[1] + 2 * it * t * my + t * t * l.to[1];
+      g.globalCompositeOperation = 'lighter';
+      circle(g, x, y + 5, 5.5, 'rgba(255,200,110,.14)');
+      circle(g, x, y + 5, 2.2, 'rgba(255,230,170,.9)');
+      g.globalCompositeOperation = 'source-over';
+    }
+  }
+  g.restore();
+}
+
+// --- room floors and furniture ----------------------------------------------
+const WOOD = '#6f4a2e', WOOD2 = '#8a5e3b', PAPER = '#efe6d2', INK = 'rgba(45,32,22,.55)';
+const BOOKS = ['#c65b4a', '#d9a24a', '#5f7f8f', '#6c8b5a', '#b66c9a', '#e0cfa9', '#925a3c'];
+
+function paintRoom(g, r) {
+  const st = STYLES[r.type] || STYLES.living;
+  g.save();
+  g.beginPath(); g.rect(r.x, r.y, r.w, r.h); g.clip();
+  paintFloor(g, r, st);
+  if (!['kitchen', 'bath', 'bedroom', 'study'].includes(r.type)) drawRug(g, r, st);
+  drawFurniture(g, r, st);
+  g.restore();
+}
+
+function paintFloor(g, r, st) {
+  g.fillStyle = st.co; g.fillRect(r.x, r.y, r.w, r.h);
+  if (st.floor === 'tile') {
+    const s = 30;
+    for (let y = r.y; y < r.y + r.h; y += s) {
+      for (let x = r.x; x < r.x + r.w; x += s) {
+        if ((((x - r.x) / s | 0) + ((y - r.y) / s | 0)) % 2 === 0) {
+          g.fillStyle = hexA(st.co2, .18); g.fillRect(x, y, s, s);
+        }
+      }
+    }
+    g.strokeStyle = 'rgba(55,45,34,.16)'; g.lineWidth = 1;
+    for (let x = r.x; x <= r.x + r.w; x += s) line(g, x, r.y, x, r.y + r.h, g.strokeStyle, 1);
+    for (let y = r.y; y <= r.y + r.h; y += s) line(g, r.x, y, r.x + r.w, y, g.strokeStyle, 1);
+  } else {
+    const rnd = rng(r.idx * 41 + level * 7);
+    for (let y = r.y + 1; y < r.y + r.h; y += 17) {
+      line(g, r.x, y, r.x + r.w, y, 'rgba(45,30,18,.17)', 1);
+      let x = r.x - rnd() * 90;
+      while (x < r.x + r.w) {
+        const j = x + 58 + rnd() * 70;
+        line(g, j, y, j, Math.min(y + 17, r.y + r.h), 'rgba(45,30,18,.14)', 1);
+        x = j + 70 + rnd() * 90;
+      }
+    }
+    for (let i = 0; i < 14; i++) {
+      const x = r.x + rnd() * r.w, y = r.y + rnd() * r.h;
+      line(g, x, y, x + 12 + rnd() * 22, y + (rnd() - .5) * 3, 'rgba(255,220,170,.05)', 1);
+    }
+  }
+  g.fillStyle = 'rgba(255,235,190,.035)';
+  g.fillRect(r.x, r.y, r.w, r.h * .4);
+}
+
+function drawRug(g, r, st) {
+  let rw, rh, x, y;
+  if (r.type === 'hall') {
+    if (r.w >= r.h) {
+      rw = Math.min(r.w - 100, r.w * .52); rh = 22;
+      x = r.x + (r.w - rw) / 2; y = r.y + (r.h - rh) / 2;
+    } else {
+      rw = 22; rh = Math.min(r.h - 100, r.h * .52);
+      x = r.x + (r.w - rw) / 2; y = r.y + (r.h - rh) / 2;
+    }
+  } else if (r.w > r.h * 1.7) {
+    rw = Math.min(r.w - 80, r.w * .46); rh = Math.min(r.h - 56, 40);
+    x = r.x + (r.w - rw) / 2; y = r.y + r.h * .51;
+  } else if (r.h > r.w * 1.7) {
+    rw = Math.min(r.w - 56, 40); rh = Math.min(r.h - 80, r.h * .46);
+    x = r.x + r.w * .49; y = r.y + (r.h - rh) / 2;
+  } else {
+    rw = Math.min(r.w - 100, r.w * .42); rh = Math.min(r.h - 90, r.h * .32);
+    x = r.x + (r.w - rw) / 2; y = r.y + r.h * .53;
+  }
+  if (rw < 40 || rh < 26) return;
+  r.rugRect = { x, y, w: rw, h: rh };
+  fillRR(g, x + 2, y + 3, rw, rh, 6, 'rgba(25,15,10,.2)');
+  fillRR(g, x, y, rw, rh, 6, st.rug);
+  strokeRR(g, x, y, rw, rh, 6, st.rug2, 2);
+  strokeRR(g, x + 6, y + 6, rw - 12, rh - 12, 4, hexA(st.rug2, .45), 1);
+  g.save();
+  g.beginPath(); g.rect(x + 3, y + 3, rw - 6, rh - 6); g.clip();
+  g.strokeStyle = hexA(st.rug2, .18); g.lineWidth = 1;
+  if (rw > rh * 1.3) {
+    for (let xx = x + 10; xx < x + rw - 6; xx += 7) line(g, xx, y + 5, xx, y + rh - 5, g.strokeStyle, 1);
+  } else {
+    for (let yy = y + 10; yy < y + rh - 6; yy += 7) line(g, x + 5, yy, x + rw - 5, yy, g.strokeStyle, 1);
+  }
+  g.fillStyle = hexA(st.rug2, .5);
+  const n = Math.max(2, Math.floor(Math.max(rw, rh) / 38));
+  for (let i = 1; i < n; i++) {
+    const cx = x + (rw * i) / n, cy = y + rh / 2;
+    g.beginPath(); g.moveTo(cx, cy - 4); g.lineTo(cx + 4, cy); g.lineTo(cx, cy + 4); g.lineTo(cx - 4, cy); g.closePath(); g.fill();
+  }
+  g.restore();
+  g.strokeStyle = hexA(st.rug2, .55); g.lineWidth = 1;
+  if (rw > rh) {
+    for (let i = 0; i < 8; i++) {
+      line(g, x + 8 + i * (rw - 16) / 7, y - 4, x + 8 + i * (rw - 16) / 7, y - 1, g.strokeStyle, 1);
+      line(g, x + 8 + i * (rw - 16) / 7, y + rh + 1, x + 8 + i * (rw - 16) / 7, y + rh + 4, g.strokeStyle, 1);
+    }
+  } else {
+    for (let i = 0; i < 5; i++) {
+      line(g, x - 4, y + 7 + i * (rh - 14) / 4, x - 1, y + 7 + i * (rh - 14) / 4, g.strokeStyle, 1);
+      line(g, x + rw + 1, y + 7 + i * (rh - 14) / 4, x + rw + 4, y + 7 + i * (rh - 14) / 4, g.strokeStyle, 1);
+    }
+  }
+}
+
+function drawFurniture(g, r, st) {
+  switch (r.type) {
+    case 'living': furnishLiving(g, r, st); break;
+    case 'bedroom': furnishBedroom(g, r, st); break;
+    case 'kitchen': furnishKitchen(g, r, st); break;
+    case 'bath': furnishBath(g, r, st); break;
+    case 'dining': furnishDining(g, r, st); break;
+    case 'hall': furnishHall(g, r, st); break;
+    case 'study': furnishStudy(g, r, st); break;
+    case 'conservatory': furnishConservatory(g, r, st); break;
+    case 'nursery': furnishNursery(g, r, st); break;
+    default: furnishPlayroom(g, r, st);
+  }
+}
+
+function furnishLiving(g, r, st) {
+  const s = bestWallSized(r, [154, 132, 112, 92], ['n', 'w', 'e', 's'], 60);
+  if (s) onWall(g, r, s.side, s.along, s.len, 58, (l, d) => drawSofa(g, l, d, st));
+  const opp = s ? { n: 's', s: 'n', w: 'e', e: 'w' }[s.side] : 's';
+  const tv = bestWallSized(r, [92, 80, 68], [opp, 's', 'n', 'w', 'e'], 32);
+  if (tv) onWall(g, r, tv.side, tv.along, tv.len, 30, (l, d) => drawTV(g, l, d, st));
+  const shelf = bestWallSized(r, [82, 68, 54], ['w', 'e', 'n', 's'], 25);
+  if (shelf) onWall(g, r, shelf.side, shelf.along, shelf.len, 24, (l, d) => drawBookshelf(g, l, d));
+  if (r.rugRect) drawCoffeeTable(g, r.rugRect.x + r.rugRect.w / 2, r.rugRect.y + r.rugRect.h * .45, Math.min(72, r.rugRect.w * .38), Math.min(40, r.rugRect.h * .38), st);
+  else drawCoffeeTable(g, r.x + r.w / 2, r.y + r.h / 2, Math.min(66, r.w * .4), Math.min(38, r.h * .3), st);
+  cornerPlant(g, r, st);
+}
+
+function furnishBedroom(g, r, st) {
+  const comfortable = bestWallSized(r, [138, 120, 104, 86, 72], ['n', 'e', 'w', 's'], Math.min(92, Math.max(52, r.h * .46)));
+  if (comfortable) {
+    const depth = Math.min(92, Math.max(50, r.h * .46));
+    onWall(g, r, comfortable.side, comfortable.along, comfortable.len, depth, (l, d) => drawBed(g, l, d, st));
+  }
+  const ward = bestWallSized(r, [92, 78, 62], ['s', 'w', 'e', 'n'], 35);
+  if (ward) onWall(g, r, ward.side, ward.along, ward.len, 35, (l, d) => drawWardrobe(g, l, d));
+  cornerPlant(g, r, st);
+}
+
+function furnishKitchen(g, r, st) {
+  let c = null, len = 0;
+  for (const want of [210, 180, 150, 124, 104, 86]) {
+    c = bestWall(r, want, ['n', 'w', 'e', 's'], 45);
+    if (c) { len = want; break; }
+  }
+  if (c) onWall(g, r, c.side, c.along, len, 45, (l, d) => drawCounter(g, l, d, st, r.idx));
+  const prefer = ['e', 's', 'w', 'n'].filter(s => !c || s !== c.side);
+  const fr = bestWallSized(r, [42, 36], prefer, 42);
+  if (fr) onWall(g, r, fr.side, fr.along, fr.len, fr.len, (l, d) => drawFridge(g, l, d));
+  if (c && r.w > 235 && r.h > 150) drawIsland(g, r.x + r.w * .5, r.y + r.h * .62, Math.min(110, r.w * .36), 52, st);
+  cornerPlant(g, r, st);
+}
+
+function furnishBath(g, r, st) {
+  const tub = bestWallSized(r, [128, 108, 88, 72, 58], ['n', 'w', 'e', 's'], Math.min(52, r.h * .48));
+  if (tub) onWall(g, r, tub.side, tub.along, tub.len, Math.min(52, r.h * .48), (l, d) => drawTub(g, l, d, st));
+  const sink = bestWallSized(r, [58, 48, 40], ['e', 'w', 's', 'n'], 32);
+  if (sink) onWall(g, r, sink.side, sink.along, sink.len, 32, (l, d) => drawVanity(g, l, d, st));
+  const wc = bestWallSized(r, [34, 30], ['s', 'e', 'w', 'n'], 42);
+  if (wc) onWall(g, r, wc.side, wc.along, wc.len, 42, (l, d) => drawToilet(g, l, d));
+  if (r.w * r.h > 22000) drawBathMat(g, r.x + r.w * .5, r.y + r.h * .7, st);
+}
+
+function furnishDining(g, r, st) {
+  const tw = Math.min(132, Math.max(76, r.w * .46)), th = Math.min(78, Math.max(52, r.h * .38));
+  drawDiningTable(g, r.x + r.w * .5, r.y + r.h * .54, tw, th, st);
+  const sb = bestWallSized(r, [88, 72, 56], ['w', 'e', 'n', 's'], 29);
+  if (sb) onWall(g, r, sb.side, sb.along, sb.len, 29, (l, d) => drawSideboard(g, l, d, st));
+  cornerPlant(g, r, st);
+}
+
+function furnishHall(g, r, st) {
+  const con = r.w > 150 && r.h > 100 ? bestWallSized(r, [72, 60], ['n', 's', 'e', 'w'], 26) : null;
+  if (con) onWall(g, r, con.side, con.along, con.len, 26, (l, d) => drawConsole(g, l, d, st));
+  const pegs = bestWallSized(r, [62, 48], ['s', 'n', 'e', 'w'], 14);
+  if (pegs) onWall(g, r, pegs.side, pegs.along, pegs.len, 14, (l, d) => drawCoatPegs(g, l, d, st));
+}
+
+function furnishStudy(g, r, st) {
+  const desk = bestWallSized(r, [118, 100, 84, 68], ['n', 'e', 'w', 's'], 46);
+  if (desk) onWall(g, r, desk.side, desk.along, desk.len, 46, (l, d) => drawDesk(g, l, d, st));
+  const shelf = bestWallSized(r, [96, 80, 64, 52], ['w', 'e', 's', 'n'], 25);
+  if (shelf) onWall(g, r, shelf.side, shelf.along, shelf.len, 24, (l, d) => drawBookshelf(g, l, d));
+  cornerPlant(g, r, st);
+}
+
+function furnishConservatory(g, r, st) {
+  const bench = bestWallSized(r, [104, 88, 72], ['n', 'w', 'e', 's'], 33);
+  if (bench) onWall(g, r, bench.side, bench.along, bench.len, 33, (l, d) => drawWickerBench(g, l, d, st));
+  const pts = [
+    [r.x + 34, r.y + 38, 24], [r.x + r.w - 40, r.y + 42, 27], [r.x + 38, r.y + r.h - 44, 22],
+    [r.x + r.w - 44, r.y + r.h - 50, 25], [r.x + r.w * .48, r.y + 34, 19],
+  ];
+  for (const [x, y, s] of pts) drawPlant(g, x, y, s, st);
+  drawWickerTable(g, r.x + r.w * .5, r.y + r.h * .55, 34);
+  drawPot(g, r.x + r.w * .22, r.y + r.h * .64, 12);
+  drawPot(g, r.x + r.w * .73, r.y + r.h * .34, 10);
+}
+
+function furnishNursery(g, r, st) {
+  const crib = bestWallSized(r, [88, 74, 62], ['n', 'e', 'w', 's'], Math.min(54, r.h * .44));
+  if (crib) onWall(g, r, crib.side, crib.along, crib.len, Math.min(54, r.h * .44), (l, d) => drawCrib(g, l, d, st));
+  const chest = bestWallSized(r, [66, 54], ['s', 'w', 'e', 'n'], 28);
+  if (chest) onWall(g, r, chest.side, chest.along, chest.len, 28, (l, d) => drawToyChest(g, l, d, st));
+  drawBlocks(g, r, st, 4);
+  drawBall(g, r.x + r.w * .66, r.y + r.h * .72, Math.min(9, r.w * .09), st);
+  cornerPlant(g, r, st);
+}
+
+function furnishPlayroom(g, r, st) {
+  const chest = bestWallSized(r, [76, 62], ['s', 'w', 'e', 'n'], 31);
+  if (chest) onWall(g, r, chest.side, chest.along, chest.len, 31, (l, d) => drawToyChest(g, l, d, st));
+  drawWickerTable(g, r.x + r.w * .52, r.y + r.h * .58, Math.min(34, r.w * .12));
+  drawBlocks(g, r, st, 7);
+  drawBall(g, r.x + r.w * .28, r.y + r.h * .7, Math.min(10, r.w * .07), st);
+  const shelf = bestWallSized(r, [62, 48], ['n', 'e', 'w', 's'], 24);
+  if (shelf) onWall(g, r, shelf.side, shelf.along, shelf.len, 22, (l, d) => drawBookshelf(g, l, d));
+  cornerPlant(g, r, st);
+}
+
+function drawSofa(g, len, d, st) {
+  fillRR(g, 2, 3, len, d, 10, 'rgba(20,12,8,.24)');
+  fillRR(g, 0, 0, len, d, 10, shade(st.accent, -.2));
+  fillRR(g, 3, 3, len - 6, d - 6, 8, st.accent);
+  fillRR(g, 6, 5, len - 12, 17, 5, shade(st.accent, -.08));
+  fillRR(g, 0, 5, 11, d - 10, 5, shade(st.accent, -.12));
+  fillRR(g, len - 11, 5, 11, d - 10, 5, shade(st.accent, -.12));
+  fillRR(g, 12, 24, len / 2 - 15, d - 31, 5, shade(st.accent, .07));
+  fillRR(g, len / 2 + 3, 24, len / 2 - 15, d - 31, 5, shade(st.accent, .07));
+  line(g, len / 2, 26, len / 2, d - 9, hexA('#000000', .16), 1);
+  drawPillow(g, 20, 15, 18, 13, -.3, st.textile);
+  drawPillow(g, len - 38, 16, 17, 12, .32, st.textile);
+  strokeRR(g, 0, 0, len, d, 10, INK, 1.4);
+}
+
+function drawPillow(g, x, y, w, h, rot, color) {
+  g.save(); g.translate(x + w / 2, y + h / 2); g.rotate(rot);
+  fillRR(g, -w / 2, -h / 2, w, h, 5, color);
+  strokeRR(g, -w / 2, -h / 2, w, h, 5, 'rgba(60,40,25,.3)', 1);
+  g.restore();
+}
+
+function drawBed(g, len, d, st) {
+  fillRR(g, 2, 3, len, d, 8, 'rgba(20,12,8,.24)');
+  fillRR(g, 0, 0, len, d, 8, WOOD);
+  fillRR(g, 3, 6, len - 6, d - 9, 5, '#f2e8d6');
+  strokeRR(g, 3, 6, len - 6, d - 9, 5, 'rgba(80,60,40,.22)', 1);
+  fillRR(g, 3, d * .47, len - 6, d * .5, 4, st.accent);
+  g.fillStyle = hexA('#ffffff', .14);
+  g.fillRect(4, d * .49, len - 8, 3);
+  const pw = (len - 20) / 2;
+  fillRR(g, 8, 12, pw - 3, 21, 4, '#fbf5e8');
+  fillRR(g, len / 2 + 3, 12, pw - 3, 21, 4, '#fbf5e8');
+  strokeRR(g, 8, 12, pw - 3, 21, 4, 'rgba(90,70,50,.18)', 1);
+  strokeRR(g, len / 2 + 3, 12, pw - 3, 21, 4, 'rgba(90,70,50,.18)', 1);
+  fillRR(g, 0, 0, len, 8, 3, shade(WOOD, -.1));
+  g.fillStyle = hexA(st.textile, .9);
+  g.beginPath(); g.moveTo(len * .68, d * .58); g.lineTo(len - 5, d * .58); g.lineTo(len - 5, d - 5); g.closePath(); g.fill();
+  strokeRR(g, 0, 0, len, d, 8, INK, 1.4);
+}
+
+function drawWardrobe(g, len, d) {
+  fillRR(g, 2, 3, len, d, 4, 'rgba(20,12,8,.22)');
+  fillRR(g, 0, 0, len, d, 4, WOOD);
+  fillRR(g, 2, 2, len - 4, d - 4, 3, WOOD2);
+  line(g, len / 2, 4, len / 2, d - 4, 'rgba(40,25,15,.5)', 1.5);
+  circle(g, len / 2 - 6, d / 2, 2, '#d9c28f');
+  circle(g, len / 2 + 6, d / 2, 2, '#d9c28f');
+  strokeRR(g, 0, 0, len, d, 4, INK, 1.2);
+}
+
+function drawBookshelf(g, len, d) {
+  fillRR(g, 2, 3, len, d, 3, 'rgba(20,12,8,.24)');
+  fillRR(g, 0, 0, len, d, 3, shade(WOOD, -.05));
+  const rows = d > 22 ? 2 : 1;
+  for (let row = 0; row < rows; row++) {
+    const y = 3 + row * (d - 6) / rows, h = (d - 6) / rows - 2;
+    g.fillStyle = 'rgba(30,18,10,.35)'; g.fillRect(2, y, len - 4, h);
+    let x = 4;
+    let k = 0;
+    while (x < len - 5) {
+      const bw = 4 + hash01(k + row * 17 + Math.round(len)) * 4;
+      if (x + bw > len - 5) break;
+      g.fillStyle = BOOKS[(k + row + Math.round(len)) % BOOKS.length];
+      g.fillRect(x, y + 1, bw, h - 2);
+      x += bw + 1; k++;
+    }
+  }
+  line(g, 2, d - 2, len - 2, d - 2, 'rgba(255,230,180,.12)', 1);
+  strokeRR(g, 0, 0, len, d, 3, INK, 1.2);
+}
+
+function drawCoffeeTable(g, x, y, w, h, st) {
+  fillRR(g, x - w / 2 + 2, y - h / 2 + 3, w, h, 7, 'rgba(20,12,8,.24)');
+  fillRR(g, x - w / 2, y - h / 2, w, h, 7, WOOD2);
+  strokeRR(g, x - w / 2, y - h / 2, w, h, 7, INK, 1.2);
+  fillRR(g, x - w * .28, y - h * .22, w * .3, h * .38, 2, '#d9cbb4');
+  line(g, x - w * .26, y - h * .1, x - w * .02, y - h * .1, 'rgba(70,50,35,.4)', 1);
+  circle(g, x + w * .2, y + h * .08, 4, '#efe4cf', 'rgba(60,40,25,.4)', 1);
+  circle(g, x + w * .24, y + h * .08, 2, '#6b4a2e');
+}
+
+function drawTV(g, len, d, st) {
+  fillRR(g, 1, 2, len, d, 3, 'rgba(20,12,8,.22)');
+  fillRR(g, 0, 0, len, d, 3, WOOD);
+  fillRR(g, 6, 5, len - 12, 8, 2, '#20232a');
+  line(g, 8, 7, len - 12, 7, 'rgba(160,200,220,.18)', 1);
+  strokeRR(g, 0, 0, len, d, 3, INK, 1.1);
+}
+
+function drawPlant(g, x, y, s, st) {
+  g.fillStyle = 'rgba(0,0,0,.2)';
+  g.beginPath(); g.ellipse(x + 3, y + 4, s * .7, s * .35, 0, 0, TAU); g.fill();
+  circle(g, x, y, s * .46, '#9a5a3b', 'rgba(50,30,20,.4)', 1);
+  const greens = ['#3e7a4b', '#4f8f55', '#2f6640'];
+  for (let i = 0; i < 7; i++) {
+    const a = i * TAU / 7 + .35, rr2 = s * .54;
+    g.save();
+    g.translate(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2);
+    g.rotate(a);
+    g.beginPath(); g.ellipse(0, 0, s * .42, s * .24, 0, 0, TAU);
+    g.fillStyle = greens[i % 3]; g.fill();
+    g.strokeStyle = 'rgba(20,50,25,.2)'; g.lineWidth = 1; g.stroke();
+    g.restore();
+  }
+  circle(g, x, y, s * .18, '#6f8f5a');
+}
+
+function drawPot(g, x, y, s) {
+  circle(g, x, y, s * .55, '#8f5a3d', 'rgba(50,30,20,.4)', 1);
+  circle(g, x, y - s * .2, s * .42, '#5a8a55');
+}
+
+function drawCounter(g, len, d, st, seed) {
+  fillRR(g, 1, 2, len, d, 3, 'rgba(20,12,8,.22)');
+  fillRR(g, 0, 0, len, d, 3, WOOD);
+  fillRR(g, 3, 5, len - 6, d - 8, 2, '#e6dbc6');
+  g.fillStyle = 'rgba(60,40,25,.18)';
+  for (let x = 10; x < len - 6; x += 26) line(g, x, 5, x, d - 4, 'rgba(60,40,25,.14)', 1);
+  if (len > 100) {
+    const sx = len * .26;
+    g.beginPath(); g.ellipse(sx, d * .52, 15, 9, 0, 0, TAU);
+    g.fillStyle = '#aeb9b2'; g.fill(); g.strokeStyle = 'rgba(50,60,55,.5)'; g.lineWidth = 1; g.stroke();
+    line(g, sx + 10, d * .52 - 6, sx + 16, d * .52 - 11, '#b9c2ba', 2);
+    circle(g, sx + 16, d * .52 - 11, 2, '#b9c2ba');
+  }
+  if (len > 170) {
+    const bx = len * .7;
+    for (let i = 0; i < 4; i++) {
+      circle(g, bx + (i % 2) * 15, d * .42 + ((i / 2) | 0) * 14, 5.5, '#48413a', 'rgba(20,18,15,.5)', 1);
+    }
+  } else {
+    fillRR(g, len - 34, d * .28, 22, 12, 2, '#c7b89c');
+    line(g, len - 32, d * .28 + 2, len - 14, d * .28 + 2, 'rgba(80,60,40,.5)', 1);
+  }
+  strokeRR(g, 0, 0, len, d, 3, INK, 1.1);
+}
+
+function drawFridge(g, len, d) {
+  fillRR(g, 2, 3, len, d, 4, 'rgba(20,12,8,.24)');
+  fillRR(g, 0, 0, len, d, 4, '#d9dee0');
+  line(g, 3, d * .42, len - 3, d * .42, 'rgba(70,85,90,.35)', 1.4);
+  line(g, len - 9, 4, len - 9, d * .38, 'rgba(70,85,90,.4)', 2);
+  line(g, len - 9, d * .48, len - 9, d - 4, 'rgba(70,85,90,.4)', 2);
+  strokeRR(g, 0, 0, len, d, 4, 'rgba(50,60,64,.5)', 1.2);
+}
+
+function drawIsland(g, x, y, w, h, st) {
+  fillRR(g, x - w / 2 + 2, y - h / 2 + 3, w, h, 6, 'rgba(20,12,8,.22)');
+  fillRR(g, x - w / 2, y - h / 2, w, h, 6, WOOD2);
+  fillRR(g, x - w / 2 + 3, y - h / 2 + 3, w - 6, h - 6, 4, '#e3d6bf');
+  fillRR(g, x - w * .18, y - h * .2, w * .26, h * .34, 3, '#caa06a');
+  circle(g, x + w * .18, y + h * .08, 7, '#a45d42');
+}
+
+function drawTub(g, len, d, st) {
+  fillRR(g, 1, 2, len, d, 13, 'rgba(20,12,8,.2)');
+  fillRR(g, 0, 0, len, d, 13, '#eef1ed');
+  fillRR(g, 6, 6, len - 12, d - 12, 10, '#c3dde0');
+  fillRR(g, 9, 9, len - 18, d - 18, 8, '#8fc3cb');
+  g.fillStyle = 'rgba(255,255,255,.24)';
+  g.beginPath(); g.ellipse(len * .35, d * .4, len * .18, d * .12, -.2, 0, TAU); g.fill();
+  for (let i = 0; i < 4; i++) circle(g, len * .55 + i * 10, d * .62 + (i % 2) * 4, 2 + i * .4, 'rgba(255,255,255,.65)');
+  line(g, len - 14, d / 2, len - 7, d / 2 - 8, '#b7c4c1', 3);
+  strokeRR(g, 0, 0, len, d, 13, 'rgba(80,100,98,.25)', 1.2);
+}
+
+function drawVanity(g, len, d, st) {
+  fillRR(g, 1, 2, len, d, 3, 'rgba(20,12,8,.2)');
+  fillRR(g, 0, 0, len, d, 3, '#e4dccd');
+  g.beginPath(); g.ellipse(len / 2, d * .5, len * .29, d * .28, 0, 0, TAU);
+  g.fillStyle = '#cfe2e2'; g.fill(); g.strokeStyle = 'rgba(60,90,92,.4)'; g.lineWidth = 1; g.stroke();
+  line(g, len / 2, d * .35, len / 2, d * .18, '#aab7b5', 2);
+  strokeRR(g, 0, 0, len, d, 3, 'rgba(70,90,88,.3)', 1.1);
+}
+
+function drawToilet(g, len, d) {
+  fillRR(g, len * .1, 0, len * .8, 13, 3, '#e8eeea');
+  g.beginPath(); g.ellipse(len / 2, d * .58, len * .44, d * .34, 0, 0, TAU);
+  g.fillStyle = '#eef3ef'; g.fill(); g.strokeStyle = 'rgba(80,100,98,.35)'; g.lineWidth = 1.2; g.stroke();
+  g.beginPath(); g.ellipse(len / 2, d * .58, len * .33, d * .24, 0, 0, TAU);
+  g.fillStyle = '#d4e1df'; g.fill();
+  circle(g, len / 2, d * .23, 2.4, '#b9c6c3');
+}
+
+function drawBathMat(g, x, y, st) {
+  fillRR(g, x - 22, y - 13, 44, 26, 5, hexA(st.rug2, .85));
+  strokeRR(g, x - 22, y - 13, 44, 26, 5, hexA(st.rug, .6), 1);
+  for (let i = 0; i < 4; i++) line(g, x - 16 + i * 10, y + 14, x - 16 + i * 10, y + 17, hexA(st.rug, .5), 1);
+}
+
+function drawDiningTable(g, x, y, w, h, st) {
+  const chairs = 4;
+  for (let i = 0; i < chairs; i++) {
+    const a = i * TAU / 4 + Math.PI / 4;
+    drawChair(g, x + Math.cos(a) * (w * .72), y + Math.sin(a) * (h * .82), a + Math.PI / 2, st);
+  }
+  g.fillStyle = 'rgba(20,12,8,.22)';
+  g.beginPath(); g.ellipse(x + 2, y + 4, w / 2, h / 2, 0, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(x, y, w / 2, h / 2, 0, 0, TAU);
+  g.fillStyle = WOOD2; g.fill(); g.strokeStyle = INK; g.lineWidth = 1.4; g.stroke();
+  g.beginPath(); g.ellipse(x, y - 1, w / 2 - 7, h / 2 - 6, 0, 0, TAU);
+  g.fillStyle = shade(WOOD2, .08); g.fill();
+  for (let i = 0; i < 4; i++) {
+    const a = i * TAU / 4 + Math.PI / 4;
+    circle(g, x + Math.cos(a) * w * .27, y + Math.sin(a) * h * .3, 7, '#e9e1cf', 'rgba(70,50,35,.3)', 1);
+    circle(g, x + Math.cos(a) * w * .27, y + Math.sin(a) * h * .3, 3, 'rgba(160,190,200,.7)');
+  }
+  circle(g, x, y, 5, '#c9a14f', 'rgba(80,50,20,.4)', 1);
+  circle(g, x, y, 1.5, '#f6e6ae');
+}
+
+function drawChair(g, x, y, rot, st) {
+  g.save(); g.translate(x, y); g.rotate(rot);
+  fillRR(g, -10, -7, 20, 20, 4, shade(st.accent, -.05));
+  fillRR(g, -11, -13, 22, 7, 3, shade(st.accent, -.16));
+  strokeRR(g, -10, -7, 20, 20, 4, 'rgba(40,25,15,.28)', 1);
+  g.restore();
+}
+
+function drawSideboard(g, len, d, st) {
+  fillRR(g, 1, 2, len, d, 3, 'rgba(20,12,8,.2)');
+  fillRR(g, 0, 0, len, d, 3, WOOD);
+  line(g, len / 2, 4, len / 2, d - 4, 'rgba(40,25,15,.4)', 1);
+  fillRR(g, len * .18, 6, 18, 9, 2, '#b9c5b4');
+  line(g, len * .27, 10, len * .27, 3, '#5d8a5a', 1.5);
+  circle(g, len * .27, 2, 3, st.textile);
+  strokeRR(g, 0, 0, len, d, 3, INK, 1.1);
+}
+
+function drawConsole(g, len, d, st) {
+  fillRR(g, 1, 2, len, d, 3, 'rgba(20,12,8,.2)');
+  fillRR(g, 0, 0, len, d, 3, WOOD2);
+  fillRR(g, len * .42, 5, 18, 9, 3, '#8ea898');
+  circle(g, len * .52, 2, 3.2, st.textile);
+  strokeRR(g, 0, 0, len, d, 3, INK, 1.1);
+}
+
+function drawCoatPegs(g, len, d, st) {
+  line(g, 0, 4, len, 4, WOOD2, 3);
+  for (let i = 0; i < 3; i++) {
+    const x = len * (.2 + i * .3);
+    circle(g, x, 5, 2.5, '#c7a76f');
+    if (i !== 1) {
+      fillRR(g, x - 6, 7, 12, 15, 4, hexA(st.accent, .9));
+      line(g, x, 8, x, 20, 'rgba(60,35,20,.3)', 1);
+    }
+  }
+}
+
+function drawDesk(g, len, d, st) {
+  fillRR(g, 1, 2, len, d, 3, 'rgba(20,12,8,.22)');
+  fillRR(g, 0, 0, len, d, 3, WOOD2);
+  fillRR(g, 5, 5, len - 10, d - 10, 2, '#d8c8ad');
+  fillRR(g, len * .18, 9, 40, 8, 2, '#262b31');
+  line(g, len * .2, 12, len * .2 + 32, 12, 'rgba(150,190,215,.2)', 1);
+  fillRR(g, len * .62, 9, 20, 15, 2, '#e7dfd0');
+  line(g, len * .64, 12, len * .64 + 15, 12, 'rgba(80,60,40,.3)', 1);
+  circle(g, len * .86, d * .52, 4, '#eee3cc', 'rgba(80,60,40,.3)', 1);
+  g.save(); g.translate(len / 2, d + 18);
+  circle(g, 0, 0, 12, shade(st.accent, -.05));
+  g.beginPath(); g.arc(0, 2, 12, .15, Math.PI - .15); g.strokeStyle = 'rgba(40,25,15,.4)'; g.lineWidth = 2; g.stroke();
+  g.restore();
+  strokeRR(g, 0, 0, len, d, 3, INK, 1.1);
+}
+
+function drawWickerBench(g, len, d, st) {
+  fillRR(g, 1, 2, len, d, 6, 'rgba(20,12,8,.2)');
+  fillRR(g, 0, 0, len, d, 6, '#a58255');
+  for (let y = 5; y < d - 4; y += 6) line(g, 4, y, len - 4, y, 'rgba(70,48,28,.25)', 1);
+  fillRR(g, 5, 4, len - 10, 9, 3, st.textile);
+  strokeRR(g, 0, 0, len, d, 6, 'rgba(60,40,20,.3)', 1);
+}
+
+function drawWickerTable(g, x, y, s) {
+  circle(g, x + 2, y + 3, s, 'rgba(20,12,8,.2)');
+  circle(g, x, y, s, '#a58255', 'rgba(60,40,20,.3)', 1);
+  circle(g, x, y, s * .7, '#c3a06e');
+  circle(g, x, y, s * .42, '#8e6a44');
+  circle(g, x - s * 1.25, y + s * .3, s * .46, '#9b7a50');
+  circle(g, x + s * 1.25, y + s * .3, s * .46, '#9b7a50');
+}
+
+function drawCrib(g, len, d, st) {
+  fillRR(g, 2, 3, len, d, 5, 'rgba(20,12,8,.22)');
+  fillRR(g, 0, 0, len, d, 5, WOOD2);
+  fillRR(g, 4, 5, len - 8, d - 10, 3, '#f1e7d6');
+  for (let x = 7; x < len - 4; x += 7) line(g, x, 6, x, d - 6, 'rgba(90,60,35,.4)', 1);
+  fillRR(g, 8, d * .45, len - 16, d * .38, 3, st.accent);
+  strokeRR(g, 0, 0, len, d, 5, INK, 1.1);
+}
+
+function drawToyChest(g, len, d, st) {
+  fillRR(g, 2, 3, len, d, 4, 'rgba(20,12,8,.2)');
+  fillRR(g, 0, 0, len, d, 4, shade(st.accent, -.15));
+  fillRR(g, 4, 4, len - 8, d - 8, 3, st.accent);
+  line(g, 4, d * .52, len - 4, d * .52, 'rgba(40,25,15,.35)', 1.5);
+  circle(g, len / 2, d * .55, 2.5, '#f0d796');
+  strokeRR(g, 0, 0, len, d, 4, INK, 1.1);
+}
+
+function drawBlocks(g, r, st, count) {
+  const cols = ['#d36a5a', '#e0b35a', '#6f9bb3', '#79a06a', '#b58bc6'];
+  for (let i = 0; i < count; i++) {
+    const x = r.x + r.w * (.22 + hash01(r.idx * 13 + i * 7) * .56);
+    const y = r.y + r.h * (.35 + hash01(r.idx * 29 + i * 11) * .42);
+    g.save(); g.translate(x, y); g.rotate((hash01(i + 4) - .5) * .5);
+    fillRR(g, -5, -5, 10, 10, 1.5, cols[i % cols.length]);
+    g.strokeStyle = 'rgba(40,25,15,.3)'; g.lineWidth = 1; g.strokeRect(-5, -5, 10, 10);
+    g.restore();
+  }
+}
+
+function drawBall(g, x, y, s, st) {
+  circle(g, x + 2, y + 3, s, 'rgba(20,12,8,.18)');
+  circle(g, x, y, s, st.textile, 'rgba(40,25,15,.25)', 1);
+  g.beginPath(); g.arc(x, y, s * .7, -.4, 1.2); g.strokeStyle = 'rgba(255,255,255,.4)'; g.lineWidth = 2; g.stroke();
+  g.beginPath(); g.arc(x, y, s * .55, 2.4, 3.8); g.strokeStyle = 'rgba(60,40,30,.35)'; g.lineWidth = 1.5; g.stroke();
+}
+
+function cornerPlant(g, r, st) {
+  if (r.w < 150 || r.h < 120) return;
+  const corners = [
+    [r.x + 30, r.y + 30], [r.x + r.w - 32, r.y + 30],
+    [r.x + 30, r.y + r.h - 32], [r.x + r.w - 32, r.y + r.h - 32],
+  ];
+  const c = corners[(r.idx + level) % corners.length];
+  drawPlant(g, c[0], c[1], 20, st);
+}
+
+// --- garden props ------------------------------------------------------------
+function drawProp(g, kind, x, y, s, th) {
+  switch (kind) {
+    case 'streetlamp': drawStreetlamp(g, x, y, s); break;
+    case 'lantern': drawLantern(g, x, y, s); break;
+    case 'cat': drawCat(g, x, y, s); break;
+    case 'bike': drawBike(g, x, y, s); break;
+    case 'doghouse': drawDoghouse(g, x, y, s); break;
+    case 'fountain': drawFountain(g, x, y, s, th); break;
+    case 'bench': drawBench(g, x, y, s); break;
+    case 'mailbox': drawMailbox(g, x, y, s); break;
+    case 'stump': drawStump(g, x, y, s, th); break;
+    case 'boat': drawBoat(g, x, y, s); break;
+    case 'lighthouse': drawLighthouse(g, x, y, s); break;
+    case 'shells': drawShells(g, x, y, s); break;
+    case 'dune': drawDune(g, x, y, s, th); break;
+    case 'pot': drawPot(g, x, y, 13 * s); break;
+    case 'flowers': drawFlowers(g, x, y, th); break;
+  }
+}
+
+function drawStreetlamp(g, x, y, s) {
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  const glow = g.createRadialGradient(x, y - 8, 2, x, y - 8, 95 * s);
+  glow.addColorStop(0, 'rgba(255,210,125,.3)');
+  glow.addColorStop(.45, 'rgba(255,180,90,.1)');
+  glow.addColorStop(1, 'rgba(255,170,80,0)');
+  g.fillStyle = glow; circle(g, x, y - 8, 95 * s, glow);
+  g.restore();
+  g.fillStyle = 'rgba(0,0,0,.28)';
+  g.beginPath(); g.ellipse(x + 4, y + 7 * s, 13 * s, 7 * s, 0, 0, TAU); g.fill();
+  circle(g, x, y, 5 * s, '#3c3a38', 'rgba(20,18,16,.5)', 1);
+  line(g, x, y, x, y - 34 * s, '#4d4a44', 3 * s);
+  circle(g, x, y - 38 * s, 8 * s, 'rgba(255,220,150,.9)', 'rgba(120,80,30,.6)', 1);
+  g.globalCompositeOperation = 'lighter';
+  circle(g, x, y - 38 * s, 15 * s, 'rgba(255,200,110,.16)');
+  g.globalCompositeOperation = 'source-over';
+}
+
+function drawLantern(g, x, y, s) {
+  g.save();
+  const glow = g.createRadialGradient(x, y, 1, x, y, 55 * s);
+  glow.addColorStop(0, 'rgba(255,220,150,.36)');
+  glow.addColorStop(1, 'rgba(255,190,90,0)');
+  g.globalCompositeOperation = 'lighter'; circle(g, x, y, 55 * s, glow); g.restore();
+  circle(g, x, y + 7, 4 * s, '#2f2a22');
+  line(g, x, y + 7, x, y - 4, '#4c4436', 2.5);
+  fillRR(g, x - 5 * s, y - 12 * s, 10 * s, 12 * s, 2, 'rgba(255,215,140,.85)');
+  line(g, x - 5 * s, y - 7 * s, x + 5 * s, y - 7 * s, 'rgba(100,70,30,.5)', 1);
+}
+
+function drawCat(g, x, y, s) {
+  g.save();
+  g.fillStyle = 'rgba(0,0,0,.2)';
+  g.beginPath(); g.ellipse(x + 3, y + 5, 18 * s, 10 * s, .1, 0, TAU); g.fill();
+  g.fillStyle = '#d79b5f';
+  g.beginPath(); g.ellipse(x, y + 3, 16 * s, 10 * s, -.1, 0, TAU); g.fill();
+  circle(g, x - 12 * s, y - 4 * s, 8 * s, '#dfa76b');
+  g.beginPath(); g.moveTo(x - 18 * s, y - 9 * s); g.lineTo(x - 16 * s, y - 16 * s); g.lineTo(x - 12 * s, y - 10 * s); g.closePath(); g.fillStyle = '#dfa76b'; g.fill();
+  g.beginPath(); g.moveTo(x - 9 * s, y - 10 * s); g.lineTo(x - 6 * s, y - 16 * s); g.lineTo(x - 4 * s, y - 8 * s); g.closePath(); g.fill();
+  g.strokeStyle = '#b67543'; g.lineWidth = 2 * s; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(x + 8 * s, y + 5 * s); g.quadraticCurveTo(x + 22 * s, y + 7 * s, x + 17 * s, y - 3 * s); g.stroke();
+  g.strokeStyle = 'rgba(70,45,25,.45)'; g.lineWidth = 1;
+  for (let i = 0; i < 3; i++) {
+    g.beginPath(); g.moveTo(x + 2 + i * 4, y - 3); g.lineTo(x + 4 + i * 4, y + 1); g.stroke();
+  }
+  line(g, x - 15 * s, y - 2 * s, x - 19 * s, y - 1 * s, 'rgba(50,30,20,.5)', 1);
+  line(g, x - 15 * s, y + 1 * s, x - 19 * s, y + 2 * s, 'rgba(50,30,20,.5)', 1);
+  g.restore();
+}
+
+function drawBike(g, x, y, s) {
+  g.save();
+  g.strokeStyle = 'rgba(20,16,12,.3)'; g.lineWidth = 4 * s;
+  g.beginPath(); g.ellipse(x + 3, y + 5, 24 * s, 10 * s, .1, 0, TAU); g.stroke();
+  g.strokeStyle = '#3e4d5c'; g.lineWidth = 2 * s;
+  circle(g, x - 16 * s, y, 10 * s, null, '#596775', 2.2 * s);
+  circle(g, x + 16 * s, y, 10 * s, null, '#596775', 2.2 * s);
+  g.beginPath();
+  g.moveTo(x - 16 * s, y); g.lineTo(x - 3 * s, y - 10 * s); g.lineTo(x + 7 * s, y + 4 * s); g.lineTo(x - 5 * s, y + 4 * s); g.lineTo(x - 16 * s, y);
+  g.moveTo(x - 3 * s, y - 10 * s); g.lineTo(x + 9 * s, y - 12 * s); g.lineTo(x + 16 * s, y);
+  g.strokeStyle = '#b25b45'; g.lineWidth = 2.4 * s; g.stroke();
+  line(g, x - 3 * s, y - 10 * s, x - 8 * s, y - 17 * s, '#3e4d5c', 2 * s);
+  line(g, x - 10 * s, y - 18 * s, x - 4 * s, y - 18 * s, '#3e4d5c', 2 * s);
+  line(g, x + 10 * s, y - 12 * s, x + 7 * s, y - 18 * s, '#3e4d5c', 2 * s);
+  line(g, x + 3 * s, y - 18 * s, x + 10 * s, y - 18 * s, '#3e4d5c', 2 * s);
+  g.restore();
+}
+
+function drawDoghouse(g, x, y, s) {
+  g.save();
+  g.fillStyle = 'rgba(0,0,0,.24)';
+  g.beginPath(); g.ellipse(x + 5, y + 9, 28 * s, 16 * s, 0, 0, TAU); g.fill();
+  fillRR(g, x - 24 * s, y - 15 * s, 48 * s, 32 * s, 2, '#a96845');
+  g.beginPath(); g.moveTo(x - 30 * s, y - 12 * s); g.lineTo(x, y - 28 * s); g.lineTo(x + 30 * s, y - 12 * s); g.closePath();
+  g.fillStyle = '#7d4930'; g.fill();
+  g.strokeStyle = 'rgba(250,220,180,.18)'; g.lineWidth = 1;
+  for (let i = -2; i <= 2; i++) line(g, x + i * 9 * s, y - 13 * s, x + i * 5 * s, y - 24 * s, g.strokeStyle, 1);
+  g.beginPath(); g.arc(x, y + 15 * s, 10 * s, Math.PI, TAU);
+  g.fillStyle = '#3a2618'; g.fill();
+  circle(g, x, y + 16 * s, 8 * s, '#3a2618');
+  g.restore();
+}
+
+function drawFountain(g, x, y, s, th) {
+  g.save();
+  circle(g, x + 3, y + 5, 40 * s, 'rgba(0,0,0,.2)');
+  circle(g, x, y, 40 * s, '#7c7767', 'rgba(30,26,18,.4)', 2);
+  circle(g, x, y, 34 * s, '#3f6670');
+  circle(g, x, y, 31 * s, 'rgba(120,185,190,.45)');
+  g.strokeStyle = 'rgba(200,240,230,.3)'; g.lineWidth = 1;
+  for (let i = 0; i < 3; i++) {
+    g.beginPath(); g.ellipse(x, y, 10 + i * 10, 8 + i * 8, 0, 0, TAU); g.stroke();
+  }
+  circle(g, x, y, 7 * s, '#8d8877');
+  line(g, x, y, x, y - 26 * s, '#8d8877', 4 * s);
+  for (let i = 0; i < 7; i++) {
+    const a = i * TAU / 7;
+    g.globalCompositeOperation = 'lighter';
+    circle(g, x + Math.cos(a) * 20 * s, y - 10 * s + Math.sin(a) * 8 * s, 2.4, 'rgba(220,245,240,.55)');
+    g.globalCompositeOperation = 'source-over';
+  }
+  g.restore();
+}
+
+function drawBench(g, x, y, s) {
+  g.save(); g.translate(x, y);
+  g.fillStyle = 'rgba(0,0,0,.2)';
+  g.beginPath(); g.ellipse(3, 6, 33 * s, 12 * s, 0, 0, TAU); g.fill();
+  for (let i = 0; i < 3; i++) fillRR(g, -30 * s, -9 * s + i * 5 * s, 60 * s, 3.5 * s, 1, '#8b6a46');
+  fillRR(g, -27 * s, -11 * s, 54 * s, 5 * s, 1, '#a58255');
+  g.restore();
+}
+
+function drawMailbox(g, x, y, s) {
+  line(g, x, y + 4, x, y + 26, '#5a5248', 3 * s);
+  fillRR(g, x - 11 * s, y - 11 * s, 22 * s, 18 * s, 5, '#5b6a72');
+  line(g, x - 11 * s, y - 4 * s, x + 11 * s, y - 4 * s, 'rgba(230,240,240,.25)', 1);
+  line(g, x + 8 * s, y - 10 * s, x + 8 * s, y - 20 * s, '#b34d3f', 2);
+  circle(g, x + 8 * s, y - 20 * s, 2, '#d46a55');
+}
+
+function drawStump(g, x, y, s, th) {
+  circle(g, x + 2, y + 3, 18 * s, 'rgba(0,0,0,.2)');
+  circle(g, x, y, 18 * s, '#5a4630');
+  circle(g, x, y, 14 * s, '#8b704f');
+  g.strokeStyle = 'rgba(70,50,30,.4)'; g.lineWidth = 1;
+  for (let i = 1; i <= 3; i++) circle(g, x, y, 4 * i * s, null, g.strokeStyle, 1);
+  fillRR(g, x + 12 * s, y - 12 * s, 4 * s, 24 * s, 1, '#6d573c');
+  g.beginPath(); g.moveTo(x + 14 * s, y - 12 * s); g.lineTo(x + 22 * s, y - 22 * s); g.lineTo(x + 23 * s, y - 10 * s); g.closePath();
+  g.fillStyle = '#8e9698'; g.fill();
+}
+
+function drawBoat(g, x, y, s) {
+  g.save(); g.translate(x, y); g.rotate(-.18);
+  g.fillStyle = 'rgba(0,0,0,.18)';
+  g.beginPath(); g.ellipse(3, 7, 28 * s, 8 * s, 0, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(0, 0, 28 * s, 9 * s, 0, 0, TAU);
+  g.fillStyle = '#704b32'; g.fill(); g.strokeStyle = '#402a1a'; g.lineWidth = 1.4; g.stroke();
+  g.beginPath(); g.ellipse(0, -1, 21 * s, 5 * s, 0, 0, TAU); g.fillStyle = '#9a6d47'; g.fill();
+  line(g, 0, -2, 0, -34 * s, '#5a4632', 2);
+  g.beginPath(); g.moveTo(0, -32 * s); g.lineTo(20 * s, -8 * s); g.lineTo(0, -8 * s); g.closePath();
+  g.fillStyle = '#e4d8bd'; g.fill(); g.strokeStyle = 'rgba(90,70,50,.4)'; g.lineWidth = 1; g.stroke();
+  g.restore();
+}
+
+function drawLighthouse(g, x, y, s) {
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  for (const a of [-.5, .7]) {
+    g.save(); g.translate(x, y - 30 * s); g.rotate(a);
+    const grd = g.createLinearGradient(0, 0, 220 * s, 0);
+    grd.addColorStop(0, 'rgba(255,235,170,.28)'); grd.addColorStop(1, 'rgba(255,220,150,0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.moveTo(0, -8 * s); g.lineTo(220 * s, -44 * s); g.lineTo(220 * s, 44 * s); g.lineTo(0, 8 * s); g.closePath(); g.fill();
+    g.restore();
+  }
+  g.restore();
+  g.fillStyle = 'rgba(0,0,0,.2)';
+  g.beginPath(); g.ellipse(x + 4, y + 5, 30 * s, 16 * s, 0, 0, TAU); g.fill();
+  circle(g, x, y, 28 * s, '#d8cdb8', 'rgba(60,50,38,.5)', 2);
+  circle(g, x, y, 22 * s, '#b44f45');
+  circle(g, x, y, 14 * s, '#e8dfcc');
+  circle(g, x, y, 9 * s, '#fff3c8', 'rgba(120,90,40,.5)', 1);
+  g.globalCompositeOperation = 'lighter';
+  circle(g, x, y, 20 * s, 'rgba(255,235,170,.18)');
+  g.globalCompositeOperation = 'source-over';
+}
+
+function drawShells(g, x, y, s) {
+  for (let i = 0; i < 3; i++) {
+    const px = x + (i - 1) * 18 * s, py = y + (i % 2) * 10 * s;
+    g.beginPath(); g.arc(px, py, 5 * s, Math.PI, TAU);
+    g.strokeStyle = 'rgba(245,220,190,.8)'; g.lineWidth = 1.5 * s; g.stroke();
+    g.beginPath(); g.arc(px, py, 2.5 * s, Math.PI, TAU); g.strokeStyle = 'rgba(245,220,190,.5)'; g.stroke();
+  }
+}
+
+function drawDune(g, x, y, s, th) {
+  g.strokeStyle = th.leaf; g.lineWidth = 1.4;
+  for (let i = 0; i < 9; i++) {
+    const a = -Math.PI / 2 + (i - 4) * .16;
+    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a) * 8 * s, y + Math.sin(a) * 14 * s, x + Math.cos(a) * 16 * s, y + Math.sin(a) * 24 * s); g.stroke();
+  }
+}
+
+// --- walls, windows, doors, art ---------------------------------------------
+function drawWalls(g, spec) {
+  g.save();
+  g.lineJoin = 'miter';
+  for (const r of rooms) {
+    g.strokeStyle = 'rgba(26,18,12,.9)';
+    g.lineWidth = 21;
+    g.strokeRect(r.x, r.y, r.w, r.h);
+  }
+  for (const r of rooms) {
+    g.strokeStyle = '#e8d8bb';
+    g.lineWidth = 15;
+    g.strokeRect(r.x, r.y, r.w, r.h);
+  }
+  for (const r of rooms) {
+    const st = STYLES[r.type] || STYLES.living;
+    g.strokeStyle = 'rgba(95,72,48,.28)';
+    g.lineWidth = 1.2;
+    g.strokeRect(r.x + 10, r.y + 10, r.w - 20, r.h - 20);
+    g.strokeStyle = hexA(st.accent, .2);
+    g.lineWidth = 2;
+    g.setLineDash([2, 7]);
+    g.strokeRect(r.x + 5, r.y + 5, r.w - 10, r.h - 10);
+    g.setLineDash([]);
+  }
+  g.restore();
+  drawExteriorTrim(g, spec);
+}
+
+function drawExteriorTrim(g, spec) {
+  const th = spec.theme;
+  g.save();
+  for (const r of rooms) {
+    for (const side of SIDES) {
+      for (const [a, b] of r.ext[side]) {
+        if (b - a < 8) continue;
+        const lineAt = sideLine(r, side);
+        if (side === 'n' || side === 's') {
+          const y = side === 'n' ? lineAt - 12 : lineAt + 12;
+          line(g, a, y, b, y, th.trim, 4);
+          line(g, a, y - 1, b, y - 1, hexA('#f0e2c5', .3), 1);
+          for (let x = a + 9; x < b - 4; x += 26) line(g, x, y - 2, x, y + 2, 'rgba(30,24,18,.25)', 1);
+        } else {
+          const x = side === 'w' ? lineAt - 12 : lineAt + 12;
+          line(g, x, a, x, b, th.trim, 4);
+          line(g, x - 1, a, x - 1, b, hexA('#f0e2c5', .3), 1);
+          for (let y = a + 9; y < b - 4; y += 26) line(g, x - 2, y, x + 2, y, 'rgba(30,24,18,.25)', 1);
+        }
+      }
+    }
+  }
+  g.restore();
+}
+
+function drawWindows(g) {
+  for (const w of windows) {
+    const horiz = w.w > w.h;
+    const st = STYLES[rooms[w.room].type] || STYLES.living;
+    fillRR(g, w.x - 2, w.y - 2, w.w + 4, w.h + 4, 2, '#f3e8d1');
+    fillRR(g, w.x, w.y, w.w, w.h, 1, '#152b42');
+    const gl = g.createLinearGradient(w.x, w.y, w.x + w.w, w.y + w.h);
+    gl.addColorStop(0, 'rgba(110,170,205,.4)');
+    gl.addColorStop(1, 'rgba(25,50,80,.15)');
+    g.fillStyle = gl; g.fillRect(w.x + 2, w.y + 2, w.w - 4, w.h - 4);
+    g.strokeStyle = 'rgba(240,235,215,.65)'; g.lineWidth = 1.4;
+    if (horiz) {
+      line(g, w.x + w.w / 2, w.y + 1, w.x + w.w / 2, w.y + w.h - 1, g.strokeStyle, 1.4);
+      line(g, w.x + 2, w.y + w.h / 2, w.x + w.w - 2, w.y + w.h / 2, 'rgba(240,235,215,.22)', 1);
+    } else {
+      line(g, w.x + 1, w.y + w.h / 2, w.x + w.w - 1, w.y + w.h / 2, g.strokeStyle, 1.4);
+      line(g, w.x + w.w / 2, w.y + 2, w.x + w.w / 2, w.y + w.h - 2, 'rgba(240,235,215,.22)', 1);
+    }
+    g.strokeStyle = 'rgba(120,95,62,.45)'; g.lineWidth = 1.4;
+    g.strokeRect(w.x, w.y, w.w, w.h);
+    // curtains on the room side
+    g.fillStyle = hexA(st.accent, .55);
+    if (w.side === 'n') {
+      fillRR(g, w.x - 3, w.y + w.h + 1, 9, 12, 2, g.fillStyle);
+      fillRR(g, w.x + w.w - 6, w.y + w.h + 1, 9, 12, 2, g.fillStyle);
+    } else if (w.side === 's') {
+      fillRR(g, w.x - 3, w.y - 13, 9, 12, 2, g.fillStyle);
+      fillRR(g, w.x + w.w - 6, w.y - 13, 9, 12, 2, g.fillStyle);
+    } else if (w.side === 'w') {
+      fillRR(g, w.x + w.w + 1, w.y - 3, 12, 9, 2, g.fillStyle);
+      fillRR(g, w.x + w.w + 1, w.y + w.h - 6, 12, 9, 2, g.fillStyle);
+    } else {
+      fillRR(g, w.x - 13, w.y - 3, 12, 9, 2, g.fillStyle);
+      fillRR(g, w.x - 13, w.y + w.h - 6, 12, 9, 2, g.fillStyle);
+    }
+    // a little moon glint
+    g.strokeStyle = 'rgba(210,235,250,.45)'; g.lineWidth = 1.6;
+    if (horiz) line(g, w.x + 7, w.y + w.h - 4, w.x + 22, w.y + 4, g.strokeStyle, 1.6);
+    else line(g, w.x + 4, w.y + 10, w.x + w.w - 4, w.y + 24, g.strokeStyle, 1.6);
+  }
+}
+
+function drawDoors(g) {
+  for (let i = 0; i < doors.length; i++) {
+    const d = doors[i];
+    const horiz = d.w >= d.h;
+    fillRR(g, d.x, d.y, d.w, d.h, 2, '#b8895b');
+    g.strokeStyle = 'rgba(70,45,25,.4)'; g.lineWidth = 1;
+    if (horiz) {
+      for (let x = d.x + 8; x < d.x + d.w - 3; x += 11) line(g, x, d.y + 3, x, d.y + d.h - 3, 'rgba(70,45,25,.22)', 1);
+    } else {
+      for (let y = d.y + 8; y < d.y + d.h - 3; y += 11) line(g, d.x + 3, y, d.x + d.w - 3, y, 'rgba(70,45,25,.22)', 1);
+    }
+    line(g, d.x, horiz ? d.y + d.h / 2 : d.y, d.x + d.w, horiz ? d.y + d.h / 2 : d.y, 'rgba(255,235,200,.22)', 1);
+
+    let inside = horiz
+      ? (pointInRooms(d.x + d.w / 2, d.y - 24) ? -1 : pointInRooms(d.x + d.w / 2, d.y + d.h + 24) ? 1 : (i % 2 ? 1 : -1))
+      : (pointInRooms(d.x - 24, d.y + d.h / 2) ? -1 : pointInRooms(d.x + d.w + 24, d.y + d.h / 2) ? 1 : (i % 2 ? 1 : -1));
+    const len = Math.min(horiz ? d.w : d.h, 58) - 6;
+    let hingeX, hingeY, start, open;
+    if (horiz) {
+      hingeX = d.x + 6; hingeY = d.y + d.h / 2;
+      start = 0;
+      open = inside < 0 ? -Math.PI * .43 : Math.PI * .43;
+    } else {
+      hingeX = d.x + d.w / 2; hingeY = d.y + 6;
+      start = Math.PI / 2;
+      open = inside < 0 ? Math.PI / 2 + Math.PI * .43 : Math.PI / 2 - Math.PI * .43;
+    }
+    g.save();
+    g.beginPath(); g.arc(hingeX, hingeY, len, start, open, open < start);
+    g.strokeStyle = 'rgba(70,52,34,.26)'; g.lineWidth = 1; g.stroke();
+    const ex = hingeX + Math.cos(open) * len, ey = hingeY + Math.sin(open) * len;
+    line(g, hingeX, hingeY, ex, ey, 'rgba(150,105,65,.85)', 3.2);
+    line(g, hingeX, hingeY, ex, ey, 'rgba(245,225,190,.25)', 1);
+    circle(g, ex, ey, 2.2, '#e2cfa8');
+    circle(g, hingeX, hingeY, 2, '#6b5338');
+    g.restore();
+  }
+}
+
+function pointInRooms(x, y) {
+  return rooms.some(r => x > r.x + 8 && x < r.x + r.w - 8 && y > r.y + 8 && y < r.y + r.h - 8);
+}
+
+function drawWallArt(g) {
+  for (const r of rooms) {
+    const st = STYLES[r.type] || STYLES.living;
+    if (r.w < 110 || r.h < 95) continue;
+    const prefer = SIDES.filter(s => !r.usedSides.has(s));
+    for (const side of prefer) {
+      const len = sideLen(r, side);
+      const gaps = freeGaps(len, r.blocks[side], 26);
+      const gap = gaps.find(([a, b]) => b - a > 58);
+      if (!gap) continue;
+      const c = (gap[0] + gap[1]) / 2;
+      const horiz = horizontalSide(side);
+      const aw = horiz ? 34 : 12, ah = horiz ? 12 : 30;
+      let x, y;
+      if (side === 'n') { x = r.x + c - aw / 2; y = r.y - 7; }
+      else if (side === 's') { x = r.x + c - aw / 2; y = r.y + r.h - 5; }
+      else if (side === 'w') { x = r.x - 5; y = r.y + c - ah / 2; }
+      else { x = r.x + r.w - 7; y = r.y + c - ah / 2; }
+      fillRR(g, x, y, aw, ah, 1.5, '#7a5d39');
+      fillRR(g, x + 2, y + 2, aw - 4, ah - 4, 1, st.wall);
+      const art = g.createLinearGradient(x, y, x + aw, y + ah);
+      art.addColorStop(0, hexA(st.accent, .8)); art.addColorStop(1, hexA(st.rug2, .7));
+      g.fillStyle = art; g.fillRect(x + 3, y + 3, aw - 6, ah - 6);
+      if (horiz) {
+        line(g, x + 5, y + ah - 4, x + aw - 5, y + ah - 4, 'rgba(40,50,35,.55)', 1.4);
+        circle(g, x + aw - 8, y + 5, 1.8, 'rgba(255,235,170,.8)');
+      } else {
+        line(g, x + 4, y + ah - 5, x + aw - 4, y + ah - 5, 'rgba(40,50,35,.55)', 1.4);
+        circle(g, x + aw - 4, y + 5, 1.6, 'rgba(255,235,170,.8)');
+      }
+      break;
+    }
+  }
+}
+
+// --- light and motion --------------------------------------------------------
+const effective = r => {
+  if (!r) return 0;
+  const flick = r.target && r.v < .96 ? 1 - .16 * Math.max(0, Math.sin(time * 38 + r.idx * 3.1)) : 1;
+  return r.v * flick;
+};
+
+function drawLighting(g) {
+  for (const r of rooms) {
+    const v = effective(r);
+    g.save();
+    g.beginPath(); g.rect(r.x + 8, r.y + 8, r.w - 16, r.h - 16); g.clip();
+    g.fillStyle = `rgba(8,16,34,${.47 * (1 - v)})`;
+    g.fillRect(r.x + 8, r.y + 8, r.w - 16, r.h - 16);
+    g.fillStyle = `rgba(40,90,120,${.05 * (1 - v)})`;
+    g.fillRect(r.x + 8, r.y + 8, r.w - 16, r.h - 16);
+
+    for (const w of windows) if (w.room === r.idx) drawBeam(g, w, v);
+
+    if (v > .01) {
+      const lx = r.lamp.x, ly = r.lamp.y, rad = Math.max(r.w, r.h) * .62;
+      g.fillStyle = `rgba(255,194,108,${.045 * v})`;
+      g.fillRect(r.x + 8, r.y + 8, r.w - 16, r.h - 16);
+      const warm = g.createRadialGradient(lx, ly, 3, lx, ly, rad);
+      warm.addColorStop(0, `rgba(255,235,180,${.22 * v})`);
+      warm.addColorStop(.3, `rgba(255,205,125,${.07 * v})`);
+      warm.addColorStop(1, 'rgba(255,160,80,0)');
+      g.globalCompositeOperation = 'lighter';
+      g.fillStyle = warm;
+      g.beginPath(); g.arc(lx, ly, rad, 0, TAU); g.fill();
+      g.globalAlpha = .035 * v;
+      for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2 + .4;
+        g.beginPath(); g.moveTo(lx, ly);
+        g.lineTo(lx + Math.cos(a) * rad * 1.12, ly + Math.sin(a) * rad * 1.12);
+        g.lineTo(lx + Math.cos(a + .16) * rad * .3, ly + Math.sin(a + .16) * rad * .3);
+        g.closePath(); g.fillStyle = '#ffd98f'; g.fill();
+      }
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      drawMotes(g, r, v);
+    }
+
+    if (r.flash > 0) {
+      g.fillStyle = `rgba(255,241,200,${r.flash * .34})`;
+      g.fillRect(r.x + 8, r.y + 8, r.w - 16, r.h - 16);
+    }
+    g.restore();
+
+    if (v > .02) {
+      for (const w of windows) {
+        if (w.room !== r.idx) continue;
+        g.fillStyle = `rgba(255,211,142,${.25 * v})`;
+        g.fillRect(w.x + 2, w.y + 2, w.w - 4, w.h - 4);
+      }
+    }
+  }
+}
+
+function drawBeam(g, w, v) {
+  const alpha = (1 - v) * .13;
+  if (alpha < .012) return;
+  const horiz = w.w > w.h;
+  let x1, y1, x2, y2, dx, dy;
+  if (w.side === 'n') { x1 = w.x; x2 = w.x + w.w; y1 = y2 = w.y + w.h; dx = 0; dy = 1; }
+  else if (w.side === 's') { x1 = w.x; x2 = w.x + w.w; y1 = y2 = w.y; dx = 0; dy = -1; }
+  else if (w.side === 'w') { y1 = w.y; y2 = w.y + w.h; x1 = x2 = w.x + w.w; dx = 1; dy = 0; }
+  else { y1 = w.y; y2 = w.y + w.h; x1 = x2 = w.x; dx = -1; dy = 0; }
+  const L = 138, spread = 44;
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  const grd = horiz
+    ? g.createLinearGradient(0, y1, 0, y1 + dy * L)
+    : g.createLinearGradient(x1, 0, x1 + dx * L, 0);
+  grd.addColorStop(0, `rgba(155,205,245,${alpha})`);
+  grd.addColorStop(1, 'rgba(120,180,230,0)');
+  g.fillStyle = grd;
+  g.beginPath();
+  if (horiz) {
+    g.moveTo(x1, y1); g.lineTo(x2, y2);
+    g.lineTo(x2 + spread, y2 + dy * L); g.lineTo(x1 - spread, y1 + dy * L);
+  } else {
+    g.moveTo(x1, y1); g.lineTo(x2, y2);
+    g.lineTo(x2 + dx * L, y2 + spread); g.lineTo(x1 + dx * L, y1 - spread);
+  }
+  g.closePath(); g.fill();
+  g.restore();
+}
+
+function drawMotes(g, r, v) {
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 6; i++) {
+    const u = hash01(r.idx * 19 + i * 7), w = hash01(r.idx * 37 + i * 13);
+    const x = r.x + 20 + (r.w - 40) * u + Math.sin(time * .34 + i * 1.7) * 9;
+    const y = r.y + 20 + (r.h - 40) * w + Math.cos(time * .28 + i * 2.3) * 7;
+    const a = v * .32 * (.35 + .65 * Math.abs(Math.sin(time * .8 + i)));
+    circle(g, x, y, 1.5, `rgba(255,240,190,${a})`);
+  }
+  g.restore();
+}
+
+function drawFixtures(g) {
+  for (const r of rooms) {
+    const v = effective(r), l = r.lamp;
+    const fancy = r.type === 'living' || r.type === 'dining' || r.type === 'conservatory';
+    g.save();
+    g.translate(l.x, l.y);
+    if (v > .02) {
+      g.globalCompositeOperation = 'lighter';
+      const halo = g.createRadialGradient(0, 0, 1, 0, 0, 34);
+      halo.addColorStop(0, `rgba(255,245,200,${.5 * v})`);
+      halo.addColorStop(1, 'rgba(255,200,110,0)');
+      g.fillStyle = halo; circle(g, 0, 0, 34, halo);
+      g.globalCompositeOperation = 'source-over';
+    }
+    circle(g, 0, 2, 13, 'rgba(34,24,16,.38)');
+    circle(g, 0, 0, 12, v > .5 ? '#e8c98a' : '#746654', 'rgba(45,32,20,.55)', 1);
+    if (fancy) {
+      for (let i = 0; i < 4; i++) {
+        const a = i * TAU / 4 + .35;
+        line(g, Math.cos(a) * 5, Math.sin(a) * 5, Math.cos(a) * 18, Math.sin(a) * 18, v > .5 ? '#d6b374' : '#5f5343', 2);
+        circle(g, Math.cos(a) * 19, Math.sin(a) * 19, 3.6, v > .12 ? '#fff1c2' : '#4d4438');
+        if (v > .12) circle(g, Math.cos(a) * 19, Math.sin(a) * 19, 7, `rgba(255,230,160,${.13 * v})`);
+      }
+    }
+    circle(g, 0, 0, 6.2, v > .12 ? '#fff4c9' : '#3d3730', 'rgba(60,45,28,.4)', 1);
+    if (v > .12) circle(g, -1.2, -1.4, 2.6, 'rgba(255,255,235,.9)');
+    g.restore();
+  }
+}
+
+function drawFireflies(g) {
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  for (const f of fireflies) {
+    const x = f.x + Math.sin(time * .33 + f.p) * 12;
+    const y = f.y + Math.cos(time * .27 + f.p * 1.4) * 9;
+    const a = (.3 + .7 * (.5 + .5 * Math.sin(time * 1.4 + f.p))) * f.s;
+    circle(g, x, y, 7, `rgba(220,244,155,${.07 * a})`);
+    circle(g, x, y, 1.9, `rgba(236,255,185,${.65 * a})`);
+  }
+  g.restore();
+}
+
+function drawFx(g) {
+  for (const f of fx) {
+    const k = f.t / f.dur;
+    if (f.kind === 'ring') {
+      g.save();
+      g.beginPath(); g.arc(f.x, f.y, 12 + 70 * k, 0, TAU);
+      g.strokeStyle = `rgba(255,224,155,${(1 - k) * .42})`; g.lineWidth = 2; g.stroke();
+      g.restore();
+    } else if (f.kind === 'tag') {
+      const y = f.y - 17 * k;
+      g.save(); g.globalAlpha = Math.max(0, 1 - k);
+      circle(g, f.x, y, 10, 'rgba(32,24,16,.9)', 'rgba(243,196,107,.8)', 1.2);
+      g.fillStyle = '#ffe2a1'; g.font = '700 11px Georgia, serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(f.letter, f.x, y + .5);
+      g.restore();
+    } else if (f.kind === 'bolt') {
+      g.save(); g.globalAlpha = Math.max(0, 1 - k);
+      g.strokeStyle = 'rgba(255,240,180,.8)'; g.lineWidth = 1.4;
+      const s = f.seed;
+      for (let i = 0; i < 2; i++) {
+        const a = -Math.PI / 2 + (i ? .45 : -.35) + s * .3;
+        let x = f.x, y = f.y;
+        g.beginPath(); g.moveTo(x, y);
+        for (let j = 0; j < 3; j++) {
+          x += Math.cos(a + (j % 2 ? .9 : -.9)) * 5;
+          y += Math.sin(a) * 7;
+          g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+      g.restore();
+    }
+  }
+}
+
+function drawWin(g) {
+  const k = Math.min(1, winT / 1.1);
+  if (uniformOn()) {
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    const glow = g.createRadialGradient(W / 2, H * .43, 40, W / 2, H * .45, W * .62);
+    glow.addColorStop(0, `rgba(255,215,140,${.1 + .05 * Math.sin(time * 2)})`);
+    glow.addColorStop(1, 'rgba(255,170,80,0)');
+    g.fillStyle = glow; g.fillRect(0, 0, W, H);
+    for (const r of rooms) {
+      g.beginPath(); g.arc(r.lamp.x, r.lamp.y, 14 + 115 * k, 0, TAU);
+      g.strokeStyle = `rgba(255,235,175,${(1 - k) * .35})`; g.lineWidth = 2; g.stroke();
+    }
+    g.restore();
+  } else {
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    const moon = g.createRadialGradient(W / 2, H * .42, 40, W / 2, H * .48, W * .62);
+    moon.addColorStop(0, `rgba(130,185,245,${.06 + .02 * Math.sin(time * 1.5)})`);
+    moon.addColorStop(1, 'rgba(80,140,220,0)');
+    g.fillStyle = moon; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 14; i++) {
+      const x = 100 + hash01(i * 7 + level) * (W - 200);
+      const y = 80 + hash01(i * 13 + level) * (H - 160);
+      const a = Math.max(0, Math.sin(time * 2 + i) * .14 * (1 - k));
+      circle(g, x, y, 2, `rgba(210,235,255,${a})`);
+    }
+    g.restore();
+  }
+}
+
+// --- boot --------------------------------------------------------------------
+const undoBtn = $('undo'), resetBtn = $('reset');
+if (undoBtn) undoBtn.addEventListener('click', undoTurn);
+if (resetBtn) resetBtn.addEventListener('click', resetLevel);
+
+if (typeof addEventListener === 'function') {
+  addEventListener('resize', resize);
+  addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key >= '1' && e.key <= '9') {
+      const i = Number(e.key) - 1;
+      if (i < switches.length) pressSwitch(i);
+    } else if (e.key === 'u' || e.key === 'U') undoTurn();
+    else if (e.key === 'r' || e.key === 'R') resetLevel();
+  });
+}
+
+const saved = loadState();
+best = saved.best;
+loadLevel(saved.level);
+resize();
+if (g2 && typeof requestAnimationFrame === 'function') requestAnimationFrame(frame);
+</script>
+</body>
+</html>
