@@ -80,6 +80,17 @@ test('a ray starts at the centre, points outward and never crosses to the far si
   assert.ok(!down.includes((C - 2) * G + C), 'does not reach upward');
 });
 
+test('the flight rail is a rounded square while keeping symmetric headings', () => {
+  const axis = ev('orbitPoint(0, { cx: 0, cy: 0, orbit: 100 })');
+  const corner = ev('orbitPoint(Math.PI / 4, { cx: 0, cy: 0, orbit: 100 })');
+  const opposite = ev('orbitPoint(5 * Math.PI / 4, { cx: 0, cy: 0, orbit: 100 })');
+  assert.equal(axis.x, 100, 'the straight sections reach the full rail width');
+  assert.ok(corner.x > 70 && corner.x < 90, 'the diagonal bends inward into a rounded corner');
+  assert.ok(Math.abs(corner.x - corner.y) < 1e-9, 'the corner is symmetric');
+  assert.ok(Math.abs(opposite.x + corner.x) < 1e-9);
+  assert.ok(Math.abs(opposite.y + corner.y) < 1e-9);
+});
+
 test('a drone only prints the most central field that still owes its colour', () => {
   field(`needA[${CENTRE}] = 0; needA[${CENTRE + 1}] = 1; needA[${CENTRE + 2}] = 0;`);
   const red = { color: 0, ang: 0 }, blue = { color: 1, ang: 0 }, other = { color: 2, ang: 0 };
