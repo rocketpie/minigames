@@ -51,6 +51,7 @@
   .tool:active { transform: translateY(1px); }
   .tool:disabled { opacity: .35; cursor: default; }
   .tool:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+  .tool, .panel button { display: inline-flex; align-items: center; justify-content: center; gap: .32em; }
 
   #table {
     --cw: 72px; --ch: 101px; --gap: 4px;
@@ -200,8 +201,8 @@
   <header>
     <h1><span class="logo" aria-hidden="true"><img src="card-back.svg" alt=""></span>FreeCell</h1>
     <div class="stat">MOVES<b id="moves">0</b></div>
-    <button id="undo" class="tool" disabled>Undo</button>
-    <button id="new" class="tool">New game</button>
+    <button id="undo" class="tool" disabled><span aria-hidden="true">↺</span> Undo</button>
+    <button id="new" class="tool"><span aria-hidden="true">★</span> New game</button>
   </header>
 
   <div id="table">
@@ -221,7 +222,7 @@
     <p class="eyebrow">All four foundations</p>
     <h2 id="winTitle">Solved!</h2>
     <p>You finished the deal in <b id="winMoves">0</b> moves.</p>
-    <button id="again">New game</button>
+    <button id="again"><span aria-hidden="true">★</span> New game</button>
   </div>
 </div>
 
