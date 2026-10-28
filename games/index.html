@@ -1,28 +1,65 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>minigames</title>
-<style>
-  body {
-    margin: 0; min-height: 100vh; display: flex; flex-direction: column; justify-content: center;
-    gap: .5rem; padding: 2rem; font-family: system-ui, sans-serif;
-    background: #faf8ef; color: #776e65;
-  }
-  h1 { margin: 0 0 .5rem; }
-  a { color: #8f7a66; font-size: 1.2rem; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  p { margin: 0; color: #bbada0; font-size: .9rem; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>minigames</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: .5rem;
+      padding: 2rem;
+      font-family: system-ui, sans-serif;
+      background: #faf8ef;
+      color: #776e65;
+    }
+
+    h1 {
+      margin: 0 0 .5rem;
+    }
+
+    a {
+      color: #8f7a66;
+      font-size: 1.2rem;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    p {
+      margin: 0;
+      color: #bbada0;
+      font-size: .9rem;
+    }
+
+    p a {
+      font-size: inherit;
+      text-decoration: underline;
+    }
+  </style>
 </head>
+
 <body>
-<h1>minigames</h1>
-<a href="2048/2048.html">2048</a>
-<a href="icewall/icewall.html">icewall</a>
-<a href="drone-printer/drone-printer.html">drone printer</a>
-<a href="lights-please/lights-please.html">lights, please!</a>
-<a href="freecell/freecell.html">freecell</a>
-<p>Tap one to play.</p>
+  <h1>minigames</h1>
+  <p>Here be free, vibe-coded minigames.
+    <br /> No Ads, no payment, no cookies, no tracking.
+    <br />Game state is stored entirely in localStorage on your device.
+  </p>
+  <p>Tap one to play:</p>
+  <a href="2048/2048.html">2048</a>
+  <a href="icewall/icewall.html">icewall</a>
+  <a href="drone-printer/drone-printer.html">drone printer</a>
+  <a href="lights-please/lights-please.html">lights, please!</a>
+  <a href="freecell/freecell.html">freecell</a>
+  <p>Feel free to play the games, or use them as inspiration. See <a
+      href="https://github.com/rocketpie/minigames/blob/main/LICENSE">the license</a>.</p>
 </body>
+
 </html>
