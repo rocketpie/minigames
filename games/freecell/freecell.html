@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>freecell</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: ui-rounded, "Avenir Next", system-ui, sans-serif; color: #e9f0e2;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; padding: .7rem .5rem 1rem;
+    user-select: none; -webkit-user-select: none;
+    background:
+      radial-gradient(120% 85% at 50% -10%, rgba(255, 255, 255, .07), transparent 55%),
+      radial-gradient(95% 70% at 50% 112%, rgba(0, 0, 0, .5), transparent 60%),
+      repeating-linear-gradient(31deg, rgba(255, 255, 255, .022) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(-29deg, rgba(0, 0, 0, .035) 0 1px, transparent 1px 4px),
+      radial-gradient(ellipse at 50% 38%, #1b6445, #0e422b 58%, #072a1b 100%);
+    background-attachment: fixed;
+  }
+  #app {
+    width: fit-content; max-width: 100%; display: flex; flex-direction: column;
+    align-items: center; gap: .5rem;
+  }
+  header { width: 100%; display: flex; align-items: center; gap: .45rem; }
+  h1 {
+    display: flex; align-items: center; gap: .42rem; margin: 0 auto 0 0; white-space: nowrap;
+    font-family: Georgia, "Times New Roman", serif; font-weight: 600;
+    font-size: clamp(1rem, 3.2vw, 1.45rem); letter-spacing: .1em; color: #f4e4bd;
+    text-shadow: 0 1px 0 #0009, 0 0 18px rgba(243, 196, 107, .18);
+  }
+  .logo {
+    width: 1.3rem; aspect-ratio: 5 / 7; overflow: hidden; border-radius: 2px;
+    box-shadow: 0 1px 4px #000a, 0 0 0 1px #c7a04a55;
+  }
+  .logo img { display: block; width: 100%; height: 100%; }
+  .stat {
+    padding: .1rem .4rem; text-align: center; line-height: 1.15;
+    font-size: .5rem; letter-spacing: .14em; color: #9fc0a1;
+  }
+  .stat b { display: block; font-size: .88rem; letter-spacing: 0; color: #f4e4bd; }
+  .tool {
+    font: inherit; font-size: .63rem; letter-spacing: .06em; padding: .38rem .55rem;
+    border: 1px solid rgba(243, 196, 107, .26); border-radius: 6px; cursor: pointer;
+    background: rgba(4, 30, 19, .55); color: #ecd9ae;
+  }
+  .tool:hover { background: rgba(243, 196, 107, .12); }
+  .tool:active { transform: translateY(1px); }
+  .tool:disabled { opacity: .35; cursor: default; }
+  .tool:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+
+  #table {
+    --cw: 72px; --ch: 101px; --gap: 4px;
+    position: relative; display: flex; flex-direction: column; gap: calc(var(--gap) * 1.6);
+    touch-action: manipulation;
+  }
+  #table.dealing { pointer-events: none; }
+  #top { display: flex; justify-content: space-between; gap: var(--gap); }
+  .group { display: flex; gap: var(--gap); }
+
+  /* Wooden trays for the free cells and foundations. */
+  .slot {
+    position: relative; width: var(--cw); height: var(--ch); padding: calc(var(--cw) * .045);
+    border-radius: calc(var(--cw) * .09);
+    background:
+      linear-gradient(90deg, rgba(255, 242, 207, .17), transparent 14% 86%, rgba(40, 20, 4, .3)),
+      linear-gradient(180deg, #ad7b42 0%, #7d5027 17%, #bd8a4f 38%, #704620 62%, #a06e3a 83%, #593718 100%);
+    box-shadow:
+      0 3px 0 #38220f, 0 5px 10px rgba(0, 0, 0, .48),
+      inset 0 0 0 1px rgba(255, 226, 170, .28), inset 0 1px 0 rgba(255, 246, 220, .35);
+    transition: box-shadow .15s;
+  }
+  .slot.valid {
+    box-shadow:
+      0 0 0 2px #f3c46b, 0 0 18px rgba(243, 196, 107, .5),
+      0 3px 0 #38220f, 0 5px 10px rgba(0, 0, 0, .48);
+  }
+  .hole {
+    width: 100%; height: 100%; border-radius: calc(var(--cw) * .055);
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 38%, #0b3523, #062417 72%);
+    box-shadow: inset 0 3px 8px #000c, inset 0 0 0 1px #000a;
+    color: rgba(228, 197, 122, .2); font-size: calc(var(--cw) * .38); line-height: 1;
+  }
+  .slot .card { position: absolute; inset: calc(var(--cw) * .045); width: auto; height: auto; }
+
+  #board { display: grid; grid-template-columns: repeat(8, var(--cw)); gap: var(--gap); align-items: start; }
+  .column {
+    position: relative; min-height: var(--ch); border-radius: calc(var(--cw) * .09);
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .column > .hole {
+    height: var(--ch); border: 1px dashed rgba(232, 215, 170, .16);
+    background: rgba(0, 0, 0, .1); box-shadow: inset 0 2px 7px #0008;
+  }
+  .column.valid { outline: 2px solid rgba(243, 196, 107, .55); outline-offset: 2px; }
+  .column .card + .card { margin-top: calc(var(--ch) * -.64); }
+
+  .card {
+    position: relative; width: var(--cw); height: var(--ch); flex: 0 0 auto;
+    border-radius: calc(var(--cw) * .085); transform-style: preserve-3d;
+    transition: transform .38s ease, outline-color .15s; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .card:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+  .face {
+    position: absolute; inset: 0; border-radius: inherit; overflow: hidden;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  }
+  .front {
+    background: linear-gradient(150deg, #fffef9, #f3ecd8); color: #1c1b18;
+    box-shadow:
+      inset 0 0 0 1px rgba(0, 0, 0, .16), inset 0 0 0 3px rgba(255, 255, 255, .55),
+      0 2px 4px rgba(0, 0, 0, .42);
+  }
+  .card.red .front { color: #a5231c; }
+  .back {
+    transform: rotateY(180deg);
+    background: #03170e url("card-back.svg") center / 100% 100% no-repeat;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .45);
+  }
+  .dealing .card { transform: rotateY(180deg); }
+  .revealing .card { transition-delay: calc(var(--d, 0) * 6ms); }
+  .card.sel { transform: translateY(-7px); outline: 2px solid #f3c46b; outline-offset: 1px; }
+  .card.sel .front { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .16), 0 0 16px rgba(243, 196, 107, .55), 0 8px 16px rgba(0, 0, 0, .45); }
+
+  .corner {
+    position: absolute; display: flex; flex-direction: column; align-items: center;
+    line-height: 1; font-family: Georgia, "Times New Roman", serif; font-weight: 700;
+    font-size: calc(var(--cw) * .19);
+  }
+  .corner i { font-style: normal; font-size: calc(var(--cw) * .135); margin-top: .04em; }
+  .corner.tl { top: 3.5%; left: 4.5%; }
+  .corner.br { bottom: 3.5%; right: 4.5%; transform: rotate(180deg); }
+
+  .pips { position: absolute; inset: 0; }
+  .pip {
+    position: absolute; transform: translate(-50%, -50%); line-height: 1;
+    font-size: calc(var(--cw) * .16);
+  }
+  .pips.ace .pip { font-size: calc(var(--cw) * .42); }
+  .court {
+    position: absolute; inset: 15% 17%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: .04em; border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, .16);
+  }
+  .court b { font-family: Georgia, "Times New Roman", serif; font-size: calc(var(--cw) * .46); line-height: 1; font-weight: 600; }
+  .court i { font-style: normal; font-size: calc(var(--cw) * .22); line-height: 1; }
+
+  #hint {
+    width: 100%; min-height: 1.4em; margin: 0; text-align: center;
+    font-size: .68rem; line-height: 1.35; color: #b9d4b7;
+  }
+  footer { width: 100%; display: flex; justify-content: center; }
+  a { color: #f3c46b; font-size: .7rem; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+
+  #overlay {
+    position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center;
+    padding: 1.2rem; background: radial-gradient(circle at 50% 42%, rgba(10, 40, 26, .5), rgba(2, 11, 7, .9));
+    backdrop-filter: blur(4px);
+  }
+  #overlay.show { display: flex; }
+  .panel {
+    width: min(88vw, 22rem); padding: 1.5rem 1.3rem 1.3rem; text-align: center;
+    border: 1px solid rgba(243, 196, 107, .4); border-radius: 14px;
+    background: linear-gradient(180deg, #0d3826, #062015);
+    box-shadow: 0 24px 70px #000c, inset 0 1px 0 rgba(255, 245, 210, .12);
+  }
+  .panel .eyebrow { margin: 0; font-size: .54rem; letter-spacing: .24em; color: #9d8d71; text-transform: uppercase; }
+  .panel h2 {
+    margin: .35rem 0 .4rem; font-family: Georgia, "Times New Roman", serif;
+    font-weight: 500; font-size: 1.8rem; color: #ffe6b0;
+  }
+  .panel p { margin: 0 0 1.1rem; font-size: .82rem; color: #c5d6c0; }
+  .panel button {
+    font: inherit; font-size: .8rem; font-weight: 700; letter-spacing: .04em;
+    padding: .6rem 1.1rem; border: 0; border-radius: 8px; cursor: pointer;
+    color: #2d2111; background: linear-gradient(180deg, #f8d995, #d9ab55);
+    box-shadow: 0 2px 0 #8b6528, 0 6px 18px rgba(0, 0, 0, .4);
+  }
+  .panel button:active { transform: translateY(1px); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card, .dealing .card { transition: none; }
+  }
+  @media (max-width: 470px) {
+    h1 { letter-spacing: .06em; }
+    .tool { font-size: .58rem; padding: .34rem .44rem; }
+    #hint { font-size: .62rem; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1><span class="logo" aria-hidden="true"><img src="card-back.svg" alt=""></span>FreeCell</h1>
+    <div class="stat">MOVES<b id="moves">0</b></div>
+    <button id="undo" class="tool" disabled>Undo</button>
+    <button id="new" class="tool">New game</button>
+  </header>
+
+  <div id="table">
+    <div id="top">
+      <div class="group" id="frees"></div>
+      <div class="group" id="founds"></div>
+    </div>
+    <div id="board"></div>
+  </div>
+
+  <p id="hint" aria-live="polite">Tap a card to pick it up, then tap where it goes.</p>
+  <footer><a href="freecell-guide.html">Strategy guide →</a></footer>
+</div>
+
+<div id="overlay">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+    <p class="eyebrow">All four foundations</p>
+    <h2 id="winTitle">Solved!</h2>
+    <p>You finished the deal in <b id="winMoves">0</b> moves.</p>
+    <button id="again">New game</button>
+  </div>
+</div>
+
+<script>
+const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const RANK_NAMES = ['Ace','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Jack','Queen','King'];
+const SUITS = ['♠','♥','♦','♣'];
+const SUIT_NAMES = ['spades','hearts','diamonds','clubs'];
+const $ = id => document.getElementById(id);
+const isRed = s => s === 1 || s === 2;
+
+// Pip positions are percentages of the card, so the face scales with any card size.
+const PIPS = {
+  2: [[50,16],[50,84]],
+  3: [[50,16],[50,50],[50,84]],
+  4: [[28,16],[72,16],[28,84],[72,84]],
+  5: [[28,16],[72,16],[50,50],[28,84],[72,84]],
+  6: [[28,16],[72,16],[28,50],[72,50],[28,84],[72,84]],
+  7: [[28,16],[72,16],[50,33],[28,50],[72,50],[28,84],[72,84]],
+  8: [[28,16],[72,16],[50,33],[28,50],[72,50],[50,67],[28,84],[72,84]],
+  9: [[28,16],[72,16],[28,39],[72,39],[50,50],[28,61],[72,61],[28,84],[72,84]],
+  10: [[30,16],[70,16],[50,27],[30,39],[70,39],[30,61],[70,61],[50,73],[30,84],[70,84]],
+};
+
+let cols, free, found, sel, moves, won, dealing, dealTimer;
+let undoStack = [];
+
+const id = c => c.s * 13 + c.r;
+const cardName = c => RANKS[c.r - 1] + SUITS[c.s];
+
+function shuffled() {
+  const deck = [];
+  for (let s = 0; s < 4; s++) for (let r = 1; r <= 13; r++) deck.push({ s, r });
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+const alternates = (top, card) => top.r === card.r + 1 && isRed(top.s) !== isRed(card.s);
+const runOk = run => run.every((c, i) => i === 0 || alternates(run[i - 1], c));
+
+function selectedRun() {
+  if (!sel) return [];
+  if (sel.kind === 'col') return cols[sel.i].slice(sel.j);
+  if (sel.kind === 'free') return free[sel.i] ? [free[sel.i]] : [];
+  return found[sel.i].length ? [found[sel.i][found[sel.i].length - 1]] : [];
+}
+
+function maxMove(dest) {
+  const emptyFree = free.filter(c => !c).length;
+  let emptyCols = cols.filter(c => !c.length).length;
+  if (dest && dest.kind === 'col' && !cols[dest.i].length) emptyCols--;
+  return (emptyFree + 1) * 2 ** Math.max(0, emptyCols);
+}
+
+function canPlace(run, dest) {
+  if (!run.length) return false;
+  if (dest.kind === 'free') return run.length === 1 && !free[dest.i];
+  if (dest.kind === 'found') {
+    return run.length === 1 && run[0].s === dest.i && run[0].r === found[dest.i].length + 1;
+  }
+  if (dest.kind === 'col') {
+    const col = cols[dest.i];
+    if (!col.length) return run.length <= maxMove(dest);
+    return alternates(col[col.length - 1], run[0]) && run.length <= maxMove(dest);
+  }
+  return false;
+}
+
+const snapshot = () => JSON.stringify({ cols, free, found, moves });
+
+function place(dest) {
+  if (!sel || (sel.kind === dest.kind && sel.i === dest.i)) return false;
+  const run = selectedRun();
+  if (!canPlace(run, dest)) return false;
+
+  undoStack.push(snapshot());
+  if (undoStack.length > 300) undoStack.shift();
+  if (sel.kind === 'col') cols[sel.i].splice(sel.j);
+  else if (sel.kind === 'free') free[sel.i] = null;
+  else found[sel.i].pop();
+
+  if (dest.kind === 'free') free[dest.i] = run[0];
+  else if (dest.kind === 'found') found[dest.i].push(run[0]);
+  else cols[dest.i].push(...run);
+
+  moves++;
+  sel = null;
+  won = found.every(p => p.length === 13);
+  draw();
+  if (won) $('again').focus();
+  return true;
+}
+
+function selectCard(kind, i, j = null) {
+  if (kind === 'col') {
+    const run = cols[i].slice(j);
+    if (!run.length || !runOk(run)) {
+      draw();
+      say('That card is buried under a mixed run.');
+      return;
+    }
+    sel = { kind, i, j };
+  } else if (kind === 'free') {
+    if (!free[i]) return;
+    sel = { kind, i };
+  } else {
+    if (!found[i].length) return;
+    sel = { kind, i };
+  }
+  draw();
+}
+
+function notice(msg) {
+  draw();
+  say(msg);
+}
+
+function say(text) {
+  const hint = $('hint');
+  if (hint.textContent !== text) hint.textContent = text;
+}
+
+function tapCard(el) {
+  const kind = el.dataset.kind, i = +el.dataset.i;
+  const j = el.dataset.j === undefined ? null : +el.dataset.j;
+  const same = sel && sel.kind === kind && sel.i === i && (kind !== 'col' || sel.j === j);
+  if (same) { sel = null; draw(); return; }
+
+  if (sel) {
+    if (kind === 'col') {
+      if (j === cols[i].length - 1 && place({ kind, i })) return;
+    } else if (place({ kind, i })) return;
+  }
+  selectCard(kind, i, j);
+}
+
+function tapSlot(el) {
+  const kind = el.dataset.slot, i = +el.dataset.i;
+  if (sel) {
+    if (!place({ kind, i })) notice("That card doesn't fit there.");
+    return;
+  }
+  if (kind === 'free' && free[i]) selectCard('free', i);
+  if (kind === 'found' && found[i].length) selectCard('found', i);
+}
+
+function tapColumn(i) {
+  if (sel && !place({ kind: 'col', i })) notice("That card doesn't fit there.");
+}
+
+function activate(el) {
+  if (dealing || won) return;
+  if (el.classList.contains('card')) return tapCard(el);
+  if (el.classList.contains('slot')) return tapSlot(el);
+  if (el.classList.contains('column')) return tapColumn(+el.dataset.col);
+}
+
+function isSelected(kind, i, j) {
+  if (!sel || sel.kind !== kind || sel.i !== i) return false;
+  return kind !== 'col' || j >= sel.j;
+}
+
+function faceHTML(c) {
+  const sym = SUITS[c.s], rank = RANKS[c.r - 1];
+  const corner = at => `<span class="corner ${at}"><b>${rank}</b><i>${sym}</i></span>`;
+  let middle;
+  if (c.r === 1) {
+    middle = `<div class="pips ace"><span class="pip" style="left:50%;top:50%">${sym}</span></div>`;
+  } else if (c.r <= 10) {
+    middle = `<div class="pips">${PIPS[c.r].map(([x, y]) =>
+      `<span class="pip" style="left:${x}%;top:${y}%">${sym}</span>`).join('')}</div>`;
+  } else {
+    middle = `<div class="court"><b>${rank}</b><i>${sym}</i></div>`;
+  }
+  return corner('tl') + middle + corner('br');
+}
+
+function cardHTML(c, kind, i, j) {
+  const pos = j == null ? '' : ` data-j="${j}" style="z-index:${j};--d:${j * 8 + i}"`;
+  const selClass = isSelected(kind, i, j) ? ' sel' : '';
+  return `<div class="card${isRed(c.s) ? ' red' : ''}${selClass}" role="button" tabindex="0"
+    data-focus="c${id(c)}" data-kind="${kind}" data-i="${i}"${pos}
+    aria-label="${RANK_NAMES[c.r - 1]} of ${SUIT_NAMES[c.s]}">
+    <div class="face front">${faceHTML(c)}</div>
+    <div class="face back" aria-hidden="true"></div>
+  </div>`;
+}
+
+function draw() {
+  const active = document.activeElement && document.activeElement.dataset
+    ? document.activeElement.dataset.focus
+    : null;
+  const held = sel ? selectedRun() : [];
+  const valid = (kind, i) => !!sel && canPlace(held, { kind, i });
+
+  let frees = '';
+  for (let i = 0; i < 4; i++) {
+    const c = free[i], on = c ? '' : ` role="button" tabindex="0" data-focus="f${i}"`;
+    frees += `<div class="slot${valid('free', i) ? ' valid' : ''}" data-slot="free" data-i="${i}"
+      aria-label="Free cell ${i + 1}"${on}>
+      <div class="hole" aria-hidden="true">✦</div>${c ? cardHTML(c, 'free', i) : ''}
+    </div>`;
+  }
+
+  let founds = '';
+  for (let i = 0; i < 4; i++) {
+    const pile = found[i], c = pile[pile.length - 1];
+    const on = c ? '' : ` role="button" tabindex="0" data-focus="o${i}"`;
+    founds += `<div class="slot${valid('found', i) ? ' valid' : ''}" data-slot="found" data-i="${i}"
+      aria-label="${SUIT_NAMES[i]} foundation"${on}>
+      <div class="hole" aria-hidden="true">${SUITS[i]}</div>${c ? cardHTML(c, 'found', i) : ''}
+    </div>`;
+  }
+
+  let board = '';
+  for (let i = 0; i < 8; i++) {
+    const col = cols[i];
+    const on = col.length ? '' : ` role="button" tabindex="0" data-focus="col${i}"`;
+    board += `<div class="column${valid('col', i) ? ' valid' : ''}" data-col="${i}"
+      aria-label="Column ${i + 1}"${on}>
+      ${col.length ? col.map((c, j) => cardHTML(c, 'col', i, j)).join('') : '<div class="hole" aria-hidden="true"></div>'}
+    </div>`;
+  }
+
+  $('frees').innerHTML = frees;
+  $('founds').innerHTML = founds;
+  $('board').innerHTML = board;
+  $('moves').textContent = moves;
+  $('undo').disabled = !undoStack.length;
+  $('overlay').classList.toggle('show', won);
+  $('winMoves').textContent = moves;
+
+  if (held.length) {
+    say(`In hand: ${held.map(cardName).join(' ')}` +
+      (held.length > 1 ? ` (${held.length} cards)` : '') + '. Tap a destination.');
+  } else {
+    say(won ? `Solved in ${moves} moves.` : 'Tap a card to pick it up, then tap where it goes.');
+  }
+
+  if (active) {
+    const el = $('table').querySelector(`[data-focus="${active}"]`);
+    if (el) el.focus({ preventScroll: true });
+  }
+}
+
+function animateDeal() {
+  const t = $('table');
+  t.classList.remove('revealing');
+  t.classList.add('dealing');
+  const frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : f => setTimeout(f, 0);
+  frame(() => frame(() => {
+    t.classList.add('revealing');
+    t.classList.remove('dealing');
+  }));
+  clearTimeout(dealTimer);
+  dealTimer = setTimeout(() => {
+    dealing = false;
+    t.classList.remove('revealing');
+    t.classList.remove('dealing');
+  }, 900);
+}
+
+function newGame() {
+  const deck = shuffled();
+  cols = Array.from({ length: 8 }, () => []);
+  deck.forEach((c, i) => cols[i % 8].push(c));
+  free = [null, null, null, null];
+  found = [[], [], [], []];
+  sel = null;
+  moves = 0;
+  won = false;
+  undoStack = [];
+  dealing = true;
+  draw();
+  if (document.activeElement === $('again')) $('new').focus();
+  animateDeal();
+}
+
+function undo() {
+  const saved = undoStack.pop();
+  if (!saved) return;
+  ({ cols, free, found, moves } = JSON.parse(saved));
+  sel = null;
+  won = false;
+  draw();
+}
+
+function fit() {
+  const gap = Math.max(2, Math.min(8, innerWidth * .007));
+  const wide = Math.min(innerWidth - 16, 1120);
+  const tall = Math.max(300, innerHeight - 130);
+  const cw = Math.max(30, Math.min((wide - gap * 7) / 8, tall / 6.1, 132));
+  const t = $('table');
+  t.style.setProperty('--gap', gap.toFixed(2) + 'px');
+  t.style.setProperty('--cw', cw.toFixed(2) + 'px');
+  t.style.setProperty('--ch', (cw * 1.4).toFixed(2) + 'px');
+}
+
+$('table').addEventListener('click', e => {
+  const el = e.target.closest('.card, .slot, .column');
+  if (el) activate(el);
+});
+$('table').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target.closest('.card, .slot, .column');
+  if (!el) return;
+  e.preventDefault();
+  activate(el);
+});
+$('new').addEventListener('click', newGame);
+$('again').addEventListener('click', newGame);
+$('undo').addEventListener('click', undo);
+addEventListener('resize', fit);
+
+fit();
+newGame();
+</script>
+</body>
+</html>

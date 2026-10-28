@@ -40,6 +40,7 @@ And that's pretty cool!
 | [icewall](games/icewall/icewall.html) | drag a shape from the tray onto the board. |
 | [drone printer](games/drone-printer/drone-printer.html) | tap a glowing drone to send it, the dimmer one to bring the next forward; tap a parked drone to send it out again. |
 | [lights, please!](games/lights-please/lights-please.html) | tap a switch to flip a group of rooms; make the whole house all lit or all dark. Keys 1–9, U (undo), R (reset). |
+| [freecell](games/freecell/freecell.html) | tap a card to pick it up, tap a column, free cell or foundation to place it. Includes a [strategy guide](games/freecell/freecell-guide.html). |
 
 Preview, and share to your phone:
 
