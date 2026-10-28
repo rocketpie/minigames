@@ -232,6 +232,7 @@ const SUITS = ['♠','♥','♦','♣'];
 const SUIT_NAMES = ['spades','hearts','diamonds','clubs'];
 const $ = id => document.getElementById(id);
 const isRed = s => s === 1 || s === 2;
+const KEY = 'freecell';
 
 // Pip positions are percentages of the card, so the face scales with any card size.
 const PIPS = {
@@ -295,6 +296,44 @@ function canPlace(run, dest) {
 
 const snapshot = () => JSON.stringify({ cols, free, found, moves });
 
+const isCard = c => c && Number.isInteger(c.r) && c.r >= 1 && c.r <= 13 &&
+  Number.isInteger(c.s) && c.s >= 0 && c.s <= 3;
+
+function isSaved(s) {
+  if (!s || !Array.isArray(s.cols) || s.cols.length !== 8 || !s.cols.every(Array.isArray)) return false;
+  if (!Array.isArray(s.free) || s.free.length !== 4) return false;
+  if (!Array.isArray(s.found) || s.found.length !== 4 || !s.found.every(Array.isArray)) return false;
+  const cards = [...s.cols.flat(), ...s.free.filter(Boolean), ...s.found.flat()];
+  return cards.length === 52 && cards.every(isCard) &&
+    new Set(cards.map(c => c.s * 13 + c.r)).size === 52 &&
+    Number.isInteger(s.moves) && s.moves >= 0 &&
+    s.found.every((pile, suit) => pile.every((c, i) => c.s === suit && c.r === i + 1));
+}
+
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ cols, free, found, moves, won, undoStack }));
+  } catch { /* storage unavailable: keep playing in memory */ }
+}
+
+function load() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(KEY)); } catch { return false; }
+  if (!isSaved(saved)) return false;
+
+  cols = saved.cols;
+  free = saved.free;
+  found = saved.found;
+  moves = saved.moves;
+  won = found.every(p => p.length === 13);
+  undoStack = Array.isArray(saved.undoStack) ? saved.undoStack.filter(x => typeof x === 'string') : [];
+  sel = null;
+  dealing = false;
+  draw();
+  if (won) $('again').focus();
+  return true;
+}
+
 function place(dest) {
   if (!sel || (sel.kind === dest.kind && sel.i === dest.i)) return false;
   const run = selectedRun();
@@ -314,6 +353,7 @@ function place(dest) {
   sel = null;
   won = found.every(p => p.length === 13);
   draw();
+  save();
   if (won) $('again').focus();
   return true;
 }
@@ -498,18 +538,25 @@ function newGame() {
   won = false;
   undoStack = [];
   dealing = true;
+  const fromWin = document.activeElement === $('again');
   draw();
-  if (document.activeElement === $('again')) $('new').focus();
+  save();
+  if (fromWin) $('new').focus();
   animateDeal();
 }
 
 function undo() {
-  const saved = undoStack.pop();
+  const saved = undoStack[undoStack.length - 1];
   if (!saved) return;
-  ({ cols, free, found, moves } = JSON.parse(saved));
+  let state;
+  try { state = JSON.parse(saved); } catch { return; }
+  if (!isSaved(state)) return;
+  undoStack.pop();
+  ({ cols, free, found, moves } = state);
   sel = null;
-  won = false;
+  won = found.every(p => p.length === 13);
   draw();
+  save();
 }
 
 function fit() {
@@ -540,7 +587,7 @@ $('undo').addEventListener('click', undo);
 addEventListener('resize', fit);
 
 fit();
-newGame();
+if (!load()) newGame();
 </script>
 </body>
 </html>

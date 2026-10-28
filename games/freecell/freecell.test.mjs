@@ -13,6 +13,7 @@ const el = () => ({
   querySelector: () => null, addEventListener() {}, closest: () => null,
 });
 const nodes = new Map();
+const store = new Map();
 const ctx = {
   document: {
     getElementById: id => {
@@ -23,6 +24,11 @@ const ctx = {
   },
   addEventListener() {}, requestAnimationFrame: fn => fn(), setTimeout: fn => fn(), clearTimeout() {},
   innerWidth: 900, innerHeight: 900, console,
+  localStorage: {
+    getItem: k => store.get(k) ?? null,
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: k => store.delete(k),
+  },
 };
 vm.createContext(ctx);
 vm.runInContext(code, ctx);
@@ -32,6 +38,7 @@ const c = (r, s) => ({ r, s });
 const empty = () => [[], [], [], []];
 const cols8 = cols => Array.from({ length: 8 }, (_, i) => cols[i] || []);
 const setup = ({ cols = [], free = [null, null, null, null], found = empty() }) => {
+  store.delete('freecell');
   run(`
     cols = ${JSON.stringify(cols8(cols))};
     free = ${JSON.stringify(free)};
@@ -39,6 +46,11 @@ const setup = ({ cols = [], free = [null, null, null, null], found = empty() }) 
     sel = null; moves = 0; won = false; undoStack = []; dealing = false;
     draw();
   `);
+};
+const deck = () => {
+  const cards = [];
+  for (let s = 0; s < 4; s++) for (let r = 1; r <= 13; r++) cards.push(c(r, s));
+  return cards;
 };
 const take = () => JSON.parse(run('JSON.stringify(sel ? selectedRun().map(c => [c.r, c.s]) : null)'));
 
@@ -166,7 +178,12 @@ test('tapping the held card again puts it back down', () => {
 });
 
 test('undo puts the card back and restores the move count', () => {
-  setup({ free: [c(1, 0), null, null, null] });
+  const all = deck();
+  const rest = all.filter(x => !(x.r === 1 && x.s === 0));
+  const cols = Array.from({ length: 8 }, () => []);
+  rest.forEach((x, i) => cols[i % 8].push(x));
+
+  setup({ cols, free: [c(1, 0), null, null, null] });
   run('sel = {kind:"free", i:0}; place({kind:"found", i:0})');
   assert.equal(run('moves'), 1);
   assert.equal(run('found[0].length'), 1);
@@ -175,6 +192,60 @@ test('undo puts the card back and restores the move count', () => {
   assert.equal(run('moves'), 0);
   assert.equal(run('found[0].length'), 0);
   assert.equal(run('free[0].r'), 1);
+});
+
+test('saves the board and restores it after a visit to the guide', () => {
+  const all = deck();
+  const keep = new Set([c(10, 0), c(9, 1)].map(x => x.s * 13 + x.r));
+  const rest = all.filter(x => !keep.has(x.s * 13 + x.r));
+  const cols = [[c(10, 0)], [c(9, 1)], [], [], [], [], [], []];
+  rest.forEach((x, i) => cols[2 + (i % 6)].push(x));
+
+  setup({ cols });
+  run('tapCard({dataset:{kind:"col", i:"1", j:"0"}})');
+  run('tapCard({dataset:{kind:"col", i:"0", j:"0"}})');
+  assert.equal(run('moves'), 1);
+
+  const saved = JSON.parse(ctx.localStorage.getItem('freecell'));
+  assert.equal(saved.moves, 1);
+  assert.deepEqual(saved.cols[0].map(x => x.r), [10, 9]);
+
+  run('cols = [[],[],[],[],[],[],[],[]]; free = [null,null,null,null]; found = [[],[],[],[]]; moves = 0; won = false; undoStack = []; sel = null;');
+  assert.equal(run('load()'), true);
+  assert.equal(run('moves'), 1);
+  assert.deepEqual(Array.from(run('cols[0].map(x => x.r)')), [10, 9]);
+});
+
+test('undo history also survives a reload', () => {
+  const all = deck();
+  const rest = all.filter(x => !(x.r === 1 && x.s === 0));
+  const cols = Array.from({ length: 8 }, () => []);
+  rest.forEach((x, i) => cols[i % 8].push(x));
+
+  setup({ cols, free: [c(1, 0), null, null, null] });
+  run('sel = {kind:"free", i:0}; place({kind:"found", i:0})');
+  assert.equal(run('found[0].length'), 1);
+  assert.equal(run('undoStack.length'), 1);
+
+  run('cols = [[],[],[],[],[],[],[],[]]; free = [null,null,null,null]; found = [[],[],[],[]]; moves = 0; won = false; undoStack = []; sel = null;');
+  assert.equal(run('load()'), true);
+  assert.equal(run('undoStack.length'), 1);
+
+  run('undo()');
+  assert.equal(run('found[0].length'), 0);
+  assert.equal(run('free[0].r'), 1);
+  assert.equal(run('moves'), 0);
+});
+
+test('a corrupt save is ignored', () => {
+  ctx.localStorage.setItem('freecell', '{"cols":[]}');
+  assert.equal(run('load()'), false);
+
+  const bad = { cols: Array.from({ length: 8 }, () => []), free: [null, null, null, null], found: empty(), moves: 0, undoStack: [] };
+  bad.cols[0] = [c(1, 0)];
+  ctx.localStorage.setItem('freecell', JSON.stringify(bad));
+  assert.equal(run('load()'), false);
+  store.delete('freecell');
 });
 
 test('a card can be taken back off a foundation', () => {
