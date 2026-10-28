@@ -7,13 +7,14 @@
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; }
+  :root { --stage: min(96vw, calc((100vh - 8.2rem) / 0.7)); }
   body {
     font-family: ui-rounded, "Avenir Next", system-ui, sans-serif; color: #e9e1d2;
     display: flex; flex-direction: column; align-items: center; gap: .55rem;
     padding: .65rem .6rem 1rem; user-select: none; -webkit-user-select: none;
     background: radial-gradient(120% 90% at 50% -10%, #202a40 0%, #0b0e17 62%), #080b12;
   }
-  header { width: min(94vw, 78vh); display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  header { width: var(--stage); display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
   h1 {
     font-family: Georgia, "Times New Roman", serif; font-weight: 600; margin: 0 auto 0 0;
     font-size: clamp(.9rem, 2.5vw, 1.15rem); letter-spacing: .16em; color: #f1e7d4; white-space: nowrap;
@@ -26,56 +27,22 @@
     font-size: .5rem; letter-spacing: .1em; color: #a39a8b;
   }
   .stat b { display: block; font-size: .82rem; letter-spacing: 0; color: #f3e6cf; }
-  #stage { width: min(94vw, 78vh); position: relative; }
+  #stage { width: var(--stage); position: relative; }
   canvas {
-    width: 100%; aspect-ratio: 10 / 7; display: block; border-radius: 14px; background: #0b1220;
+    width: 100%; aspect-ratio: 10 / 7; display: block; border-radius: 14px; background: #0b1220; cursor: pointer;
     touch-action: manipulation; box-shadow: 0 0 0 1px rgba(243, 196, 107, .14), 0 18px 45px rgba(0, 0, 0, .55);
   }
-  #board {
-    width: min(94vw, 78vh); display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr));
-    gap: .4rem; padding: .45rem; border-radius: 12px;
-    background: linear-gradient(180deg, #4a3324, #2a1a12 70%);
-    box-shadow: inset 0 1px 0 #7b5c3d, inset 0 -3px 8px #0008, 0 10px 24px rgba(0, 0, 0, .4);
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
   }
-  .switch {
-    position: relative; min-width: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: .16rem;
-    appearance: none; -webkit-appearance: none;
-    padding: .32rem .12rem .26rem; border: 0; border-radius: 7px; color: #3d2a14; font: inherit;
-    background: linear-gradient(180deg, #e8d7ae, #b89c6c 55%, #9c7f52);
-    box-shadow: inset 0 1px 0 #fff8df, inset 0 -2px 2px #0003, 0 2px 0 #5a4026, 0 3px 6px #0007;
-    transition: transform .08s;
-  }
-  .switch::before, .switch::after {
-    content: ""; position: absolute; top: 4px; width: 3px; height: 3px; border-radius: 50%; background: #6b5433;
-  }
-  .switch::before { left: 4px; }
-  .switch::after { right: 4px; }
-  .switch:active { transform: translateY(1px); }
-  .switch { -webkit-tap-highlight-color: transparent; }
-  .switch:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
-  .switch:disabled { opacity: .45; cursor: default; }
-  .letter { font-size: .5rem; font-weight: 800; letter-spacing: .1em; color: #4c351b; }
-  .plate {
-    position: relative; display: block; width: 1.5rem; max-width: 100%; aspect-ratio: 1; height: auto;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 28%, #f7eccd, #c6ab77 58%, #8f754b);
-    box-shadow: inset 0 0 0 1px rgba(123, 98, 60, .4), inset 0 -2px 3px rgba(0, 0, 0, .25);
-  }
-  .lever {
-    position: absolute; left: 40%; top: 16%; width: 20%; height: 68%;
-    border-radius: .2rem; background: linear-gradient(180deg, #fff7df, #c0ab83 60%, #8f7952);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, .5); transform: rotate(-26deg);
-    transition: transform .15s cubic-bezier(.3, 1.4, .5, 1);
-  }
-  .switch.on .lever { transform: rotate(26deg); }
-  .switch.on .plate { box-shadow: inset 0 0 0 1px rgba(123, 98, 60, .4), inset 0 0 9px #ffe7a3, 0 0 8px rgba(255, 214, 122, .35); }
-  .lamps { height: .55rem; line-height: .55rem; font-size: .46rem; letter-spacing: .12em; color: #5a4224; }
   #trail {
-    width: min(94vw, 78vh); min-height: 1.05em; text-align: center;
+    width: var(--stage); min-height: 1.05em; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: .55rem;
     letter-spacing: .16em; color: #8f8576;
   }
-  #under { width: min(94vw, 78vh); display: flex; align-items: center; gap: .5rem; }
+  #under { width: var(--stage); display: flex; align-items: center; gap: .5rem; }
   #hint { flex: 1; margin: 0; min-height: 2.1em; font-size: .69rem; line-height: 1.35; color: #b9b0a2; }
   .tools { display: flex; gap: .35rem; }
   .tool {
@@ -103,7 +70,6 @@
     box-shadow: 0 2px 0 #8b6528, 0 6px 18px rgba(0, 0, 0, .4);
   }
   #next:active { transform: translateY(1px); }
-  @media (prefers-reduced-motion: reduce) { .lever { transition: none; } }
   @media (max-width: 430px) {
     h1 { font-size: .82rem; letter-spacing: .1em; }
     .stat { min-width: 2.6rem; font-size: .46rem; padding: .16rem .34rem; }
@@ -122,11 +88,11 @@
     <div class="stat">LIT<b id="lit">0/0</b></div>
   </div>
 </header>
-<div id="stage"><canvas id="view" role="img" aria-label="A cutaway floor plan of the house at night."></canvas></div>
-<div id="board" role="group" aria-label="Light switches"></div>
+<div id="stage"><canvas id="view" role="img" aria-label="A cutaway floor plan of the house at night. Tap a room to flip its lights."></canvas></div>
+<div id="board" class="sr-only" role="group" aria-label="Room light switches"></div>
 <div id="trail" aria-hidden="true"></div>
 <div id="under">
-  <p id="hint" aria-live="polite">Flip switches until every room agrees.</p>
+  <p id="hint" aria-live="polite">Tap a room to flip its lights.</p>
   <div class="tools">
     <button class="tool" id="undo" type="button">↶ Undo</button>
     <button class="tool" id="reset" type="button">↻ Reset</button>
@@ -206,8 +172,9 @@ const STYLES = {
 };
 
 // --- levels ------------------------------------------------------------------
-// The lit rooms are the starting picture. Switches toggle fixed groups of lamps;
-// the house is finished when every room is lit, or every room is dark.
+// The lit rooms are the starting picture. Every room has its own switch, and the
+// room's circuit always includes the room itself; tapping it flips the group.
+// The house is finished when every room is lit, or every room is dark.
 const LEVELS = [
   {
     name: 'Little Cabin',
@@ -226,7 +193,7 @@ const LEVELS = [
       { x: 620, y: 328, w: 64, h: 24 }, { x: 508, y: 430, w: 24, h: 64 },
       { x: 330, y: 508, w: 64, h: 24 },
     ],
-    switches: [[0, 2], [1, 3], [0, 1, 3], [2]],
+    switches: [[0, 2], [0, 1, 3], [2], [1, 3]],
     lit: [1, 2, 3],
     garden: {
       path: [[362, 566], [390, 620], [420, 700]],
@@ -256,7 +223,7 @@ const LEVELS = [
       { x: 628, y: 450, w: 24, h: 64 }, { x: 300, y: 348, w: 64, h: 24 },
       { x: 280, y: 548, w: 64, h: 24 },
     ],
-    switches: [[0, 4], [1, 3], [2, 3, 5], [0, 1, 5], [2, 4, 5]],
+    switches: [[0, 1, 5], [1, 3], [2, 4, 5], [2, 3, 5], [0, 4], [2, 3, 5]],
     lit: [3, 4, 5],
     garden: {
       path: [[312, 600], [330, 650], [340, 700]],
@@ -289,7 +256,7 @@ const LEVELS = [
       { x: 550, y: 448, w: 64, h: 24 }, { x: 608, y: 490, w: 24, h: 64 },
       { x: 508, y: 480, w: 24, h: 64 }, { x: 360, y: 548, w: 64, h: 24 },
     ],
-    switches: [[0, 1], [1, 2, 4], [2, 3], [3, 5], [4, 6], [5, 6], [0, 4]],
+    switches: [[0, 4], [0, 1], [2, 3], [3, 5], [1, 2, 4], [5, 6], [4, 6]],
     lit: [0, 1, 2, 6],
     garden: {
       path: [[392, 594], [392, 640], [392, 700]],
@@ -323,7 +290,7 @@ const LEVELS = [
       { x: 728, y: 470, w: 24, h: 64 }, { x: 770, y: 428, w: 64, h: 24 },
       { x: 400, y: 268, w: 80, h: 24 }, { x: 348, y: 340, w: 24, h: 64 },
     ],
-    switches: [[0, 2, 6], [1, 3], [2, 4, 7], [3, 5], [0, 4], [5, 6], [1, 6, 7]],
+    switches: [[0, 4], [1, 6, 7], [0, 2, 6], [1, 3], [2, 4, 7], [3, 5], [5, 6], [2, 4, 7]],
     lit: [1, 5, 6, 7],
     garden: {
       path: [[520, 700], [520, 560], [500, 480], [450, 330], [440, 290]],
@@ -359,7 +326,7 @@ const LEVELS = [
       { x: 588, y: 360, w: 24, h: 64 }, { x: 700, y: 328, w: 64, h: 24 },
       { x: 680, y: 568, w: 64, h: 24 },
     ],
-    switches: [[0, 2, 5], [0, 1, 4], [2, 3, 6], [3, 4, 8], [5, 6, 7], [1, 4, 7], [0, 5, 8], [2, 4, 6, 8]],
+    switches: [[0, 5, 8], [1, 4, 7], [2, 4, 6, 8], [3, 4, 8], [0, 1, 4], [0, 2, 5], [2, 3, 6], [5, 6, 7], [3, 4, 8]],
     lit: [2, 3, 4, 6, 8],
     garden: {
       path: [[712, 614], [712, 650], [700, 700]],
@@ -372,7 +339,7 @@ const LEVELS = [
   },
 ];
 
-const HINT = 'Flip a switch and watch which rooms change. Make every room agree: all lit, or all dark.';
+const HINT = 'Tap a room to flip its lights. Make every room agree: all lit, or all dark.';
 
 // --- level runtime -----------------------------------------------------------
 let level = 0, rooms = [], doors = [], windows = [], switches = [], switchEls = [];
@@ -570,11 +537,11 @@ function loadLevel(n) {
     r.blocks = wallBlocks(r, doors, windows, true);
     r.doorBlocks = wallBlocks(r, doors, windows, false);
   }
-  switches = spec.switches.map((group, i) => ({ group: group.slice(), letter: String.fromCharCode(65 + i), on: false }));
+  switches = spec.switches.map(group => ({ group: group.slice(), on: false }));
   history = []; moves = 0; phase = 'play'; winT = 0; overlayShown = false; time = 0; fx = [];
   fireflies = makeFireflies(rooms, level + 1);
   staticKey = '';
-  if (view && typeof view.setAttribute === 'function') view.setAttribute('aria-label', `Night floor plan of the ${spec.name}.`);
+  if (view && typeof view.setAttribute === 'function') view.setAttribute('aria-label', `Night floor plan of the ${spec.name}. Tap a room to flip its lights.`);
   buildSwitchPanel();
   hideOverlay();
   updateHud();
@@ -605,7 +572,6 @@ function addSwitchFx(sw, dir) {
   for (const i of sw.group) {
     const l = rooms[i].lamp;
     fx.push({ kind: 'ring', x: l.x, y: l.y, t: 0, dur: .55 });
-    fx.push({ kind: 'tag', x: l.x, y: l.y - 18, t: 0, dur: 1.15, letter: sw.letter });
     if (dir > 0) fx.push({ kind: 'bolt', x: l.x, y: l.y, t: 0, dur: .28, seed: hash01(rooms[i].idx * 31 + moves) });
   }
 }
@@ -620,7 +586,10 @@ function pressSwitch(i) {
   addSwitchFx(sw, 1);
   updateHud();
   updateSwitchEls();
-  setStatus(`Switch ${sw.letter} flips ${listNames(sw.group.map(j => rooms[j].name))}.`);
+  const others = sw.group.filter(j => j !== i).map(j => rooms[j].name);
+  setStatus(others.length
+    ? `Tapping the ${rooms[i].name} also flips ${listNames(others)}.`
+    : `Tapping the ${rooms[i].name} flips only itself.`);
   if (uniform()) {
     phase = 'won'; winT = 0; overlayShown = false;
     best[level] = best[level] ? Math.min(best[level], moves) : moves;
@@ -630,6 +599,20 @@ function pressSwitch(i) {
     setStatus(uniformOn() ? 'Every room is glowing.' : 'Every room is dark. The house agrees.');
   }
   return true;
+}
+
+// Rooms are the buttons: a tap works out which room was hit, then flips its circuit.
+function roomAt(x, y) {
+  for (let i = rooms.length - 1; i >= 0; i--) {
+    const r = rooms[i];
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return i;
+  }
+  return -1;
+}
+
+function tapAt(x, y) {
+  const i = roomAt(x, y);
+  return i < 0 ? false : pressSwitch(i);
 }
 
 const uniformOn = () => rooms.length > 0 && rooms.every(r => r.on);
@@ -643,7 +626,7 @@ function undoTurn() {
   addSwitchFx(sw, -1);
   updateHud();
   updateSwitchEls();
-  setStatus(`Undid switch ${sw.letter}. ${litRooms()} of ${rooms.length} rooms lit.`);
+  setStatus(`Undid the ${rooms[i].name}. ${litRooms()} of ${rooms.length} rooms lit.`);
   return true;
 }
 
@@ -670,16 +653,13 @@ function updateHud() {
   if (m) m.textContent = String(moves);
   if (s) s.textContent = litRooms() + '/' + rooms.length;
   if (u) u.disabled = history.length === 0 || phase !== 'play';
-  if (t) t.textContent = history.length ? 'ORDER  ' + history.map(i => switches[i].letter).join(' · ') : '';
+  if (t) t.textContent = history.length ? 'ORDER  ' + history.map(i => rooms[i].name).join(' · ') : '';
 }
 
 function updateSwitchEls() {
   switchEls.forEach((el, i) => {
     const on = !!(switches[i] && switches[i].on);
-    el.classList.toggle('on', on);
     el.setAttribute('aria-pressed', on ? 'true' : 'false');
-    const dots = el.querySelector('.lamps');
-    if (dots) dots.textContent = '•'.repeat(switches[i] ? switches[i].group.length : 0);
   });
 }
 
@@ -687,24 +667,13 @@ function buildSwitchPanel() {
   const board = $('board');
   if (!board) return;
   board.textContent = '';
-  board.style.setProperty('--n', String(switches.length));
   switchEls = switches.map((sw, i) => {
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'switch';
-    b.title = `Switch ${sw.letter} (key ${i + 1})`;
-    b.setAttribute('aria-label', `Switch ${sw.letter}, flips ${sw.group.length} lamps`);
+    b.type = 'button';
+    b.title = `${rooms[i].name} (key ${i + 1})`;
+    b.setAttribute('aria-label', `${rooms[i].name} light switch`);
     b.setAttribute('aria-keyshortcuts', String(i + 1));
     b.setAttribute('aria-pressed', 'false');
-    const letter = document.createElement('span');
-    letter.className = 'letter'; letter.textContent = sw.letter;
-    const plate = document.createElement('span');
-    plate.className = 'plate';
-    const lever = document.createElement('span');
-    lever.className = 'lever';
-    plate.appendChild(lever);
-    const lamps = document.createElement('span');
-    lamps.className = 'lamps'; lamps.textContent = '•'.repeat(sw.group.length);
-    b.append(letter, plate, lamps);
     b.addEventListener('click', () => { pressSwitch(i); });
     board.appendChild(b);
     return b;
@@ -2194,14 +2163,6 @@ function drawFx(g) {
       g.beginPath(); g.arc(f.x, f.y, 12 + 70 * k, 0, TAU);
       g.strokeStyle = `rgba(255,224,155,${(1 - k) * .42})`; g.lineWidth = 2; g.stroke();
       g.restore();
-    } else if (f.kind === 'tag') {
-      const y = f.y - 17 * k;
-      g.save(); g.globalAlpha = Math.max(0, 1 - k);
-      circle(g, f.x, y, 10, 'rgba(32,24,16,.9)', 'rgba(243,196,107,.8)', 1.2);
-      g.fillStyle = '#ffe2a1'; g.font = '700 11px Georgia, serif';
-      g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(f.letter, f.x, y + .5);
-      g.restore();
     } else if (f.kind === 'bolt') {
       g.save(); g.globalAlpha = Math.max(0, 1 - k);
       g.strokeStyle = 'rgba(255,240,180,.8)'; g.lineWidth = 1.4;
@@ -2257,6 +2218,13 @@ function drawWin(g) {
 const undoBtn = $('undo'), resetBtn = $('reset');
 if (undoBtn) undoBtn.addEventListener('click', undoTurn);
 if (resetBtn) resetBtn.addEventListener('click', resetLevel);
+
+if (view && typeof view.addEventListener === 'function') {
+  view.addEventListener('click', e => {
+    const box = view.getBoundingClientRect();
+    if (box.width && box.height) tapAt((e.clientX - box.left) * W / box.width, (e.clientY - box.top) * H / box.height);
+  });
+}
 
 if (typeof addEventListener === 'function') {
   addEventListener('resize', resize);

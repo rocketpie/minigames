@@ -40,6 +40,7 @@ function el(tag) {
       return null;
     },
     getContext() { return gctx; },
+    getBoundingClientRect() { return { left: 0, top: 0, width: this.clientWidth, height: this.clientWidth * 0.7 }; },
   };
   Object.defineProperty(e, 'textContent', {
     get() { return this._text; },
@@ -209,15 +210,42 @@ test('drawing every level never throws', () => {
   assert.doesNotThrow(() => { ev('update(.3)'); ev('drawScene()'); });
 });
 
-test('the switch panel has one accessible button per switch', () => {
+test('the hidden room buttons are accessible', () => {
   ev('loadLevel(2)');
   const board = getEl('board');
-  assert.equal(board.children.length, LEVELS[2].switches.length);
+  assert.equal(board.children.length, LEVELS[2].rooms.length);
   for (const b of board.children) {
     assert.equal(b.tagName, 'button');
-    assert.match(b.getAttribute('aria-label'), /^Switch [A-Z], flips \d lamps$/);
+    assert.match(b.getAttribute('aria-label'), /^.+ light switch$/);
     assert.equal(b.getAttribute('aria-pressed'), 'false');
   }
+});
+
+test('every room owns a switch that includes it', () => {
+  for (let n = 0; n < LEVELS.length; n++) {
+    const L = LEVELS[n];
+    assert.equal(L.switches.length, L.rooms.length, `level ${n} has one switch per room`);
+    L.switches.forEach((g, i) => assert.ok(g.includes(i), `level ${n} switch ${i} includes its room`));
+  }
+});
+
+test('tapping a room on the canvas flips that room\'s circuit', () => {
+  ev('loadLevel(0)');
+  const view = getEl('view');
+  const room = ev('rooms[2]');
+  const group = Array.from(ev('switches[2].group'));
+  const before = Array.from(ev('rooms.map(r => r.on)'));
+  view.listeners.click[0]({
+    clientX: (room.x + room.w / 2) * view.clientWidth / G,
+    clientY: (room.y + room.h / 2) * view.clientWidth * 0.7 / 700,
+  });
+  const after = Array.from(ev('rooms.map(r => r.on)'));
+  for (let i = 0; i < before.length; i++) {
+    assert.equal(after[i], group.includes(i) ? !before[i] : before[i], `room ${i}`);
+  }
+  assert.equal(ev('moves'), 1);
+  assert.equal(ev('tapAt(1, 1)'), false, 'tapping outside the house does nothing');
+  assert.equal(ev('moves'), 1);
 });
 
 test('clicking a switch button drives the game', () => {
