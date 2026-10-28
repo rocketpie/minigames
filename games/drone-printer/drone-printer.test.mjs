@@ -7,15 +7,26 @@ import vm from 'node:vm';
 // Run the page's <script> with a stub DOM so we can drive the real painting logic.
 const code = readFileSync(new URL('./drone-printer.html', import.meta.url), 'utf8').match(/<script>([\s\S]*)<\/script>/)[1];
 const noop = () => {};
-const gctx = { fillRect: noop, clearRect: noop, beginPath: noop, arc: noop, fill: noop, stroke: noop, strokeRect: noop, moveTo: noop, lineTo: noop, arcTo: noop, closePath: noop, save: noop, restore: noop, translate: noop, rotate: noop, drawImage: noop, fillStyle: '', strokeStyle: '', lineWidth: 1, globalAlpha: 1 };
-const el = () => ({
-  style: { setProperty() {}, display: '' }, dataset: {}, textContent: '', className: '', clientWidth: 320, width: 320, height: 320,
-  classList: { add() {}, remove() {} }, append() {}, appendChild: c => c, remove() {}, addEventListener() {}, querySelectorAll: () => [],
-  getContext: () => gctx,
-});
+const gradient = { addColorStop: noop };
+const gctx = { fillRect: noop, clearRect: noop, beginPath: noop, arc: noop, fill: noop, stroke: noop, strokeRect: noop, moveTo: noop, lineTo: noop, arcTo: noop, quadraticCurveTo: noop, closePath: noop, clip: noop, save: noop, restore: noop, translate: noop, rotate: noop, drawImage: noop, createLinearGradient: () => gradient, createRadialGradient: () => gradient, fillStyle: '', strokeStyle: '', lineWidth: 1, globalAlpha: 1 };
+const el = () => {
+  const e = {
+    style: { setProperty() {}, display: '' }, dataset: {}, className: '', clientWidth: 320, width: 320, height: 320,
+    children: [], classList: { add() {}, remove() {} }, append(...cs) { this.children.push(...cs); },
+    appendChild(c) { this.children.push(c); return c; }, remove() {}, addEventListener() {}, querySelectorAll: () => [],
+    getContext: () => gctx,
+  };
+  Object.defineProperty(e, 'textContent', {
+    get() { return this._text || ''; },
+    set(v) { this._text = String(v); this.children = []; },
+  });
+  return e;
+};
+const elements = new Map();
+const getEl = id => { if (!elements.has(id)) elements.set(id, el()); return elements.get(id); };
 const store = new Map();
 const ctx = {
-  document: { getElementById: el, createElement: el, body: { append() {} } },
+  document: { getElementById: getEl, createElement: el, body: { append() {} } },
   addEventListener() {}, removeEventListener() {}, setTimeout: fn => fn(), console,
   localStorage: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) },
 };
@@ -91,6 +102,12 @@ test('the flight rail is a rounded square while keeping symmetric headings', () 
   assert.ok(Math.abs(opposite.y + corner.y) < 1e-9);
 });
 
+test('reservoirs stay colored at low ammo and nearly top off with full magazines', () => {
+  assert.ok(ev('reservoirFill(4)') < .55, 'under five shots is visibly lower');
+  assert.ok(ev('reservoirFill(16)') > .8, 'over fifteen shots is nearly full');
+  assert.equal(ev('reservoirFill(30)'), .9, 'the tank never overflows its glass');
+});
+
 test('a drone only prints the most central field that still owes its colour', () => {
   field(`needA[${CENTRE}] = 0; needA[${CENTRE + 1}] = 1; needA[${CENTRE + 2}] = 0;`);
   const red = { color: 0, ang: 0 }, blue = { color: 1, ang: 0 }, other = { color: 2, ang: 0 };
@@ -136,6 +153,16 @@ test('three landing pads hold drones; a fourth landing crashes', () => {
   assert.equal(ev('phase'), 'play');
   ev('land({ color: 3, mag: 1 })');
   assert.equal(ev('phase'), 'over', 'no pad free, so it crashes');
+});
+
+test('a parked drone can be relaunched by tapping the drone, not the empty pad', () => {
+  ev("phase = 'play'; flying = []; parked = [{ color: 0, mag: 4 }, null, null]; renderPads();");
+  const pad = getEl('pad0');
+  pad.onpointerdown({ target: pad, preventDefault: noop });
+  assert.ok(ev('parked[0]'), 'tapping the landing marker does nothing');
+  pad.onpointerdown({ target: pad.children[0], preventDefault: noop });
+  assert.equal(ev('parked[0]'), null, 'tapping the parked drone relaunches it');
+  assert.equal(ev('flying.length'), 1);
 });
 
 test('up to five drones fly at once, and parked drones can be re-sent', () => {
@@ -261,4 +288,6 @@ test('each level has a valid send order that spends exactly its magazines', () =
 test('drawing a frame never throws', () => {
   ev('loadLevel(1)');
   assert.doesNotThrow(() => ev('drawScene(0.016)'));
+  assert.doesNotThrow(() => ev('drawDrone(g2, 0, 0, 10, 0, true, .5, 16)'), 'full tanks render in flight');
+  assert.doesNotThrow(() => ev('drawDrone(g2, 0, 0, 10, 0, false, .5, 3)'), 'low tanks render while parked');
 });

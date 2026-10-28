@@ -46,44 +46,46 @@
   }
   .lane::after { content: "QUEUE"; position: absolute; right: .24rem; bottom: .12rem; color: #e9d6ad40; font-size: .38rem; letter-spacing: .16em; }
   .drone {
-    position: relative; flex: 0 0 2.65rem; border-radius: 7px; cursor: pointer; overflow: hidden;
-    border: 1px solid #f2dfb126; background: linear-gradient(180deg, #59616b, #343b46);
-    display: flex; align-items: center; justify-content: center; box-shadow: inset 0 1px 0 #ffffff20, 0 2px 0 #111720;
-    -webkit-tap-highlight-color: transparent;
+    position: relative; flex: 0 0 2.65rem; cursor: pointer; overflow: visible;
+    display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent;
   }
-  .drone canvas { height: 100%; aspect-ratio: 1; width: auto; display: block; }
-  .drone .mag { position: absolute; right: .18rem; bottom: .1rem; font-size: .58rem; font-weight: 900; color: #fff1d2; text-shadow: 0 1px 2px #000; }
+  .drone canvas { position: relative; z-index: 1; height: 100%; aspect-ratio: 1; width: auto; display: block; }
+  .drone .mag {
+    position: absolute; z-index: 2; right: .12rem; bottom: .02rem; font-size: 1.35rem; line-height: 1; font-weight: 1000;
+    color: #ffdc62; -webkit-text-stroke: .35px #513813; text-shadow: 0 1px 0 #241b0d, 0 2px 3px #000;
+  }
   .drone.next { opacity: .58; }
-  .drone.front { border-color: #f3c46b; box-shadow: 0 0 0 1px #f3c46b, inset 0 1px 0 #ffffff20, 0 2px 0 #111720; }
-  /* a drone whose colour is on the print frontier can fire right now */
-  .drone.ready, .drone.front.ready { border-color: #a4e6a1; box-shadow: 0 0 0 1px #a4e6a1, 0 0 12px rgba(164, 230, 161, .5), inset 0 1px 0 #ffffff20; }
 
-  .park { display: flex; flex-direction: column; gap: .28rem; width: 3.35rem; }
+  .park { display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: .28rem; width: 3.35rem; height: 6.35rem; min-height: 0; }
   .pad {
-    position: relative; min-width: 0; flex: 1; overflow: hidden; border-radius: 8px; cursor: default;
-    border: 1px solid #f3c46b35; display: flex; align-items: center; justify-content: center;
+    position: relative; min-width: 0; min-height: 0; overflow: visible;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .drone::before, .pad::before {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 84%; height: 76%; transform: translate(-50%, -50%);
+    border: 1px solid #e5c98955; border-radius: 50%; pointer-events: none;
     background:
-      radial-gradient(circle at 5px 5px, #e8d3a555 1px, transparent 1.7px),
-      radial-gradient(circle at calc(100% - 5px) 5px, #e8d3a555 1px, transparent 1.7px),
-      radial-gradient(circle at 5px calc(100% - 5px), #e8d3a555 1px, transparent 1.7px),
-      radial-gradient(circle at calc(100% - 5px) calc(100% - 5px), #e8d3a555 1px, transparent 1.7px),
-      linear-gradient(145deg, #333b47, #202630);
-    box-shadow: inset 0 1px 4px #0008;
+      linear-gradient(90deg, transparent 49.5%, #e5c98925 50%, transparent 50.5%),
+      linear-gradient(0deg, transparent 49.5%, #e5c98925 50%, transparent 50.5%),
+      repeating-radial-gradient(ellipse, transparent 0 5px, #e5c98925 5.5px 6px);
   }
-  .pad::before {
-    content: ""; position: absolute; width: 58%; aspect-ratio: 1; border: 1px solid #e5c98955; border-radius: 50%;
-    background: repeating-radial-gradient(circle, transparent 0 5px, #e5c98925 5.5px 6px);
-  }
+  .drone.front::before { border-color: #f3c46b; }
+  /* a drone whose colour is on the print frontier can fire right now */
+  .drone.ready::before { border-color: #a4e6a1; box-shadow: 0 0 9px rgba(164, 230, 161, .5); }
   .pad::after {
-    content: "PAD " attr(data-pad); position: absolute; top: .08rem; left: 0; right: 0; z-index: 2;
-    color: #e9d6ad88; text-align: center; font: 700 .36rem/1 ui-monospace, monospace; letter-spacing: .08em;
+    content: attr(data-pad); position: absolute; left: .08rem; bottom: .08rem; z-index: 2;
+    color: #e9d6ad88; font: 700 .36rem/1 ui-monospace, monospace; letter-spacing: .08em; pointer-events: none;
   }
   .pad canvas { position: relative; z-index: 1; height: 100%; aspect-ratio: 1; width: auto; display: block; }
-  .pad .mag { position: absolute; z-index: 3; right: .16rem; bottom: .05rem; font-size: .55rem; font-weight: 900; color: #fff1d2; text-shadow: 0 1px 2px #000; }
-  .pad.full { border-color: #f3c46b88; background: linear-gradient(145deg, #59616b, #343b46); cursor: pointer; box-shadow: inset 0 1px 0 #ffffff20, 0 2px 0 #111720; }
+  .pad .mag {
+    position: absolute; z-index: 3; right: .14rem; bottom: .02rem; font-size: 1.15rem; line-height: 1; font-weight: 1000;
+    color: #ffdc62; -webkit-text-stroke: .3px #513813; text-shadow: 0 1px 0 #241b0d, 0 2px 3px #000;
+    cursor: pointer;
+  }
   .pad.full::before { border-color: #ffe3a0a0; }
-  .pad.ready { box-shadow: 0 0 0 1px #a4e6a1, 0 0 12px rgba(164, 230, 161, .5); }
-  .pad:active { transform: translateY(1px); }
+  .pad.ready::before { border-color: #a4e6a1; box-shadow: 0 0 9px rgba(164, 230, 161, .5); }
+  .pad.full canvas { cursor: pointer; touch-action: none; }
+  .pad.full canvas:active { transform: translateY(1px); }
 
   #hint { margin: 0; width: min(94vw, 58vh); min-height: 2.1em; text-align: center; font-size: .67rem; line-height: 1.35; color: #b9b0a2; }
 
@@ -102,7 +104,6 @@
     .stat { min-width: 2.6rem; font-size: .46rem; padding: .16rem .34rem; }
     .stat b { font-size: .74rem; }
     #hint { font-size: .62rem; }
-    .pad { border-radius: 6px; }
   }
 </style>
 </head>
@@ -576,54 +577,107 @@ function roundRect(g, x, y, w, h, r) {
   g.closePath();
 }
 
-// A little quadcopter: black body and wings, rotors on the wing tips, and a tank of
-// spray colour on top. While it flies the rotors blur into a spinning disk.
-function drawDrone(g, x, y, s, color, spinning, ang) {
+function drawRotor(g, x, y, r, spinning, front) {
+  g.fillStyle = '#171c24'; g.strokeStyle = '#10131a'; g.lineWidth = Math.max(1, r * .22);
+  g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); g.stroke();
+  g.fillStyle = front ? '#74828a' : '#4e5a64';
+  g.beginPath(); g.arc(x, y, r * .74, 0, TAU); g.fill();
+  if (spinning) {
+    g.fillStyle = 'rgba(210, 230, 235, .34)';
+    g.beginPath(); g.arc(x, y, r * .66, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(255, 255, 255, .78)'; g.lineWidth = Math.max(1, r * .13);
+    g.beginPath(); g.arc(x, y, r * .48, -.35, 2.15); g.stroke();
+    g.beginPath(); g.arc(x, y, r * .48, Math.PI + .25, Math.PI + 2.4); g.stroke();
+  } else {
+    g.strokeStyle = '#202833'; g.lineWidth = Math.max(1, r * .19); g.lineCap = 'round';
+    g.beginPath(); g.moveTo(x - r * .58, y - r * .43); g.lineTo(x + r * .58, y + r * .43); g.stroke();
+    g.beginPath(); g.moveTo(x + r * .58, y - r * .43); g.lineTo(x - r * .58, y + r * .43); g.stroke();
+  }
+  g.fillStyle = '#d8c38f'; g.strokeStyle = '#202630'; g.lineWidth = Math.max(1, r * .1);
+  g.beginPath(); g.arc(x, y, r * .19, 0, TAU); g.fill(); g.stroke();
+}
+
+// Isometric comic quadcopter, with four rotors and its glass paint reservoir.
+const reservoirFill = mag => Math.min(.9, .39 + Math.max(0, mag) * .03);
+
+function drawDrone(g, x, y, s, color, spinning, ang, mag = 10) {
   g.save();
   g.translate(x, y);
   g.rotate(ang);
-  const wing = s * 1.6, edge = Math.max(1, s * 0.06);
-  g.lineWidth = edge;
-  g.fillStyle = '#1b1e26';
-  g.strokeStyle = 'rgba(0, 0, 0, .55)';
-  roundRect(g, -wing / 2, -s * 0.14, wing, s * 0.28, s * 0.14);
-  g.fill(); g.stroke();
+  const rotors = [
+    { x: -.72, y: -.43, r: .23, front: false }, { x: .72, y: -.43, r: .23, front: false },
+    { x: -.82, y: .53, r: .30, front: true }, { x: .82, y: .53, r: .30, front: true },
+  ];
 
-  for (const sx of [-1, 1]) {
-    const rx = sx * wing / 2;
-    if (spinning) {
-      g.fillStyle = 'rgba(175, 190, 220, .5)';
-      g.beginPath(); g.arc(rx, 0, s * 0.44, 0, TAU); g.fill();
-      g.strokeStyle = 'rgba(80, 95, 130, .55)'; g.stroke();
-      g.strokeStyle = 'rgba(255, 255, 255, .55)';
-      g.beginPath(); g.arc(rx, 0, s * 0.26, ang, ang + 2.3); g.stroke();
-    } else {
-      g.fillStyle = '#2a2f3a';
-      g.beginPath(); g.arc(rx, 0, s * 0.13, 0, TAU); g.fill();
-      g.strokeStyle = '#454d5e'; g.lineWidth = Math.max(1, s * 0.09);
-      g.beginPath(); g.moveTo(rx - s * 0.38, 0); g.lineTo(rx + s * 0.38, 0); g.stroke();
-      g.beginPath(); g.moveTo(rx, -s * 0.38); g.lineTo(rx, s * 0.38); g.stroke();
-      g.lineWidth = edge;
-    }
+  g.fillStyle = 'rgba(16, 20, 27, .24)';
+  roundRect(g, -s * .72, -s * .15, s * 1.44, s * .76, s * .28); g.fill();
+  for (const r of rotors) {
+    g.beginPath(); g.moveTo(0, -s * .04); g.lineTo(r.x * s, r.y * s);
+    g.strokeStyle = '#171c24'; g.lineWidth = Math.max(2, s * .19); g.lineCap = 'round'; g.stroke();
+    g.beginPath(); g.moveTo(0, -s * .04); g.lineTo(r.x * s, r.y * s);
+    g.strokeStyle = r.front ? '#9ba8a8' : '#65727c'; g.lineWidth = Math.max(1, s * .075); g.stroke();
+  }
+  for (const r of rotors) drawRotor(g, r.x * s, r.y * s, r.r * s, spinning, r.front);
+
+  // Faceted chassis and forward running lights make the front edge read in perspective.
+  g.beginPath();
+  g.moveTo(-s * .34, -s * .23); g.lineTo(-s * .22, -s * .37); g.lineTo(s * .21, -s * .37);
+  g.lineTo(s * .38, -s * .13); g.lineTo(s * .31, s * .25); g.lineTo(s * .18, s * .34);
+  g.lineTo(-s * .2, s * .34); g.lineTo(-s * .37, s * .13); g.closePath();
+  g.fillStyle = '#35404b'; g.strokeStyle = '#11151c'; g.lineWidth = Math.max(1.5, s * .11); g.fill(); g.stroke();
+  g.beginPath();
+  g.moveTo(-s * .23, -s * .22); g.lineTo(-s * .14, -s * .29); g.lineTo(s * .14, -s * .29);
+  g.lineTo(s * .25, -s * .12); g.lineTo(-s * .25, -s * .12); g.closePath();
+  g.fillStyle = '#879397'; g.fill();
+  g.strokeStyle = '#202630'; g.lineWidth = Math.max(1, s * .045); g.stroke();
+  for (const side of [-1, 1]) {
+    g.fillStyle = side < 0 ? '#ffcb65' : '#fa735e';
+    g.beginPath(); g.arc(side * s * .25, s * .16, s * .055, 0, TAU); g.fill();
   }
 
-  g.fillStyle = '#111318';
-  roundRect(g, -s * 0.5, -s * 0.42, s, s * 0.84, s * 0.28);
-  g.fill();
-  g.strokeStyle = 'rgba(0, 0, 0, .6)'; g.stroke();
+  // Collar sits below the sphere so the reservoir feels mounted, not pasted on.
+  g.fillStyle = '#1c232b'; g.strokeStyle = '#10141b'; g.lineWidth = Math.max(1, s * .07);
+  roundRect(g, -s * .34, s * .17, s * .68, s * .18, s * .07); g.fill(); g.stroke();
 
-  g.fillStyle = HEX[KEYS[color]];
-  g.beginPath(); g.arc(0, 0, s * 0.36, 0, TAU); g.fill();
-  g.strokeStyle = 'rgba(0, 0, 0, .4)'; g.lineWidth = Math.max(1, s * 0.05); g.stroke();
+  const cy = -s * .13, r = s * .48, ink = '#11151c', paint = HEX[KEYS[color]];
+  const surfaceY = cy + r * (1 - 2 * reservoirFill(mag));
+  const glass = g.createRadialGradient(-r * .36, cy - r * .42, r * .04, 0, cy, r * 1.18);
+  glass.addColorStop(0, 'rgba(255, 255, 255, .92)');
+  glass.addColorStop(.28, 'rgba(204, 240, 247, .58)');
+  glass.addColorStop(1, 'rgba(55, 106, 131, .9)');
+  g.fillStyle = glass; g.strokeStyle = ink; g.lineWidth = Math.max(1.5, s * .095);
+  g.beginPath(); g.arc(0, cy, r, 0, TAU); g.fill(); g.stroke();
+
+  g.save();
+  g.beginPath(); g.arc(0, cy, r * .83, 0, TAU); g.clip();
+  const liquid = g.createLinearGradient(0, cy - r, 0, cy + r);
+  liquid.addColorStop(0, hexA(paint, .84)); liquid.addColorStop(.55, paint); liquid.addColorStop(1, hexA(paint, .92));
+  g.fillStyle = liquid;
+  g.beginPath(); g.moveTo(-r, surfaceY); g.quadraticCurveTo(0, surfaceY - r * .045, r, surfaceY);
+  g.lineTo(r, cy + r); g.lineTo(-r, cy + r); g.closePath(); g.fill();
+  g.strokeStyle = hexA('#ffffff', .55); g.lineWidth = Math.max(1, s * .025);
+  g.beginPath(); g.moveTo(-r, surfaceY); g.quadraticCurveTo(0, surfaceY - r * .045, r, surfaceY); g.stroke();
+  g.fillStyle = 'rgba(255, 255, 255, .78)';
+  g.beginPath(); g.arc(-r * .32, surfaceY + (cy + r - surfaceY) * .5, r * .075, 0, TAU); g.fill();
+  g.beginPath(); g.arc(r * .1, surfaceY + (cy + r - surfaceY) * .7, r * .045, 0, TAU); g.fill();
+  g.restore();
+
+  // A swept highlight and rim sell the reservoir as a glass sphere.
+  g.strokeStyle = 'rgba(255, 255, 255, .88)'; g.lineWidth = Math.max(1, s * .055);
+  g.beginPath(); g.arc(-r * .07, cy - r * .08, r * .78, Math.PI * 1.12, Math.PI * 1.72); g.stroke();
+  g.fillStyle = 'rgba(255, 255, 255, .88)';
+  g.beginPath(); g.arc(-r * .35, cy - r * .47, r * .105, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(27, 47, 59, .72)'; g.lineWidth = Math.max(1, s * .035);
+  g.beginPath(); g.arc(0, cy, r * .96, 0, TAU); g.stroke();
   g.restore();
 }
 
 // Draw the same drone into a small tile canvas (used by the lanes and parking pads).
-function paintDroneTile(cv, color) {
+function paintDroneTile(cv, color, mag) {
   const g = cv && typeof cv.getContext === 'function' ? cv.getContext('2d') : null;
   if (!g) return;
   g.clearRect(0, 0, cv.width, cv.height);
-  drawDrone(g, cv.width / 2, cv.height / 2, Math.min(cv.width, cv.height) * 0.34, color, false, 0);
+  drawDrone(g, cv.width / 2, cv.height / 2, Math.min(cv.width, cv.height) * 0.34, color, false, 0, mag);
 }
 
 // --- static board layer --------------------------------------------------------
@@ -731,7 +785,7 @@ function drawScene(dt) {
   for (const d of flying) {
     const p = dronePos(d, L);
     g2.globalAlpha = d.state === 'leave' ? 1 - d.t / LEAVE_T : 1;
-    drawDrone(g2, p.x, p.y, L.size * 0.028, d.color, true, d.ang);
+    drawDrone(g2, p.x, p.y, L.size * 0.028, d.color, true, d.ang, d.mag);
   }
   g2.globalAlpha = 1;
 }
@@ -746,7 +800,7 @@ function renderLanes() {
       div.className = 'drone ' + (k === 0 ? 'front' : 'next') + (readyColors.has(d.color) ? ' ready' : '');
       const cv = document.createElement('canvas');
       cv.width = 64; cv.height = 64;
-      paintDroneTile(cv, d.color);
+      paintDroneTile(cv, d.color, d.mag);
       const mag = document.createElement('b');
       mag.className = 'mag';
       mag.textContent = d.mag;
@@ -768,15 +822,20 @@ function renderPads() {
     if (!el) return;
     el.className = 'pad' + (d ? ' full' : '') + (d && readyColors.has(d.color) ? ' ready' : '');
     el.textContent = '';
-    el.onpointerdown = d ? () => relaunchParked(pi) : null;
+    el.onpointerdown = null;
     if (!d) return;
     const cv = document.createElement('canvas');
     cv.width = 56; cv.height = 56;
-    paintDroneTile(cv, d.color);
+    paintDroneTile(cv, d.color, d.mag);
     const mag = document.createElement('b');
     mag.className = 'mag';
     mag.textContent = d.mag;
     el.append(cv, mag);
+    el.onpointerdown = e => {
+      if (e.target !== cv && e.target !== mag) return;
+      if (e && e.preventDefault) e.preventDefault();
+      relaunchParked(pi);
+    };
   });
 }
 
