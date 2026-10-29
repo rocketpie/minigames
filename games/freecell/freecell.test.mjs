@@ -235,26 +235,44 @@ test('a corrupt save is ignored', () => {
   store.delete('freecell');
 });
 
-test('a moved card is drawn at its old spot, then slides to the new one', () => {
-  let atReflow = null;
-  const props = new Map();
-  const card = {
-    dataset: { focus: 'c0' },
-    get offsetWidth() { atReflow = Object.fromEntries(props); return 0; },
-    style: {
-      transition: '',
-      setProperty: (k, v) => props.set(k, v),
-      removeProperty: k => props.delete(k),
-    },
-    getBoundingClientRect: () => ({ left: 40, top: 70 }),
+test('a moved card arcs over the rest with a flip; a shoved card just slides', () => {
+  const seen = {};
+  const cards = {};
+  const rects = { c0: { left: 40, top: 70 }, c1: { left: 70, top: 25 } };
+  const mk = focus => {
+    const card = {
+      dataset: { focus },
+      classList: { contains: () => false },
+      style: { zIndex: '' },
+      getBoundingClientRect: () => rects[focus],
+      animate: (frames, opts) => {
+        seen[focus] = { frames, opts, anim: { onfinish: null } };
+        return seen[focus].anim;
+      },
+    };
+    return card;
   };
+  cards.c0 = mk('c0');
+  cards.c1 = mk('c1');
   const table = ctx.document.getElementById('table');
-  table.querySelectorAll = () => [card];
-  run('slide(new Map([["c0", { left: 10, top: 10 }]]))');
+  table.querySelectorAll = () => [cards.c0, cards.c1];
+  // c1 is the card the move lifted (id 1 = ace of spades); c0 just gets shoved along.
+  run('slide(new Map([["c0", { left: 10, top: 10 }], ["c1", { left: 60, top: 45 }]]), [{ r: 1, s: 0 }])');
   table.querySelectorAll = () => [];
 
-  assert.deepEqual(atReflow, { '--mx': '-30px', '--my': '-60px' });
-  assert.deepEqual(Object.fromEntries(props), {}, 'offset cleared so the transition runs');
+  assert.equal(seen.c0.frames.length, 2, 'no flip when the card was not the one moved');
+  assert.equal(seen.c0.frames[0].transform, 'translate(-30px, -60px)');
+  assert.equal(seen.c0.frames[1].transform, 'none');
+
+  assert.equal(seen.c1.frames.length, 3);
+  assert.match(seen.c1.frames[1].transform, /rotateY\(180deg\)/);
+  assert.equal(seen.c1.frames[1].offset, .5);
+  assert.equal(seen.c1.frames[2].transform, 'translate(0px, 0px) rotateY(360deg)');
+
+  assert.equal(cards.c0.style.zIndex, '999', 'flying cards pass over the columns');
+  seen.c0.anim.onfinish();
+  seen.c1.anim.onfinish();
+  assert.deepEqual([cards.c0.style.zIndex, cards.c1.style.zIndex], ['', '']);
 });
 
 test('cards that fit a foundation go home by themselves, chaining upward', () => {
@@ -266,6 +284,29 @@ test('cards that fit a foundation go home by themselves, chaining upward', () =>
   assert.equal(run('moves'), 3);
 });
 
+test('autoplay sends cards home one at a time, pausing between them', () => {
+  const queue = [];
+  const real = ctx.setTimeout;
+  ctx.setTimeout = fn => queue.push(fn);
+  try {
+    setup({ free: [c(1, 0), c(2, 0), null, null], cols: [[c(3, 0)]] });
+    run('sel = {kind:"free", i:0}; place({kind:"found", i:0})');
+    assert.equal(run('found[0].length'), 1, 'only the player move has landed');
+
+    queue.shift()();
+    assert.equal(run('found[0].length'), 2);
+    queue.shift()();
+    assert.equal(run('found[0].length'), 3);
+    assert.equal(queue.length, 1, 'one more tick to find nothing left to send');
+
+    queue.shift()();
+    assert.equal(queue.length, 0);
+    assert.equal(run('moves'), 3);
+  } finally {
+    ctx.setTimeout = real;
+  }
+});
+
 test('a card can be taken back off a foundation', () => {
   setup({ found: [[c(1, 0)], [], [], []] });
   run('selectCard("found", 0)');
@@ -273,7 +314,7 @@ test('a card can be taken back off a foundation', () => {
   assert.equal(run('found[0].length'), 0);
   assert.equal(run('free[0].r'), 1);
 
-  run('autoFound()');
+  run('autoStep()');
   assert.equal(run('found[0].length'), 0, 'autoplay leaves a card you pulled back alone');
 });
 
