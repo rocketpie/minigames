@@ -21,14 +21,6 @@
   a { color: #14603f; }
   .lead { font-size: 1.04rem; }
   em { font-style: normal; font-weight: 700; color: #0e422b; }
-  code, .formula {
-    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-    background: #eadfc6; border-radius: 4px; padding: .08rem .3rem; font-size: .92em;
-  }
-  .formula {
-    display: block; margin: .8rem 0; padding: .8rem .9rem; text-align: center;
-    font-size: 1.02rem; background: #0e422b; color: #f4e4bd; border-radius: 8px;
-  }
   .hero {
     float: right; width: 6.1rem; margin: 0 0 .9rem 1.1rem; border-radius: 6px;
     box-shadow: 0 4px 14px #0e422b40, 0 1px 3px #0003;
@@ -87,7 +79,7 @@
 <img class="hero" src="card-back.svg" alt="FreeCell card back: gold Celtic knotwork and Fibonacci spirals on very dark green" width="120" height="168">
 <h1>FreeCell — strategy guide</h1>
 <p class="lead">FreeCell looks like a card game about luck. It isn't. Almost every deal can be won. You lose by <em>spending your reserves before the board pays them back</em>.</p>
-<p class="note">Controls: tap a card to pick it up (with the run beneath it); tap a column, free cell or foundation to place it. Undo rewinds one move.</p>
+<p class="note">Controls: tap a card to pick it up (with the run beneath it); tap a column, free cell or foundation to place it. Any card that fits a foundation goes home by itself. Undo rewinds one move.</p>
 
 <h2>How the board works</h2>
 <ul>
@@ -120,19 +112,17 @@
   </figure>
 </div>
 
-<h2>Rule 2 — Empty columns double your capacity</h2>
-<p>An empty column can take a whole run, not just one card. That makes it far more valuable than a free cell. Each empty column doubles your capacity: two empty columns let you move four times as many cards as none, and twice as many as one. Emptying a column to park a lone king usually throws that away.</p>
+<h2>Rule 2 — Empty columns are staging space</h2>
+<p>An empty column can take a whole run, not just one card. That makes it far more valuable than a free cell: it is where a long run goes while you dig underneath it. Emptying a column to park a lone king usually throws that space away for the rest of the game.</p>
 <p>A useful test: <em>will this king move again soon?</em> If the answer is no, the empty column is probably worth more empty than occupied.</p>
 
 <h2>Rule 3 — Dig toward the cards you need</h2>
 <p>Do not clear every column at once. Pick the one or two columns holding the cards that matter — an ace, a 2, or the card that completes a long run — and work on those. The rest of the board can wait.</p>
 <p>When two moves are equally safe, take the one that exposes a lower card. Low cards are the ones that go home, and they are the ones that unblock other suits.</p>
 
-<h2>The supermove formula</h2>
-<p>You can move more than one card at a time, but only if the cards form a clean descending alternating run. The maximum length is:</p>
-<div class="formula">(free cells empty + 1) × 2<sup>empty columns</sup></div>
-<p>If the destination is itself an empty column, do not count that column — it is being filled by the move.</p>
-<p>Examples: four empty free cells and two empty columns give <code>5 × 4 = 20</code> cards onto an occupied column, or <code>5 × 2 = 10</code> onto an empty one. No free cells and one empty column give just <code>2</code>. That is why emptying the last free cell can quietly cost you a move you thought you had.</p>
+<h2>Moving runs</h2>
+<p>You can move more than one card at a time, and only the cards matter: any clean descending alternating run moves as one, however long it is and however many free cells or empty columns you have. There is no supermove arithmetic in this game, and filling a free cell never costs you a move.</p>
+<p>So keep long runs together. A nine-card run moves as easily as a single card.</p>
 
 <h2>Opening checklist</h2>
 <ol>
@@ -157,19 +147,19 @@
 
 <h2>Practice</h2>
 
-<p><strong>1.</strong> All four free cells are empty and you have one empty column. Can you move a 9-card run onto an occupied column? Onto the empty column?</p>
+<p><strong>1.</strong> All four free cells are full and no columns are empty. Can you move a 9-card run onto an occupied column?</p>
 <details><summary>Answer</summary>
-<p><em>Occupied: yes.</em> <code>(4 + 1) × 2 = 10</code>, so 9 fits. <em>Empty: no.</em> The destination column no longer counts, giving <code>(4 + 1) × 1 = 5</code>. Emptying a column can make a move you could already make impossible.</p>
+<p><em>Yes.</em> Any clean run moves as one here, whatever the free cells and empty columns look like. Only the run itself has to be right: each card one lower and the opposite colour from the one above it.</p>
 </details>
 
-<p><strong>2.</strong> Two free cells are empty and two columns are empty. You want to move a 12-card run onto an occupied column. Can you?</p>
+<p><strong>2.</strong> Two free cells are empty and two columns are empty. You want to move a 12-card run onto an occupied column. What do you need to check?</p>
 <details><summary>Answer</summary>
-<p><em>Exactly.</em> <code>(2 + 1) × 2² = 12</code>. One more card, or one fewer empty cell, and the move fails. Check the formula before you lift a long run.</p>
+<p><em>Nothing.</em> Twelve cards or twenty, the move is legal if the run alternates cleanly. This game has no supermove limit, so spend your reserves on the board, not on counting cards.</p>
 </details>
 
 <p><strong>3.</strong> The free cells are full, one column is empty, and the card you need is under a king. Do you put the king in the empty column?</p>
 <details><summary>Answer</summary>
-<p><em>Only if that card starts a chain.</em> Moving the king gives up half your remaining move capacity and fills your only staging space. If the exposed card sends several cards home or empties another column, it can be worth it. Otherwise, find a way to free a cell first.</p>
+<p><em>Only if that card starts a chain.</em> Moving the king fills your only staging space, and a king accepts nothing but a queen, so the column is dead until you clear it again. If the exposed card sends several cards home or empties another column, it can be worth it. Otherwise, find a way to free a cell first.</p>
 </details>
 
 <h2>When you're stuck</h2>

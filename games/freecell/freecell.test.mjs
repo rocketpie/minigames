@@ -43,7 +43,7 @@ const setup = ({ cols = [], free = [null, null, null, null], found = empty() }) 
     cols = ${JSON.stringify(cols8(cols))};
     free = ${JSON.stringify(free)};
     found = ${JSON.stringify(found)};
-    sel = null; moves = 0; won = false; undoStack = []; dealing = false;
+    sel = null; moves = 0; won = false; undoStack = []; dealing = false; pinned = new Set();
     draw();
   `);
 };
@@ -112,29 +112,16 @@ test('foundations count up by suit, starting with an ace', () => {
   assert.equal(run('place({kind:"found", i:0})'), false, 'must start at the ace');
 });
 
-test('supermove capacity follows free cells and empty columns', () => {
-  setup({ cols: [[c(13, 0)], [c(13, 1)]] });
-  assert.equal(run('maxMove({kind:"col", i:0})'), 5 * 2 ** 6);
-  assert.equal(run('maxMove({kind:"col", i:2})'), 5 * 2 ** 5);
-
-  run('free[0] = {r:1, s:0}; free[1] = {r:2, s:0}');
-  assert.equal(run('maxMove({kind:"col", i:0})'), 3 * 2 ** 6);
-  assert.equal(run('maxMove({kind:"col", i:2})'), 3 * 2 ** 5);
-});
-
-test('a run too long for the empty columns is refused, and allowed once a column opens', () => {
-  const run9to3 = [c(8, 1), c(7, 0), c(6, 2), c(5, 3), c(4, 1), c(3, 0)];
+test('a long clean run moves as one group, whatever the free cells and columns', () => {
+  const long = [c(9, 1), c(8, 0), c(7, 2), c(6, 3), c(5, 1), c(4, 0), c(3, 2)];
   setup({
-    cols: [run9to3, [c(9, 0)], [c(13, 0)], [c(13, 1)], [c(13, 2)], [c(13, 3)], [c(12, 0)], [c(12, 1)]],
+    cols: [long, [c(10, 0)], [c(13, 0)], [c(13, 1)], [c(13, 2)], [c(13, 3)], [c(12, 0)], [c(12, 1)]],
+    free: [c(12, 2), c(12, 3), c(11, 2), c(11, 3)],
   });
   run('selectCard("col", 0, 0)');
-  assert.deepEqual(take(), run9to3.map(x => [x.r, x.s]));
-  assert.equal(run('place({kind:"col", i:1})'), false);
-
-  run('cols[2] = []');
+  assert.deepEqual(take(), long.map(x => [x.r, x.s]));
   assert.equal(run('place({kind:"col", i:1})'), true);
-  assert.equal(run('cols[1].length'), 7);
-  assert.deepEqual(Array.from(run('cols[1].map(c => c.r)')), [9, 8, 7, 6, 5, 4, 3]);
+  assert.deepEqual(Array.from(run('cols[1].map(c => c.r)')), [10, 9, 8, 7, 6, 5, 4, 3]);
   assert.equal(run('cols[0].length'), 0);
 });
 
@@ -248,21 +235,53 @@ test('a corrupt save is ignored', () => {
   store.delete('freecell');
 });
 
+test('a moved card is drawn at its old spot, then slides to the new one', () => {
+  let atReflow = null;
+  const props = new Map();
+  const card = {
+    dataset: { focus: 'c0' },
+    get offsetWidth() { atReflow = Object.fromEntries(props); return 0; },
+    style: {
+      transition: '',
+      setProperty: (k, v) => props.set(k, v),
+      removeProperty: k => props.delete(k),
+    },
+    getBoundingClientRect: () => ({ left: 40, top: 70 }),
+  };
+  const table = ctx.document.getElementById('table');
+  table.querySelectorAll = () => [card];
+  run('slide(new Map([["c0", { left: 10, top: 10 }]]))');
+  table.querySelectorAll = () => [];
+
+  assert.deepEqual(atReflow, { '--mx': '-30px', '--my': '-60px' });
+  assert.deepEqual(Object.fromEntries(props), {}, 'offset cleared so the transition runs');
+});
+
+test('cards that fit a foundation go home by themselves, chaining upward', () => {
+  setup({ free: [c(1, 0), c(2, 0), null, null], cols: [[c(3, 0)]] });
+  run('sel = {kind:"free", i:0}; place({kind:"found", i:0})');
+  assert.equal(run('found[0].length'), 3);
+  assert.equal(run('free[1]'), null);
+  assert.equal(run('cols[0].length'), 0);
+  assert.equal(run('moves'), 3);
+});
+
 test('a card can be taken back off a foundation', () => {
   setup({ found: [[c(1, 0)], [], [], []] });
   run('selectCard("found", 0)');
   assert.equal(run('place({kind:"free", i:0})'), true);
   assert.equal(run('found[0].length'), 0);
   assert.equal(run('free[0].r'), 1);
+
+  run('autoFound()');
+  assert.equal(run('found[0].length'), 0, 'autoplay leaves a card you pulled back alone');
 });
 
 test('sending every king home wins the game', () => {
   const twelve = s => Array.from({ length: 12 }, (_, i) => c(i + 1, s));
   setup({ found: [twelve(0), twelve(1), twelve(2), twelve(3)], free: [c(13, 0), c(13, 1), c(13, 2), c(13, 3)] });
 
-  for (let i = 0; i < 4; i++) {
-    assert.equal(run(`sel = {kind:"free", i:${i}}; place({kind:"found", i:${i}})`), true);
-  }
+  run('sel = {kind:"free", i:0}; place({kind:"found", i:0})');
   assert.equal(run('won'), true);
   assert.equal(run('moves'), 4);
   assert.equal(run('found.every(p => p.length === 13)'), true);
