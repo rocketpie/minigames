@@ -10,7 +10,7 @@
   html, body { margin: 0; min-height: 100%; }
   body {
     font-family: ui-rounded, "Avenir Next", system-ui, sans-serif; color: #e9f0e2;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
     min-height: 100vh; padding: .7rem .5rem 1rem;
     user-select: none; -webkit-user-select: none;
     background:
@@ -88,6 +88,7 @@
     color: rgba(228, 197, 122, .2); font-size: calc(var(--cw) * .38); line-height: 1;
   }
   .slot .card { position: absolute; inset: calc(var(--cw) * .045); width: auto; height: auto; }
+  .slot .card.under { pointer-events: none; }
 
   #board { display: grid; grid-template-columns: repeat(8, var(--cw)); gap: var(--gap); align-items: start; }
   .column {
@@ -250,8 +251,8 @@ const KEY = 'freecell';
 // ?debug=true: every animation runs 10x slower and its name shows at the top of the page.
 const DEBUG = typeof location !== 'undefined' && location.search.includes('debug=true');
 const slow = ms => DEBUG ? ms * 10 : ms;
-const FLY_MS = 340;                       // a lifted card crossing the table
-const SHIFT_MS = 200;                     // columns closing up after it lands
+const FLY_MS = 460;                       // pick up, carry across the table, put down
+const SHIFT_MS = 180;                     // columns closing up after it lands
 const STEP_MS = FLY_MS + SHIFT_MS + 40;   // one autoplay move, landing and closing included
 
 const running = new Map();
@@ -511,11 +512,15 @@ function faceHTML(c) {
   return corner('tl') + middle + corner('br');
 }
 
-function cardHTML(c, kind, i, j) {
+function cardHTML(c, kind, i, j, under = false) {
   const pos = j == null ? '' : ` data-j="${j}" style="z-index:${j};--d:${j * 8 + i}"`;
   const selClass = isSelected(kind, i, j) ? ' sel' : '';
-  return `<div class="card${isRed(c.s) ? ' red' : ''}${selClass}" role="button" tabindex="0"
-    data-focus="c${id(c)}" data-kind="${kind}" data-i="${i}"${pos}
+  // "under" is the card beneath a flying card in a one-card slot: drawn, but not tappable.
+  const attrs = under
+    ? ' aria-hidden="true"'
+    : ` role="button" tabindex="0" data-focus="c${id(c)}"`;
+  return `<div class="card${isRed(c.s) ? ' red' : ''}${selClass}${under ? ' under' : ''}"
+    ${attrs} data-kind="${kind}" data-i="${i}"${pos}
     aria-label="${RANK_NAMES[c.r - 1]} of ${SUIT_NAMES[c.s]}">
     <div class="face front">${faceHTML(c)}</div>
     <div class="face back" aria-hidden="true"></div>
@@ -523,9 +528,40 @@ function cardHTML(c, kind, i, j) {
 }
 
 const cardRects = () => new Map([...$('table').querySelectorAll('.card:not(.flying)')]
+  .filter(el => el.dataset.focus) // the card drawn under a foundation top is scenery, not a mover
   .map(el => [el.dataset.focus, el.getBoundingClientRect()]));
 
 const calm = () => !DEBUG && typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// A soft card flip, synthesised so the game stays a single file with no assets.
+let actx;
+function moveSound() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    actx = actx || new Ctx();
+    if (actx.state === 'suspended') actx.resume();
+    const t = actx.currentTime, dur = .09, len = Math.floor(actx.sampleRate * dur);
+    const buf = actx.createBuffer(1, len, actx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const fade = 1 - i / len;
+      data[i] = (Math.random() * 2 - 1) * fade * fade; // noise with a smooth tail
+    }
+    const src = actx.createBufferSource();
+    src.buffer = buf;
+    const lp = actx.createBiquadFilter();
+    lp.type = 'lowpass'; // no piercing highs: this is paper, not a shot
+    lp.frequency.value = 1100;
+    lp.Q.value = .6;
+    const gain = actx.createGain();
+    gain.gain.setValueAtTime(.0001, t);
+    gain.gain.exponentialRampToValueAtTime(.1, t + .012); // soft attack, no click
+    gain.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    src.connect(lp).connect(gain).connect(actx.destination);
+    src.start(t);
+  } catch { /* no audio support: stay silent */ }
+}
 
 function land(key) {
   const f = flights.get(key);
@@ -544,6 +580,8 @@ function landAll() {
 // A clone on top of the table does the flying, so it crosses over every other card.
 function takeOff(el, from, to, name) {
   const key = el.dataset.focus;
+  const dx = from.left - to.left, dy = from.top - to.top;
+  const lift = Math.min(60, Math.hypot(dx, dy) / 3);
   const clone = el.cloneNode(true);
   clone.classList.add('flying');
   clone.setAttribute('aria-hidden', 'true');
@@ -552,13 +590,15 @@ function takeOff(el, from, to, name) {
     `width:${to.width}px;height:${to.height}px;z-index:1000;pointer-events:none;margin:0;`;
   $('table').appendChild(clone);
 
-  const dx = from.left - to.left, dy = from.top - to.top;
-  const lift = Math.min(60, Math.hypot(dx, dy) / 3);
+  const p = 'perspective(900px)';
+  // Pick the card up (turn it over), carry it face down, then turn it face up again.
   const anim = clone.animate([
-    { transform: `translate(${dx}px, ${dy}px) rotateY(0deg)` },
-    { transform: `translate(${dx / 2}px, ${dy / 2 - lift}px) rotateY(180deg)`, offset: .5 },
-    { transform: 'translate(0px, 0px) rotateY(360deg)' },
-  ], { duration: slow(FLY_MS), easing: 'ease-in-out' });
+    { transform: `${p} translate(${dx}px, ${dy}px) rotateY(0deg)`, offset: 0 },
+    { transform: `${p} translate(${dx}px, ${dy - 16}px) rotateY(180deg)`, offset: .2 },
+    { transform: `${p} translate(${dx / 2}px, ${dy / 2 - lift}px) rotateY(180deg)`, offset: .5 },
+    { transform: `${p} translate(0px, 0px) rotateY(180deg)`, offset: .84 },
+    { transform: `${p} translate(0px, 0px) rotateY(360deg)`, offset: 1 },
+  ], { duration: slow(FLY_MS), easing: 'ease-in-out', fill: 'backwards' });
 
   flights.set(key, { clone, anim, done: beginAnim(`fly ${name}`) });
   el.style.visibility = 'hidden';
@@ -571,7 +611,7 @@ function slide(before, moved = []) {
   const still = calm();
   const lifted = new Map(moved.map(c => [`c${id(c)}`, cardName(c)]));
   const shoved = [];
-  let flew = false;
+  let flew = false, sound = false;
 
   for (const el of $('table').querySelectorAll('.card:not(.flying)')) {
     const from = before.get(el.dataset.focus);
@@ -580,31 +620,35 @@ function slide(before, moved = []) {
     const dx = from.left - to.left, dy = from.top - to.top;
     if (!dx && !dy) continue;
 
+    const name = lifted.get(el.dataset.focus);
     if (still) {
+      if (name) sound = true;
       el.animate([{ opacity: .35 }, { opacity: 1 }], { duration: slow(200), easing: 'ease' });
       continue;
     }
-    const name = lifted.get(el.dataset.focus);
     if (name && !flights.has(el.dataset.focus)) {
       takeOff(el, from, to, name);
-      flew = true;
+      flew = sound = true;
     } else {
       shoved.push([el, dx, dy]);
     }
   }
 
   for (const [el, dx, dy] of shoved) {
+    const wait = flew ? slow(FLY_MS) : 0; // hold the board still until the card lands
     const anim = el.animate([
       { transform: `translate(${dx}px, ${dy}px)` },
       { transform: 'none' },
-    ], {
-      duration: slow(SHIFT_MS), easing: 'ease', fill: 'backwards',
-      delay: flew ? slow(FLY_MS) : 0, // hold the board still until the card lands
-    });
+    ], { duration: slow(SHIFT_MS), delay: wait, easing: 'ease', fill: 'backwards' });
     let done = () => {};
-    anim.onstart = () => { done = beginAnim('shift'); };
+    if (DEBUG) {
+      setTimeout(() => { done = beginAnim('shift'); }, wait);
+      setTimeout(() => done(), wait + slow(SHIFT_MS) + 40); // backstop: the badge always clears
+    }
     anim.onfinish = () => done();
   }
+
+  if (sound) moveSound(); // one sound per move, even when a whole run takes off
 }
 
 function hideFlying() {
@@ -632,11 +676,12 @@ function draw(moved = []) {
 
   let founds = '';
   for (let i = 0; i < 4; i++) {
-    const pile = found[i], c = pile[pile.length - 1];
+    const pile = found[i], c = pile[pile.length - 1], below = pile[pile.length - 2];
     const on = c ? '' : ` role="button" tabindex="0" data-focus="o${i}"`;
     founds += `<div class="slot${valid('found', i) ? ' valid' : ''}" data-slot="found" data-i="${i}"
       aria-label="${SUIT_NAMES[i]} foundation"${on}>
-      <div class="hole" aria-hidden="true">${SUITS[i]}</div>${c ? cardHTML(c, 'found', i) : ''}
+      <div class="hole" aria-hidden="true">${SUITS[i]}</div>${
+        below ? cardHTML(below, 'found', i, null, true) : ''}${c ? cardHTML(c, 'found', i) : ''}
     </div>`;
   }
 

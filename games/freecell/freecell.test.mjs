@@ -266,14 +266,17 @@ test('a lifted card flies on its own layer; the column waits for it to land', ()
   // c1 is the card the move lifted (id 1 = ace of spades); c0 just gets shoved along.
   run('slide(new Map([["c0", { left: 10, top: 10 }], ["c1", { left: 60, top: 45 }]]), [{ r: 1, s: 0 }])');
 
-  assert.equal(seen.fly.frames.length, 3, 'the lifted card turns over in flight');
-  assert.match(seen.fly.frames[1].transform, /rotateY\(180deg\)/);
-  assert.equal(seen.fly.frames[1].offset, .5);
-  assert.equal(seen.fly.opts.duration, 340);
+  assert.equal(seen.fly.frames.length, 5, 'pick up, carry, put down');
+  assert.equal(seen.fly.frames[1].offset, .2);
+  assert.match(seen.fly.frames[1].transform, /rotateY\(180deg\)/, 'turned over as it is picked up');
+  assert.equal(seen.fly.frames[3].offset, .84);
+  assert.match(seen.fly.frames[3].transform, /rotateY\(180deg\)/, 'carried face down');
+  assert.match(seen.fly.frames[4].transform, /rotateY\(360deg\)/, 'turned face up to land');
+  assert.equal(seen.fly.opts.duration, 460);
   assert.equal(card1.style.visibility, 'hidden', 'the real card waits out the flight');
 
   assert.equal(seen.shift.frames.length, 2, 'a shoved card does not flip');
-  assert.equal(seen.shift.opts.delay, 340, 'the board only closes up after the landing');
+  assert.equal(seen.shift.opts.delay, 460, 'the board only closes up after the landing');
   assert.equal(seen.shift.opts.fill, 'backwards', 'and it stays put during that wait');
 
   seen.fly.onfinish();
@@ -359,6 +362,52 @@ test('?debug=true slows every animation 10x and puts a name badge on top', () =>
   assert.equal(vm.runInContext('slow(380)', dbg), 3800);
   assert.equal(slowed, 'slow', 'CSS transitions slow down with the rest');
   assert.equal(shown, true, 'debug badge is visible');
+});
+
+test('the card under a foundation top is on screen while the next one flies in', () => {
+  setup({ found: [[c(1, 0), c(2, 0)], [], [], []] });
+  const html = ctx.document.getElementById('founds').innerHTML;
+  assert.equal((html.match(/data-focus="c\d+"/g) || []).length, 1, 'only the top card is interactive');
+  assert.ok(html.includes('class="card under"') || html.includes('under"'),
+    'the card below is drawn too');
+  assert.ok(html.indexOf('aria-hidden="true" data-kind') < html.indexOf('data-focus="c2"'),
+    'and it sits beneath the top card');
+});
+
+test('the card drawn under a foundation top is scenery, not a flying card', () => {
+  const under = { dataset: {}, classList: { contains: () => false }, getBoundingClientRect: () => ({ left: 5, top: 5 }) };
+  const top = { dataset: { focus: 'c1' }, classList: { contains: () => false }, getBoundingClientRect: () => ({ left: 0, top: 0 }) };
+  const table = ctx.document.getElementById('table');
+  table.querySelectorAll = () => [under, top];
+  assert.deepEqual(Array.from(run('[...cardRects().keys()]')), ['c1']);
+  table.querySelectorAll = () => [];
+});
+
+test('a moved card makes a sound, and the game stays silent without audio', () => {
+  const started = [];
+  const node = () => ({
+    connect: n => n,
+    start: () => started.push('start'),
+    frequency: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+    gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+    Q: {},
+  });
+  ctx.window = {
+    AudioContext: class {
+      constructor() {
+        this.state = 'running'; this.currentTime = 0; this.sampleRate = 8000; this.destination = {};
+      }
+      createBuffer() { return { getChannelData: () => new Float32Array(960) }; }
+      createBufferSource() { return node(); }
+      createBiquadFilter() { return node(); }
+      createGain() { return node(); }
+    },
+  };
+  run('moveSound()');
+  assert.deepEqual(started, ['start']);
+
+  delete ctx.window;
+  assert.doesNotThrow(() => run('moveSound()'), 'no AudioContext, no crash');
 });
 
 test('sending every king home wins the game', () => {
