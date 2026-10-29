@@ -6,6 +6,9 @@
 <title>drone printer</title>
 <style>
   * { box-sizing: border-box; }
+  /* One size for queued, flying and parked drones: the tile box. resize() keeps it in
+     step with the flight sprite, and grows it with the board on large screens. */
+  :root { --drone: 2.65rem; }
   html, body { margin: 0; min-height: 100%; }
   body {
     font-family: ui-rounded, "Avenir Next", system-ui, sans-serif; color: #e9e1d2;
@@ -33,21 +36,15 @@
     background: #f3ead6; touch-action: none; box-shadow: 0 0 0 3px #111720, 0 18px 45px rgba(0, 0, 0, .55);
   }
 
-  #dock {
-    width: min(94vw, 58vh); display: flex; gap: .45rem; align-items: stretch; padding: .4rem;
-    border: 1px solid rgba(243, 196, 107, .2); border-radius: 12px;
-    background: linear-gradient(180deg, #202632, #151a23); box-shadow: inset 0 1px 0 #ffffff10, 0 8px 22px #0006;
-  }
+  #dock { width: min(94vw, 58vh); display: flex; align-items: stretch; }
   .lanes { display: flex; gap: .35rem; flex: 1; }
   .lane {
-    position: relative; flex: 1; height: 6.35rem; overflow: hidden; border-radius: 8px; padding: .32rem;
-    border: 1px solid rgba(243, 196, 107, .13); background: linear-gradient(145deg, #313844, #252b35 60%, #1c222b);
-    display: flex; flex-direction: column; gap: .28rem; box-shadow: inset 0 1px 3px #0008;
+    position: relative; flex: 1; height: calc(var(--drone) * 2.36); overflow: visible;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .28rem;
   }
-  .lane::after { content: "QUEUE"; position: absolute; right: .24rem; bottom: .12rem; color: #e9d6ad40; font-size: .38rem; letter-spacing: .16em; }
   .drone {
-    position: relative; flex: 0 0 2.65rem; cursor: pointer; overflow: visible;
-    display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent;
+    position: relative; flex: 0 0 var(--drone); cursor: pointer; overflow: visible;
+    display: flex; align-items: center; justify-content: center; gap: .05rem; -webkit-tap-highlight-color: transparent;
   }
   .drone canvas { position: relative; z-index: 1; height: 100%; aspect-ratio: 1; width: auto; display: block; }
   .drone .mag {
@@ -56,29 +53,32 @@
   }
   .drone.next { opacity: .58; }
 
-  .park { display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: .28rem; width: 3.35rem; height: 6.35rem; min-height: 0; }
+  .park {
+    position: absolute; z-index: 3; right: 2%; bottom: 2%;
+    display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: .28rem;
+    width: min(max(4.1rem, calc(var(--drone) * 1.55)), 20.5%); height: calc(var(--drone) * 3.4); min-height: 0;
+  }
   .pad {
     position: relative; min-width: 0; min-height: 0; overflow: visible;
-    display: flex; align-items: center; justify-content: center;
+    display: flex; align-items: center; justify-content: center; gap: .05rem;
   }
-  .drone::before, .pad::before {
-    content: ""; position: absolute; left: 50%; top: 50%; width: 84%; height: 76%; transform: translate(-50%, -50%);
+  .pad::before {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 94%; height: 90%; transform: translate(-50%, -50%);
     border: 1px solid #e5c98955; border-radius: 50%; pointer-events: none;
     background:
       linear-gradient(90deg, transparent 49.5%, #e5c98925 50%, transparent 50.5%),
       linear-gradient(0deg, transparent 49.5%, #e5c98925 50%, transparent 50.5%),
       repeating-radial-gradient(ellipse, transparent 0 5px, #e5c98925 5.5px 6px);
   }
-  .drone.front::before { border-color: #f3c46b; }
   /* a drone whose colour is on the print frontier can fire right now */
-  .drone.ready::before { border-color: #a4e6a1; box-shadow: 0 0 9px rgba(164, 230, 161, .5); }
+  .drone.ready canvas { filter: drop-shadow(0 0 5px rgba(164, 230, 161, .95)); }
   .pad::after {
     content: attr(data-pad); position: absolute; left: .08rem; bottom: .08rem; z-index: 2;
     color: #e9d6ad88; font: 700 .36rem/1 ui-monospace, monospace; letter-spacing: .08em; pointer-events: none;
   }
-  .pad canvas { position: relative; z-index: 1; height: 100%; aspect-ratio: 1; width: auto; display: block; }
+  .pad canvas { position: relative; z-index: 1; height: var(--drone); width: var(--drone); flex: none; display: block; }
   .pad .mag {
-    position: absolute; z-index: 3; right: .14rem; bottom: .02rem; font-size: 1.15rem; line-height: 1; font-weight: 1000;
+    position: relative; z-index: 3; font-size: 1.1rem; line-height: 1; font-weight: 1000;
     color: #ffdc62; -webkit-text-stroke: .3px #513813; text-shadow: 0 1px 0 #241b0d, 0 2px 3px #000;
     cursor: pointer;
   }
@@ -115,17 +115,19 @@
     <div class="stat">SCORE<b id="score">0</b></div>
   </div>
 </header>
-<div id="canvasWrap"><canvas id="view"></canvas></div>
+<div id="canvasWrap">
+  <canvas id="view"></canvas>
+  <div class="park">
+    <i class="pad" id="pad0" data-pad="01" aria-label="Landing pad 1"></i>
+    <i class="pad" id="pad1" data-pad="02" aria-label="Landing pad 2"></i>
+    <i class="pad" id="pad2" data-pad="03" aria-label="Landing pad 3"></i>
+  </div>
+</div>
 <div id="dock">
   <div class="lanes">
     <div class="lane" id="lane0"></div>
     <div class="lane" id="lane1"></div>
     <div class="lane" id="lane2"></div>
-  </div>
-  <div class="park">
-    <i class="pad" id="pad0" data-pad="01" aria-label="Landing pad 1"></i>
-    <i class="pad" id="pad1" data-pad="02" aria-label="Landing pad 2"></i>
-    <i class="pad" id="pad2" data-pad="03" aria-label="Landing pad 3"></i>
   </div>
 </div>
 <p id="hint">Glowing drones can print right now. Tap the front one to send it; tap the dimmer one to bring it forward.</p>
@@ -506,8 +508,8 @@ const g2 = view && typeof view.getContext === 'function' ? view.getContext('2d')
 
 function layout() {
   const size = (view && view.width) || 320;
-  const grid = size * 0.72;
-  return { size, grid, cell: grid / G, ox: (size - grid) / 2, oy: (size - grid) / 2, orbit: grid / 2 + size * 0.085, cx: size / 2, cy: size / 2 };
+  const grid = size * 0.62, cx = size * 0.38, cy = size / 2;
+  return { size, grid, cell: grid / G, ox: cx - grid / 2, oy: cy - grid / 2, orbit: grid / 2 + size * 0.05, cx, cy };
 }
 
 function cellRect(g, i, L, fill, stroke) {
@@ -785,7 +787,7 @@ function drawScene(dt) {
   for (const d of flying) {
     const p = dronePos(d, L);
     g2.globalAlpha = d.state === 'leave' ? 1 - d.t / LEAVE_T : 1;
-    drawDrone(g2, p.x, p.y, L.size * 0.028, d.color, true, d.ang, d.mag);
+    drawDrone(g2, p.x, p.y, droneS, d.color, true, d.ang, d.mag);
   }
   g2.globalAlpha = 1;
 }
@@ -865,12 +867,19 @@ function showOverlay(msg, label, fn) {
 }
 const hideOverlay = () => { $('overlay').style.display = 'none'; };
 
+// drawDrone scale for a flying drone, in canvas pixels. The dock tile draws at 0.34 of
+// its box, so sharing the box keeps every drone the same on-screen size.
+let droneS = 0;
 function resize() {
   if (!view || !g2) return;
   const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
   const s = view.clientWidth || 320;
   view.width = Math.round(s * dpr);
   view.height = Math.round(s * dpr);
+  const root = typeof getComputedStyle === 'function' ? parseFloat(getComputedStyle(document.documentElement).fontSize) || 16 : 16;
+  const box = Math.max(2.65 * root, s * 0.0823); // tile box; written to --drone below
+  if (document.documentElement) document.documentElement.style.setProperty('--drone', box + 'px');
+  droneS = box * 0.34 * dpr;
 }
 
 let last = 0;

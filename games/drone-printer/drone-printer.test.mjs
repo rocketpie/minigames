@@ -102,6 +102,13 @@ test('the flight rail is a rounded square while keeping symmetric headings', () 
   assert.ok(Math.abs(opposite.y + corner.y) < 1e-9);
 });
 
+test('the lower-right parking strip sits beyond the flight rail', () => {
+  const size = ev('layout().size');
+  const rail = ev('orbitPoint(0, layout()).x') + size * .04;
+  const padMark = size * .98 - Math.min(4.1 * 16, size * .205) * .92;
+  assert.ok(rail < padMark, 'the drone silhouette clears the parking marks');
+});
+
 test('reservoirs stay colored at low ammo and nearly top off with full magazines', () => {
   assert.ok(ev('reservoirFill(4)') < .55, 'under five shots is visibly lower');
   assert.ok(ev('reservoirFill(16)') > .8, 'over fifteen shots is nearly full');
@@ -283,6 +290,13 @@ test('each level has a valid send order that spends exactly its magazines', () =
     `);
     assert.equal(fail, '', `level ${n}: ${fail}`);
   }
+});
+
+test('a flying drone draws at the same size as a dock tile', () => {
+  // The stub view is 320px wide, so both use the 2.65rem floor box; each tile draws
+  // the sprite at 0.34 of that box, and resize() sizes the flight sprite to match.
+  ev('resize()');
+  assert.equal(ev('droneS'), 2.65 * 16 * 0.34);
 });
 
 test('drawing a frame never throws', () => {
