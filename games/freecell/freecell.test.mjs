@@ -235,44 +235,53 @@ test('a corrupt save is ignored', () => {
   store.delete('freecell');
 });
 
-test('a moved card arcs over the rest with a flip; a shoved card just slides', () => {
+test('a lifted card flies on its own layer; the column waits for it to land', () => {
   const seen = {};
-  const cards = {};
-  const rects = { c0: { left: 40, top: 70 }, c1: { left: 70, top: 25 } };
-  const mk = focus => {
-    const card = {
-      dataset: { focus },
-      classList: { contains: () => false },
-      style: { zIndex: '' },
-      getBoundingClientRect: () => rects[focus],
-      animate: (frames, opts) => {
-        seen[focus] = { frames, opts, anim: { onfinish: null } };
-        return seen[focus].anim;
-      },
-    };
-    return card;
-  };
-  cards.c0 = mk('c0');
-  cards.c1 = mk('c1');
   const table = ctx.document.getElementById('table');
-  table.querySelectorAll = () => [cards.c0, cards.c1];
+  const clone = {
+    classList: { add() {} }, style: {}, removed: false,
+    setAttribute() {}, tabIndex: 0,
+    animate(frames, opts) {
+      seen.fly = { frames, opts, onfinish: null };
+      return seen.fly;
+    },
+    remove() { clone.removed = true; },
+  };
+  const mk = (focus, rect) => ({
+    dataset: { focus },
+    classList: { contains: () => false, add() {} },
+    style: { visibility: '' },
+    getBoundingClientRect: () => rect,
+    animate(frames, opts) {
+      seen.shift = { frames, opts, onfinish: null };
+      return seen.shift;
+    },
+    cloneNode: () => clone,
+  });
+  const card0 = mk('c0', { left: 40, top: 70, width: 72, height: 101 });
+  const card1 = mk('c1', { left: 70, top: 25, width: 72, height: 101 });
+  table.querySelectorAll = () => [card0, card1];
+  table.querySelector = () => card1;
+
   // c1 is the card the move lifted (id 1 = ace of spades); c0 just gets shoved along.
   run('slide(new Map([["c0", { left: 10, top: 10 }], ["c1", { left: 60, top: 45 }]]), [{ r: 1, s: 0 }])');
+
+  assert.equal(seen.fly.frames.length, 3, 'the lifted card turns over in flight');
+  assert.match(seen.fly.frames[1].transform, /rotateY\(180deg\)/);
+  assert.equal(seen.fly.frames[1].offset, .5);
+  assert.equal(seen.fly.opts.duration, 340);
+  assert.equal(card1.style.visibility, 'hidden', 'the real card waits out the flight');
+
+  assert.equal(seen.shift.frames.length, 2, 'a shoved card does not flip');
+  assert.equal(seen.shift.opts.delay, 340, 'the board only closes up after the landing');
+  assert.equal(seen.shift.opts.fill, 'backwards', 'and it stays put during that wait');
+
+  seen.fly.onfinish();
+  assert.equal(clone.removed, true);
+  assert.equal(card1.style.visibility, '', 'the landed card appears in its place');
+
   table.querySelectorAll = () => [];
-
-  assert.equal(seen.c0.frames.length, 2, 'no flip when the card was not the one moved');
-  assert.equal(seen.c0.frames[0].transform, 'translate(-30px, -60px)');
-  assert.equal(seen.c0.frames[1].transform, 'none');
-
-  assert.equal(seen.c1.frames.length, 3);
-  assert.match(seen.c1.frames[1].transform, /rotateY\(180deg\)/);
-  assert.equal(seen.c1.frames[1].offset, .5);
-  assert.equal(seen.c1.frames[2].transform, 'translate(0px, 0px) rotateY(360deg)');
-
-  assert.equal(cards.c0.style.zIndex, '999', 'flying cards pass over the columns');
-  seen.c0.anim.onfinish();
-  seen.c1.anim.onfinish();
-  assert.deepEqual([cards.c0.style.zIndex, cards.c1.style.zIndex], ['', '']);
+  table.querySelector = () => null;
 });
 
 test('cards that fit a foundation go home by themselves, chaining upward', () => {
@@ -316,6 +325,40 @@ test('a card can be taken back off a foundation', () => {
 
   run('autoStep()');
   assert.equal(run('found[0].length'), 0, 'autoplay leaves a card you pulled back alone');
+});
+
+test('?debug=true slows every animation 10x and puts a name badge on top', () => {
+  const nodes = new Map();
+  let slowed = null;
+  let shown = false;
+  const dbg = {
+    document: {
+      getElementById: id => {
+        if (!nodes.has(id)) {
+          const node = el();
+          if (id === 'debug') {
+            node.classList = {
+              add: c => { shown = shown || c === 'show'; },
+              remove() {}, toggle() {}, contains: () => false,
+            };
+          }
+          nodes.set(id, node);
+        }
+        return nodes.get(id);
+      },
+      body: { classList: { add: c => { slowed = c; } } },
+      activeElement: null,
+    },
+    addEventListener() {}, requestAnimationFrame: fn => fn(), setTimeout: fn => fn(), clearTimeout() {},
+    innerWidth: 900, innerHeight: 900, console, location: { search: '?game=1&debug=true' },
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+  };
+  vm.createContext(dbg);
+  vm.runInContext(code, dbg);
+
+  assert.equal(vm.runInContext('slow(380)', dbg), 3800);
+  assert.equal(slowed, 'slow', 'CSS transitions slow down with the rest');
+  assert.equal(shown, true, 'debug badge is visible');
 });
 
 test('sending every king home wins the game', () => {
