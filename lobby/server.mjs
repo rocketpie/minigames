@@ -158,7 +158,7 @@ export async function startServer(options = {}) {
 
   await new Promise((resolve, reject) => {
     httpServer.once('error', reject);
-    httpServer.listen(options.port ?? envNum('PORT', 80), options.host ?? '0.0.0.0', resolve);
+    httpServer.listen(options.port ?? envNum('PORT', 8080), options.host ?? '0.0.0.0', resolve);
   });
 
   return {

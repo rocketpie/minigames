@@ -45,6 +45,10 @@ And that's pretty cool!
 
 Multiplayer lobby (PoC): [`lobby/`](lobby/README.md).
 
+Deploy: `./deploy.ps1` builds and ships two images – `homelab/website` (this page, nginx,
+built from `games/` with `games/Dockerfile`) and `homelab/lobby` (see
+[lobby/HOSTING.md](lobby/HOSTING.md)). `-Component games` or `-Component lobby` ships only one.
+
 Preview, and share to your phone:
 
     node serve.mjs                                   # http://localhost:8000 (serves games/ only)

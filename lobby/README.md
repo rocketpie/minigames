@@ -9,10 +9,10 @@ logic stays in each browser.
     PORT=8080 node server.mjs      # http://localhost:8080
     node --test                    # relay + HTTP/WS tests
 
-Docker (listens on `:80` by default):
+Docker (listens on `:8080`):
 
     docker build -t minigames-lobby .
-    docker run -d -p 8080:80 --restart unless-stopped minigames-lobby
+    docker run -d -p 8080:8080 --restart unless-stopped minigames-lobby
 
 Reverse proxy, TLS, hardening and operating notes: [HOSTING.md](HOSTING.md).
 
@@ -31,7 +31,7 @@ Behind a reverse proxy the WebSocket upgrade must pass through (nginx):
 
 | variable | default | meaning |
 |---|---|---|
-| `PORT` | `80` | listen port |
+| `PORT` | `8080` | listen port |
 | `HASHCASH_BITS` | `20` | work required per room creation (~1–2 s on a laptop) |
 | `ROOM_TTL_MIN` | `120` | hard limit per room, in minutes |
 | `IDLE_TTL_MIN` | `10` | delete a room after this long without a relayed message |
