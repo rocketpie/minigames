@@ -17,6 +17,7 @@ Take the first option that fully works:
 5. Can it be one line a reader gets at a glance? One line.
 6. Otherwise: the minimum code that works.
 
+- No compatibility shims, migrations or deprecated aliases: rename and delete freely, then update callers, tests and fixtures to the new form.
 - Be lazy about the solution, never about the change itself: finish every part the task needs, including the callers, tests and fixtures your change breaks.
 - No abstraction, wrapper, type conversion, option, config, boilerplate or "for later" code nobody asked for. Keep values in the form the platform already gives you. Deletion beats addition. Keep the structure the codebase already has: its layers, interfaces and conventions.
 - The shortest working diff wins, once you know everything it must touch. A one-liner that needs decoding is not short.

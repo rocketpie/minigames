@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="de">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lobby – minigames</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 1.5rem;
+      font-family: system-ui, sans-serif;
+      background: #faf8ef;
+      color: #776e65;
+    }
+
+    main {
+      width: min(34rem, 100%);
+    }
+
+    h1 {
+      margin: 0 0 1rem;
+      font-size: 1.6rem;
+    }
+
+    section {
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: .25rem;
+      font-size: .9rem;
+    }
+
+    input {
+      padding: .5rem .6rem;
+      border: 2px solid #bbada0;
+      border-radius: .4rem;
+      background: #fff;
+      font: inherit;
+      color: inherit;
+    }
+
+    button,
+    .button {
+      padding: .55rem .9rem;
+      border: 0;
+      border-radius: .4rem;
+      background: #8f7a66;
+      color: #f9f6f2;
+      font: inherit;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .5;
+    }
+
+    #link {
+      color: #8f7a66;
+      word-break: break-all;
+      font-size: .9rem;
+    }
+
+    code {
+      padding: .1rem .3rem;
+      border-radius: .25rem;
+      background: #eee4da;
+      font-family: ui-monospace, monospace;
+      font-size: .85em;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 1.2rem;
+    }
+
+    #qrBox {
+      background: #fff;
+      padding: .5rem;
+      border-radius: .4rem;
+      width: fit-content;
+    }
+
+    #qr {
+      display: block;
+      width: 12rem;
+      height: 12rem;
+    }
+
+    .status {
+      margin: 0;
+      min-height: 1.2em;
+      font-size: .9rem;
+      color: #bbada0;
+    }
+
+    #log {
+      max-height: 14rem;
+      overflow-y: auto;
+      font-size: .9rem;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <h1>Lobby</h1>
+
+    <section id="home">
+      <label>Dein Name
+        <input id="name" maxlength="24" placeholder="Player" autocomplete="nickname">
+      </label>
+      <button id="create">Raum erstellen</button>
+      <p class="status" id="status"></p>
+    </section>
+
+    <section id="lobby" hidden>
+      <p>Raum <code id="roomId"></code></p>
+      <a id="link" href="#"></a>
+      <div>
+        <button id="copy">Link kopieren</button>
+        <button id="showQr">QR-Code</button>
+      </div>
+      <div id="qrBox" hidden><img id="qr" alt="QR-Code zum Beitreten"></div>
+      <p>Teilnehmer:</p>
+      <ul id="peers"></ul>
+      <button id="start" hidden>Start Game</button>
+      <p class="status" id="lobbyStatus"></p>
+    </section>
+
+    <section id="game" hidden>
+      <p>Raum <code id="gameRoom"></code> gestartet – hier würde das Spiel mit dieser Raum-ID laden.</p>
+      <p class="status" id="gameStatus"></p>
+      <form id="say">
+        <label>Relay-Test: Nachricht an alle
+          <input id="sayText" autocomplete="off" placeholder="z. B. Zug e2e4">
+        </label>
+        <button>Senden</button>
+      </form>
+      <ul id="log"></ul>
+    </section>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+
+</html>

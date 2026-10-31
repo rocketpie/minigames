@@ -14,7 +14,7 @@ RUN curl -fsSL -o /usr/local/bin/cloudflared \
       https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
  && chmod +x /usr/local/bin/cloudflared
 
-# nodejs runs the game logic tests.
+# nodejs runs the game logic tests; npm installs the lobby relay deps.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends nodejs \
+ && apt-get install -y --no-install-recommends nodejs npm \
  && rm -rf /var/lib/apt/lists/*

@@ -11,5 +11,6 @@
         }
     ],
     "forwardPorts": [4133],
+    "postCreateCommand": "cd lobby && npm install",
     "postStartCommand": "opencode service set hostname 0.0.0.0 && opencode service set port 4133 && opencode service start"
 }

@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 168" width="120" height="168">
+  <defs>
+    <radialGradient id="felt" cx="50%" cy="45%" r="72%">
+      <stop offset="0" stop-color="#0a3a26"/>
+      <stop offset=".62" stop-color="#052015"/>
+      <stop offset="1" stop-color="#02120b"/>
+    </radialGradient>
+
+    <!-- Interlaced gold lattice: the dark break makes the other strand pass over. -->
+    <pattern id="weave" width="28" height="28" patternUnits="userSpaceOnUse">
+      <g fill="none" stroke="#b08a3e" stroke-width="1.1" stroke-linecap="round" opacity=".55">
+        <path d="M-4 32 L32 -4"/>
+        <path d="M-4 -4 L32 32"/>
+      </g>
+      <path d="M10.5 17.5 L17.5 10.5" fill="none" stroke="#02120b" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M9.5 18.5 L18.5 9.5" fill="none" stroke="#c7a04a" stroke-width="1.1" stroke-linecap="round" opacity=".75"/>
+    </pattern>
+
+    <!-- Fibonacci spiral: quarter arcs with radii 1,1,2,3,5,8,13,21. -->
+    <path id="fib" d="M17 26 A1 1 0 0 1 18 27 A1 1 0 0 1 17 28 A2 2 0 0 1 15 26 A3 3 0 0 1 18 23 A5 5 0 0 1 23 28 A8 8 0 0 1 15 36 A13 13 0 0 1 2 23 A21 21 0 0 1 23 2" fill="none"/>
+
+    <!-- Pointed loop used three times for the central Celtic knot. -->
+    <path id="petal" d="M0 -25 C15 -16 15 12 0 19 C-15 12 -15 -16 0 -25 Z" fill="none"/>
+
+    <radialGradient id="vignette" cx="50%" cy="50%" r="68%">
+      <stop offset=".55" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".38"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="120" height="168" rx="6" fill="url(#felt)"/>
+  <rect width="120" height="168" rx="6" fill="url(#weave)"/>
+
+  <g fill="none" stroke="#c7a04a" stroke-width="1.5">
+    <rect x="4.5" y="4.5" width="111" height="159" rx="4"/>
+    <rect x="8" y="8" width="104" height="152" rx="3" stroke-width=".55" opacity=".7"/>
+  </g>
+
+  <!-- Fibonacci spirals turn through the four corners. -->
+  <g fill="none" stroke="#c7a04a" stroke-width="1.05" stroke-linecap="round" opacity=".9">
+    <use href="#fib" transform="translate(9 9) scale(.7)"/>
+    <use href="#fib" transform="translate(111 9) rotate(90) scale(.7)"/>
+    <use href="#fib" transform="translate(111 159) rotate(180) scale(.7)"/>
+    <use href="#fib" transform="translate(9 159) rotate(270) scale(.7)"/>
+  </g>
+
+  <!-- Three interlaced loops, each given a dark halo so the crossings read as over/under. -->
+  <g transform="translate(60 84)">
+    <circle r="33" fill="none" stroke="#c7a04a" stroke-width=".55" opacity=".4"/>
+    <g fill="none" stroke-linecap="round">
+      <g stroke="#02120b" stroke-width="4.6"><use href="#petal"/></g>
+      <g stroke="#d3ac55" stroke-width="2.1"><use href="#petal"/></g>
+      <g stroke="#02120b" stroke-width="4.6"><use href="#petal" transform="rotate(120)"/></g>
+      <g stroke="#d3ac55" stroke-width="2.1"><use href="#petal" transform="rotate(120)"/></g>
+      <g stroke="#02120b" stroke-width="4.6"><use href="#petal" transform="rotate(240)"/></g>
+      <g stroke="#d3ac55" stroke-width="2.1"><use href="#petal" transform="rotate(240)"/></g>
+    </g>
+    <circle r="2.2" fill="#d3ac55"/>
+  </g>
+
+  <rect width="120" height="168" rx="6" fill="url(#vignette)"/>
+  <rect x=".5" y=".5" width="119" height="167" rx="5.5" fill="none" stroke="#000" stroke-opacity=".45"/>
+</svg>

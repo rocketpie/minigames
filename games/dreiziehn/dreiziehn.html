@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>dreiziehn</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: ui-rounded, "Avenir Next", system-ui, sans-serif; color: #e9f0e2;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    min-height: 100vh; padding: .7rem .5rem 1rem;
+    user-select: none; -webkit-user-select: none;
+    background:
+      radial-gradient(120% 85% at 50% -10%, rgba(255, 255, 255, .07), transparent 55%),
+      radial-gradient(95% 70% at 50% 112%, rgba(0, 0, 0, .5), transparent 60%),
+      repeating-linear-gradient(31deg, rgba(255, 255, 255, .022) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(-29deg, rgba(0, 0, 0, .035) 0 1px, transparent 1px 4px),
+      radial-gradient(ellipse at 50% 38%, #1b6445, #0e422b 58%, #072a1b 100%);
+    background-attachment: fixed;
+  }
+  #app {
+    width: fit-content; max-width: 100%; display: flex; flex-direction: column;
+    align-items: center; gap: .55rem;
+  }
+  header { width: 100%; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .45rem; }
+  h1 {
+    display: flex; align-items: center; gap: .42rem; margin: 0 auto 0 0; white-space: nowrap;
+    font-family: Georgia, "Times New Roman", serif; font-weight: 600;
+    font-size: clamp(1rem, 3.2vw, 1.45rem); letter-spacing: .1em; color: #f4e4bd;
+    text-shadow: 0 1px 0 #0009, 0 0 18px rgba(243, 196, 107, .18);
+  }
+  .logo {
+    width: 1.3rem; aspect-ratio: 5 / 7; overflow: hidden; border-radius: 2px;
+    box-shadow: 0 1px 4px #000a, 0 0 0 1px #c7a04a55;
+  }
+  .logo img { display: block; width: 100%; height: 100%; }
+  .stat {
+    padding: .1rem .4rem; text-align: center; line-height: 1.15;
+    font-size: .5rem; letter-spacing: .14em; color: #9fc0a1; white-space: nowrap;
+  }
+  .stat b { display: block; font-size: .88rem; letter-spacing: 0; color: #f4e4bd; }
+  .mini-back {
+    display: inline-block; width: .72rem; aspect-ratio: 5 / 7; margin-right: .18rem;
+    vertical-align: -.1rem; border-radius: 1px;
+    background: #03170e url("card-back.svg") center / 100% 100% no-repeat;
+    box-shadow: 0 1px 2px #0008;
+  }
+  .tool {
+    font: inherit; font-size: .63rem; letter-spacing: .06em; padding: .38rem .55rem;
+    border: 1px solid rgba(243, 196, 107, .26); border-radius: 6px; cursor: pointer;
+    background: rgba(4, 30, 19, .55); color: #ecd9ae;
+  }
+  .tool:hover { background: rgba(243, 196, 107, .12); }
+  .tool:active { transform: translateY(1px); }
+  .tool:disabled { opacity: .35; cursor: default; }
+  .tool:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+  .tool.primary {
+    color: #2d2111; background: linear-gradient(180deg, #f8d995, #d9ab55);
+    border: 0; font-weight: 700; box-shadow: 0 2px 0 #8b6528, 0 6px 18px rgba(0, 0, 0, .4);
+  }
+  .tool.primary:hover { background: linear-gradient(180deg, #ffe6ab, #e2b663); }
+  .tool, .panel button { display: inline-flex; align-items: center; justify-content: center; gap: .32em; }
+
+  #table {
+    --cw: 72px; --ch: 101px; --gap: 4px;
+    display: flex; flex-direction: column; gap: calc(var(--gap) * 1.9);
+    touch-action: manipulation;
+  }
+  .section { display: flex; flex-direction: column; align-items: center; gap: calc(var(--gap) * .8); }
+  .label {
+    font-size: .52rem; letter-spacing: .16em; text-transform: uppercase;
+    color: #9fc0a1; text-align: center;
+  }
+  .row { display: flex; gap: var(--gap); justify-content: center; }
+
+  /* Wooden trays, same language as the freecell table. */
+  .slot {
+    position: relative; width: var(--cw); height: var(--ch); padding: calc(var(--cw) * .045);
+    border-radius: calc(var(--cw) * .09);
+    background:
+      linear-gradient(90deg, rgba(255, 242, 207, .17), transparent 14% 86%, rgba(40, 20, 4, .3)),
+      linear-gradient(180deg, #ad7b42 0%, #7d5027 17%, #bd8a4f 38%, #704620 62%, #a06e3a 83%, #593718 100%);
+    box-shadow:
+      0 3px 0 #38220f, 0 5px 10px rgba(0, 0, 0, .48),
+      inset 0 0 0 1px rgba(255, 226, 170, .28), inset 0 1px 0 rgba(255, 246, 220, .35);
+    transition: box-shadow .15s;
+  }
+  .slot.valid {
+    box-shadow:
+      0 0 0 2px #f3c46b, 0 0 18px rgba(243, 196, 107, .5),
+      0 3px 0 #38220f, 0 5px 10px rgba(0, 0, 0, .48);
+  }
+  .slot:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+  .hole {
+    width: 100%; height: 100%; border-radius: calc(var(--cw) * .055);
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 38%, #0b3523, #062417 72%);
+    box-shadow: inset 0 3px 8px #000c, inset 0 0 0 1px #000a;
+    color: rgba(228, 197, 122, .2); font-size: calc(var(--cw) * .38); line-height: 1;
+  }
+  .slot .card { position: absolute; inset: calc(var(--cw) * .045); width: auto; height: auto; }
+  .badge {
+    position: absolute; right: 5%; bottom: 5%; z-index: 5;
+    min-width: 1.15em; padding: .04em .22em; border-radius: 99px;
+    background: #f3c46b; color: #2b1e0a; font-size: calc(var(--cw) * .15);
+    font-weight: 700; line-height: 1.25; text-align: center;
+    box-shadow: 0 1px 3px #0008;
+  }
+
+  .hand-head {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  }
+  .hand-rail {
+    display: flex; gap: var(--gap); padding: calc(var(--gap) * .9);
+    border-radius: calc(var(--cw) * .12);
+    background: rgba(4, 30, 19, .38);
+    box-shadow: inset 0 2px 10px #0006, 0 1px 0 rgba(255, 246, 220, .08);
+    border: 1px solid rgba(243, 196, 107, .14);
+  }
+  .hand-slot { width: var(--cw); height: var(--ch); border-radius: calc(var(--cw) * .085); }
+  .hand-slot.empty { border: 1px dashed rgba(232, 215, 170, .18); background: rgba(0, 0, 0, .08); }
+  .hand-slot .card { width: 100%; height: 100%; }
+
+  .card {
+    position: relative; width: var(--cw); height: var(--ch); flex: 0 0 auto;
+    border-radius: calc(var(--cw) * .085); transform-style: preserve-3d;
+    transition: transform .18s ease, outline-color .15s; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .card:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+  .face {
+    position: absolute; inset: 0; border-radius: inherit; overflow: hidden;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  }
+  .front {
+    background: linear-gradient(150deg, #fffef9, #f3ecd8); color: #1c1b18;
+    box-shadow:
+      inset 0 0 0 1px rgba(0, 0, 0, .16), inset 0 0 0 3px rgba(255, 255, 255, .55),
+      0 2px 4px rgba(0, 0, 0, .42);
+  }
+  .card.red .front { color: #a5231c; }
+  .back {
+    transform: rotateY(180deg);
+    background: #03170e url("card-back.svg") center / 100% 100% no-repeat;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .45);
+  }
+  .card.sel { transform: translateY(-7px); outline: 2px solid #f3c46b; outline-offset: 1px; }
+  .card.sel .front {
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .16), 0 0 16px rgba(243, 196, 107, .55),
+      0 8px 16px rgba(0, 0, 0, .45);
+  }
+
+  .corner {
+    position: absolute; display: flex; flex-direction: column; align-items: center;
+    line-height: 1; font-family: Georgia, "Times New Roman", serif; font-weight: 700;
+    font-size: calc(var(--cw) * .19);
+  }
+  .corner i { font-style: normal; font-size: calc(var(--cw) * .135); margin-top: .04em; }
+  .corner.tl { top: 3.5%; left: 4.5%; }
+  .corner.br { bottom: 3.5%; right: 4.5%; transform: rotate(180deg); }
+
+  .pips { position: absolute; inset: 0; }
+  .pip {
+    position: absolute; transform: translate(-50%, -50%); line-height: 1;
+    font-size: calc(var(--cw) * .16);
+  }
+  .pips.ace .pip { font-size: calc(var(--cw) * .42); }
+  .court {
+    position: absolute; inset: 15% 17%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: .04em; border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, .16);
+  }
+  .court b { font-family: Georgia, "Times New Roman", serif; font-size: calc(var(--cw) * .46); line-height: 1; font-weight: 600; }
+  .court i { font-style: normal; font-size: calc(var(--cw) * .22); line-height: 1; }
+  .joker {
+    position: absolute; inset: 18% 10%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: .08em; border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, .16);
+  }
+  .joker b {
+    font-family: Georgia, "Times New Roman", serif; font-weight: 600;
+    font-size: calc(var(--cw) * .145); letter-spacing: .03em; line-height: 1;
+  }
+  .joker i { font-style: normal; font-size: calc(var(--cw) * .34); line-height: 1; }
+
+  #hint {
+    width: 100%; min-height: 1.4em; margin: 0; text-align: center;
+    font-size: .68rem; line-height: 1.35; color: #b9d4b7;
+  }
+  #rules {
+    width: min(100%, 34rem); margin-top: .1rem;
+    font-size: .7rem; line-height: 1.45; color: #b9d4b7;
+  }
+  #rules summary { cursor: pointer; text-align: center; color: #f3c46b; }
+  #rules summary:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+  #rules p { margin: .45rem 0 0; }
+  #rules ul { margin: .4rem 0 0; padding-left: 1.1rem; }
+  #rules li { margin: .2rem 0; }
+  #rules b { color: #ecd9ae; font-weight: 600; }
+
+  #overlay {
+    position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center;
+    padding: 1.2rem; background: radial-gradient(circle at 50% 42%, rgba(10, 40, 26, .5), rgba(2, 11, 7, .9));
+    backdrop-filter: blur(4px);
+  }
+  #overlay.show { display: flex; }
+  .panel {
+    width: min(88vw, 22rem); padding: 1.5rem 1.3rem 1.3rem; text-align: center;
+    border: 1px solid rgba(243, 196, 107, .4); border-radius: 14px;
+    background: linear-gradient(180deg, #0d3826, #062015);
+    box-shadow: 0 24px 70px #000c, inset 0 1px 0 rgba(255, 245, 210, .12);
+  }
+  .panel .eyebrow { margin: 0; font-size: .54rem; letter-spacing: .24em; color: #9d8d71; text-transform: uppercase; }
+  .panel h2 {
+    margin: .35rem 0 .4rem; font-family: Georgia, "Times New Roman", serif;
+    font-weight: 500; font-size: 1.8rem; color: #ffe6b0;
+  }
+  .panel p { margin: 0 0 1.1rem; font-size: .82rem; color: #c5d6c0; }
+  .panel button {
+    font: inherit; font-size: .8rem; font-weight: 700; letter-spacing: .04em;
+    padding: .6rem 1.1rem; border: 0; border-radius: 8px; cursor: pointer;
+    color: #2d2111; background: linear-gradient(180deg, #f8d995, #d9ab55);
+    box-shadow: 0 2px 0 #8b6528, 0 6px 18px rgba(0, 0, 0, .4);
+  }
+  .panel button:active { transform: translateY(1px); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { transition: none; }
+  }
+  @media (max-width: 470px) {
+    h1 { letter-spacing: .06em; }
+    .tool { font-size: .58rem; padding: .34rem .44rem; }
+    .stat { font-size: .46rem; padding: .08rem .3rem; }
+    .stat b { font-size: .8rem; }
+    #hint { font-size: .62rem; }
+    .label { font-size: .48rem; letter-spacing: .12em; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1><span class="logo" aria-hidden="true"><img src="card-back.svg" alt=""></span>Dreiziehn</h1>
+    <div class="stat"><span class="mini-back" aria-hidden="true"></span>STOCK<b id="stockCount">0</b></div>
+    <div class="stat">DONE<b id="doneCount">0</b></div>
+    <div class="stat">TURNS<b id="turns">0</b></div>
+    <div class="stat">PLAYS<b id="plays">0</b></div>
+    <button id="undo" class="tool" disabled><span aria-hidden="true">↺</span> Undo</button>
+    <button id="new" class="tool"><span aria-hidden="true">★</span> New game</button>
+  </header>
+
+  <div id="table">
+    <div class="section">
+      <div class="label">Middle · build A → K, suit doesn't matter</div>
+      <div id="middle" class="row"></div>
+    </div>
+    <div class="section">
+      <div class="label">Your piles · empty these too</div>
+      <div id="own" class="row"></div>
+    </div>
+    <div class="section">
+      <div class="hand-head">
+        <div class="label">Hand <span id="handCount">0</span>/5</div>
+        <button id="end" class="tool primary" disabled>End turn →</button>
+      </div>
+      <div id="hand" class="hand-rail"></div>
+    </div>
+  </div>
+
+  <p id="hint" aria-live="polite"></p>
+  <details id="rules">
+    <summary>How to play</summary>
+    <ul>
+      <li><b>Deck:</b> one 60-card deck per player: 52 cards plus two jokers per suit. This is the one-player table.</li>
+      <li><b>Start:</b> shuffle the deck, deal yourself 5 hand cards, and leave the rest face down in the stock.</li>
+      <li><b>Turn:</b> play at least one card, then end your turn. Ending the turn draws back up to 5 from the stock.</li>
+      <li><b>Middle:</b> four middle piles. Each starts with an ace and counts up to a king; suit doesn't matter. A joker is wild. A completed king pile is set aside and its slot starts again at ace.</li>
+      <li><b>Your piles:</b> four free storage piles. Any card, any order. Click a pile to take its top card into your hand (when your hand has room), or play a selected hand card onto it. They must be empty to win.</li>
+      <li><b>Win:</b> empty the stock and all four of your piles. Cards left in your hand are fine.</li>
+    </ul>
+    <p>Tap a card in your hand, then tap a middle pile or one of your piles. Tap the selected card again to put it back.</p>
+  </details>
+</div>
+
+<div id="overlay">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+    <p class="eyebrow">Stock and piles empty</p>
+    <h2 id="winTitle">Dreiziehn!</h2>
+    <p>You cleared it in <b id="winTurns">0</b> turns and <b id="winPlays">0</b> plays.</p>
+    <button id="again"><span aria-hidden="true">★</span> New game</button>
+  </div>
+</div>
+
+<script>
+const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const RANK_NAMES = ['Ace','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Jack','Queen','King'];
+const SUITS = ['♠','♥','♦','♣'];
+const SUIT_NAMES = ['spades','hearts','diamonds','clubs'];
+const $ = id => document.getElementById(id);
+const isRed = s => s === 1 || s === 2;
+const KEY = 'dreiziehn';
+const MAX_HAND = 5;
+const DECK_SIZE = 60;
+
+// Pip positions are percentages of the card, so the face scales with any card size.
+const PIPS = {
+  2: [[50,16],[50,84]],
+  3: [[50,16],[50,50],[50,84]],
+  4: [[28,16],[72,16],[28,84],[72,84]],
+  5: [[28,16],[72,16],[50,50],[28,84],[72,84]],
+  6: [[28,16],[72,16],[28,50],[72,50],[28,84],[72,84]],
+  7: [[28,16],[72,16],[50,33],[28,50],[72,50],[28,84],[72,84]],
+  8: [[28,16],[72,16],[50,33],[28,50],[72,50],[50,67],[28,84],[72,84]],
+  9: [[28,16],[72,16],[28,39],[72,39],[50,50],[28,61],[72,61],[28,84],[72,84]],
+  10: [[30,16],[70,16],[50,27],[30,39],[70,39],[30,61],[70,61],[50,73],[30,84],[70,84]],
+};
+
+let stock, hand, own, middle, completed, turnPlayed, turns, plays, won, sel;
+let undoStack = [];
+
+const isJoker = c => c.r === 0;
+const cid = c => c.s * 32 + c.r * 2 + (c.j || 0);
+const cardName = c => isJoker(c)
+  ? `${c.j ? 'Second' : 'First'} joker of ${SUIT_NAMES[c.s]}`
+  : `${RANK_NAMES[c.r - 1]} of ${SUIT_NAMES[c.s]}`;
+const canMiddle = (card, pile) => !!card && pile.length < 13 &&
+  (isJoker(card) || card.r === pile.length + 1);
+const nextRank = pile => pile.length >= 13 ? '—' : RANKS[pile.length];
+
+function deck() {
+  const cards = [];
+  for (let s = 0; s < 4; s++) {
+    for (let r = 1; r <= 13; r++) cards.push({ s, r });
+    cards.push({ s, r: 0, j: 0 }, { s, r: 0, j: 1 });
+  }
+  return cards;
+}
+
+function shuffled() {
+  const cards = deck();
+  for (let i = cards.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cards[i], cards[j]] = [cards[j], cards[i]];
+  }
+  return cards;
+}
+
+const snapshot = () => JSON.stringify({ stock, hand, own, middle, completed, turnPlayed, turns, plays, won });
+
+function pushUndo() {
+  undoStack.push(snapshot());
+  if (undoStack.length > 300) undoStack.shift();
+}
+
+function checkWin() {
+  won = stock.length === 0 && own.every(pile => pile.length === 0);
+  return won;
+}
+
+const isCard = c => c && Number.isInteger(c.s) && c.s >= 0 && c.s <= 3 &&
+  Number.isInteger(c.r) && c.r >= 0 && c.r <= 13 &&
+  (c.r === 0 ? (c.j === 0 || c.j === 1) : c.j === undefined);
+
+function isState(s) {
+  if (!s || !Array.isArray(s.stock) || !Array.isArray(s.hand)) return false;
+  if (!Array.isArray(s.own) || s.own.length !== 4 || !s.own.every(Array.isArray)) return false;
+  if (!Array.isArray(s.middle) || s.middle.length !== 4 || !s.middle.every(Array.isArray)) return false;
+  if (!Number.isInteger(s.completed) || s.completed < 0 || s.completed > 4) return false;
+  if (!Number.isInteger(s.turns) || s.turns < 0) return false;
+  if (!Number.isInteger(s.plays) || s.plays < 0) return false;
+  if (typeof s.turnPlayed !== 'boolean' || typeof s.won !== 'boolean') return false;
+  if (s.hand.length > MAX_HAND) return false;
+
+  const cards = [...s.stock, ...s.hand, ...s.own.flat(), ...s.middle.flat()];
+  if (cards.length !== DECK_SIZE - s.completed * 13) return false;
+  if (!cards.every(isCard)) return false;
+  if (new Set(cards.map(cid)).size !== cards.length) return false;
+
+  return s.middle.every(pile =>
+    pile.length < 13 && pile.every((c, i) => isJoker(c) || c.r === i + 1));
+}
+
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({
+      stock, hand, own, middle, completed, turnPlayed, turns, plays, won, undoStack,
+    }));
+  } catch { /* storage unavailable: keep playing in memory */ }
+}
+
+function load() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(KEY)); } catch { return false; }
+  if (!isState(saved)) return false;
+
+  stock = saved.stock;
+  hand = saved.hand;
+  own = saved.own;
+  middle = saved.middle;
+  completed = saved.completed;
+  turnPlayed = saved.turnPlayed;
+  turns = saved.turns;
+  plays = saved.plays;
+  undoStack = Array.isArray(saved.undoStack) ? saved.undoStack.filter(x => typeof x === 'string') : [];
+  sel = null;
+  checkWin();
+  draw();
+  return true;
+}
+
+function newGame() {
+  stock = shuffled();
+  hand = [];
+  for (let i = 0; i < MAX_HAND; i++) hand.push(stock.pop());
+  own = [[], [], [], []];
+  middle = [[], [], [], []];
+  completed = 0;
+  turnPlayed = false;
+  turns = 0;
+  plays = 0;
+  won = false;
+  sel = null;
+  undoStack = [];
+  draw();
+  save();
+}
+
+function playMiddle(i) {
+  if (!sel || sel.kind !== 'hand') return false;
+  const card = hand[sel.i];
+  if (!card || !canMiddle(card, middle[i])) return false;
+
+  pushUndo();
+  hand.splice(sel.i, 1);
+  middle[i].push(card);
+  plays++;
+  turnPlayed = true;
+  if (middle[i].length === 13) {
+    middle[i] = [];
+    completed++;
+  }
+  sel = null;
+  settle();
+  return true;
+}
+
+function playOwn(i) {
+  if (!sel || sel.kind !== 'hand') return false;
+  const card = hand[sel.i];
+  if (!card) return false;
+
+  pushUndo();
+  hand.splice(sel.i, 1);
+  own[i].push(card);
+  plays++;
+  turnPlayed = true;
+  sel = null;
+  settle();
+  return true;
+}
+
+function pickUpOwn(i) {
+  if (!own[i].length) return false;
+  if (hand.length >= MAX_HAND) {
+    say('Your hand is full. Play a card first.');
+    return false;
+  }
+
+  pushUndo();
+  hand.push(own[i].pop());
+  sel = null;
+  settle();
+  return true;
+}
+
+function endTurn() {
+  if (won || !turnPlayed) return false;
+
+  pushUndo();
+  while (hand.length < MAX_HAND && stock.length) hand.push(stock.pop());
+  turnPlayed = false;
+  turns++;
+  sel = null;
+  settle();
+  return true;
+}
+
+function undo() {
+  const saved = undoStack.pop();
+  if (!saved) return;
+  let state;
+  try { state = JSON.parse(saved); } catch { return; }
+  if (!isState(state)) return;
+
+  stock = state.stock;
+  hand = state.hand;
+  own = state.own;
+  middle = state.middle;
+  completed = state.completed;
+  turnPlayed = state.turnPlayed;
+  turns = state.turns;
+  plays = state.plays;
+  won = state.won;
+  sel = null;
+  checkWin();
+  draw();
+  save();
+}
+
+function settle() {
+  checkWin();
+  draw();
+  save();
+}
+
+function say(text) {
+  const hint = $('hint');
+  if (hint.textContent !== text) hint.textContent = text;
+}
+
+function hintText(held) {
+  if (won) return `Cleared in ${turns + 1} turns and ${plays} plays.`;
+  if (held) {
+    const fits = middle.some(pile => canMiddle(held, pile));
+    return `Holding ${cardName(held)}. ${fits ? 'Tap a glowing middle pile' : 'No middle pile takes it'} — or one of your own piles.`;
+  }
+  if (!hand.length) {
+    if (own.some(pile => pile.length)) {
+      return turnPlayed
+        ? 'Take a card from one of your piles, or end your turn.'
+        : 'Take a card from one of your piles, then play it.';
+    }
+    if (stock.length) return 'End your turn to draw.';
+    return `Turn ${turns + 1}: play at least one card.`;
+  }
+  if (turnPlayed) return 'Play another card, take a card from a pile, or end your turn.';
+  return `Turn ${turns + 1}: play at least one card, then end your turn.`;
+}
+
+function faceHTML(c) {
+  const sym = SUITS[c.s];
+  if (isJoker(c)) {
+    return `<span class="corner tl"><b>★</b><i>${sym}</i></span>
+      <div class="joker"><b>JOKER</b><i>${sym}</i></div>
+      <span class="corner br"><b>★</b><i>${sym}</i></span>`;
+  }
+
+  const rank = RANKS[c.r - 1];
+  const corner = at => `<span class="corner ${at}"><b>${rank}</b><i>${sym}</i></span>`;
+  let middle;
+  if (c.r === 1) {
+    middle = `<div class="pips ace"><span class="pip" style="left:50%;top:50%">${sym}</span></div>`;
+  } else if (c.r <= 10) {
+    middle = `<div class="pips">${PIPS[c.r].map(([x, y]) =>
+      `<span class="pip" style="left:${x}%;top:${y}%">${sym}</span>`).join('')}</div>`;
+  } else {
+    middle = `<div class="court"><b>${rank}</b><i>${sym}</i></div>`;
+  }
+  return corner('tl') + middle + corner('br');
+}
+
+function cardHTML(c, kind, i) {
+  const selected = sel && sel.kind === kind && sel.i === i;
+  return `<div class="card${isRed(c.s) ? ' red' : ''}${selected ? ' sel' : ''}"
+    role="button" tabindex="0" data-focus="c${cid(c)}" data-kind="${kind}" data-i="${i}"
+    aria-label="${cardName(c)}">
+    <div class="face front">${faceHTML(c)}</div>
+    <div class="face back" aria-hidden="true"></div>
+  </div>`;
+}
+
+function draw() {
+  const active = document.activeElement && document.activeElement.dataset
+    ? document.activeElement.dataset.focus
+    : null;
+  const held = sel && sel.kind === 'hand' ? hand[sel.i] : null;
+
+  $('stockCount').textContent = stock.length;
+  $('doneCount').textContent = completed;
+  $('turns').textContent = turns + 1;
+  $('plays').textContent = plays;
+  $('handCount').textContent = hand.length;
+
+  $('middle').innerHTML = middle.map((pile, i) => {
+    const top = pile[pile.length - 1];
+    const valid = held && canMiddle(held, pile);
+    const on = top ? '' : ' role="button" tabindex="0"';
+    return `<div class="slot${valid ? ' valid' : ''}" data-slot="middle" data-i="${i}"
+      aria-label="Middle pile ${i + 1}, next ${nextRank(pile)}"${on}>
+      <div class="hole" aria-hidden="true">${top ? '' : 'A'}</div>
+      ${top ? cardHTML(top, 'middle', i) : ''}
+    </div>`;
+  }).join('');
+
+  $('own').innerHTML = own.map((pile, i) => {
+    const top = pile[pile.length - 1];
+    const on = top ? '' : ' role="button" tabindex="0"';
+    return `<div class="slot${held ? ' valid' : ''}" data-slot="own" data-i="${i}"
+      aria-label="Your pile ${i + 1}${top ? `, top ${cardName(top)}` : ', empty'}"${on}>
+      <div class="hole" aria-hidden="true">${top ? '' : '+'}</div>
+      ${top ? cardHTML(top, 'own', i) : ''}
+      ${pile.length > 1 ? `<span class="badge" aria-hidden="true">${pile.length}</span>` : ''}
+    </div>`;
+  }).join('');
+
+  $('hand').innerHTML = Array.from({ length: MAX_HAND }, (_, i) => {
+    const card = hand[i];
+    return `<div class="hand-slot${card ? '' : ' empty'}">${card ? cardHTML(card, 'hand', i) : ''}</div>`;
+  }).join('');
+
+  $('undo').disabled = !undoStack.length;
+  $('end').disabled = !turnPlayed || won;
+  $('overlay').classList.toggle('show', won);
+  $('winTurns').textContent = turns + 1;
+  $('winPlays').textContent = plays;
+
+  say(hintText(held));
+
+  if (active) {
+    const el = $('table').querySelector(`[data-focus="${active}"]`);
+    if (el) el.focus({ preventScroll: true });
+  }
+}
+
+function tapHand(i) {
+  if (won || !hand[i]) return;
+  if (sel && sel.kind === 'hand' && sel.i === i) {
+    sel = null;
+    draw();
+    return;
+  }
+  sel = { kind: 'hand', i };
+  draw();
+}
+
+function tapMiddle(i) {
+  if (won) return;
+  if (!sel || sel.kind !== 'hand') {
+    say('Pick a card from your hand first.');
+    return;
+  }
+  if (!playMiddle(i)) say(`That card doesn't fit here. This pile needs ${nextRank(middle[i])}.`);
+}
+
+function tapOwn(i) {
+  if (won) return;
+  if (sel && sel.kind === 'hand') {
+    playOwn(i);
+    return;
+  }
+  if (own[i].length) pickUpOwn(i);
+}
+
+function activate(el) {
+  if (el.classList.contains('card')) {
+    const kind = el.dataset.kind;
+    const i = Number(el.dataset.i);
+    if (kind === 'hand') return tapHand(i);
+    if (kind === 'own') return tapOwn(i);
+    if (kind === 'middle') return tapMiddle(i);
+  }
+  const slot = el.dataset.slot;
+  if (slot === 'middle') return tapMiddle(Number(el.dataset.i));
+  if (slot === 'own') return tapOwn(Number(el.dataset.i));
+}
+
+function fit() {
+  const gap = Math.max(2, Math.min(8, innerWidth * .008));
+  const wide = innerWidth - 24;
+  const tall = innerHeight - 250;
+  const handRail = gap * 1.8 + 2; // the hand rail's padding and border
+  const cw = Math.max(30, Math.min((wide - gap * 4 - handRail) / 5, tall / 5.2, 118));
+  const t = $('table');
+  t.style.setProperty('--gap', gap.toFixed(2) + 'px');
+  t.style.setProperty('--cw', cw.toFixed(2) + 'px');
+  t.style.setProperty('--ch', (cw * 1.4).toFixed(2) + 'px');
+}
+
+$('table').addEventListener('click', e => {
+  const el = e.target.closest('.card, .slot');
+  if (el) activate(el);
+});
+$('table').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target.closest('.card, .slot');
+  if (!el) return;
+  e.preventDefault();
+  activate(el);
+});
+$('new').addEventListener('click', newGame);
+$('again').addEventListener('click', newGame);
+$('undo').addEventListener('click', undo);
+$('end').addEventListener('click', endTurn);
+addEventListener('resize', fit);
+
+fit();
+if (!load()) newGame();
+</script>
+</body>
+</html>

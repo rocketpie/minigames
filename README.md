@@ -41,6 +41,9 @@ And that's pretty cool!
 | [drone printer](games/drone-printer/drone-printer.html) | tap a glowing drone to send it, the dimmer one to bring the next forward; tap a parked drone to send it out again. |
 | [lights, please!](games/lights-please/lights-please.html) | tap a room to flip its circuit; make the whole house all lit or all dark. Keys 1–9, U (undo), R (reset). |
 | [freecell](games/freecell/freecell.html) | tap a card to pick it up, tap a column, free cell or foundation to place it. Includes a [strategy guide](games/freecell/freecell-guide.html). |
+| [dreiziehn](games/dreiziehn/dreiziehn.html) | single-player card solitaire: tap a hand card, then a middle pile or one of your own piles; end your turn to refill. Empty the stock and your piles to win. |
+
+Multiplayer lobby (PoC): [`lobby/`](lobby/README.md).
 
 Preview, and share to your phone:
 
