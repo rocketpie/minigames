@@ -1,4 +1,5 @@
 import { solve } from './hashcash.js';
+import { safeReturn } from './return-url.js';
 
 const $ = (id) => document.getElementById(id);
 const nameInput = $('name');
@@ -10,6 +11,11 @@ let roomId = null;
 let token = null;
 let host = false;
 let started = false;
+let playerName = '';
+
+let returnUrl = safeReturn(new URLSearchParams(location.search).get('return'));
+let maxPlayers = Math.max(1, Math.min(12, Number.parseInt(
+  new URLSearchParams(location.search).get('maxPlayers'), 10) || 12));
 
 const tokenStore = (id) => `lobby-token:${id}`;
 const joinUrl = (id) => `${location.origin}${location.pathname}?room=${id}`;
@@ -35,6 +41,7 @@ function connect(onOpen) {
 }
 
 function renderPeers(peers) {
+  $('peerCount').textContent = `Teilnehmer: ${peers.length} / ${maxPlayers}`;
   $('peers').replaceChildren(
     ...peers.map((p) => {
       const li = document.createElement('li');
@@ -50,6 +57,9 @@ function onJoined(msg) {
   token = msg.token;
   host = msg.host;
   started = msg.started;
+  playerName = msg.name;
+  returnUrl = safeReturn(msg.returnUrl) || returnUrl;
+  maxPlayers = msg.maxPlayers ?? maxPlayers;
   sessionStorage.setItem(tokenStore(roomId), token);
   history.replaceState(null, '', `?room=${roomId}`);
 
@@ -63,14 +73,28 @@ function onJoined(msg) {
   $('qr').removeAttribute('src');
   $('lobbyStatus').textContent = '';
   renderPeers(msg.peers);
-  if (started) showGame();
+  if (started) openGame();
 }
 
-function showGame() {
+function showPlaceholder() {
   started = true;
   $('lobby').hidden = true;
   $('game').hidden = false;
   $('gameRoom').textContent = roomId;
+}
+
+function openGame() {
+  started = true;
+  if (!returnUrl) return showPlaceholder();
+
+  const url = new URL(returnUrl);
+  url.searchParams.set('room', roomId);
+  url.hash = new URLSearchParams({
+    token,
+    name: playerName,
+    lobby: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`,
+  }).toString();
+  location.replace(url.toString());
 }
 
 const errorText = {
@@ -112,9 +136,10 @@ function handle(msg) {
       return onJoined(msg);
     case 'peers':
       started = msg.started;
+      maxPlayers = msg.maxPlayers ?? maxPlayers;
       return renderPeers(msg.peers);
     case 'started':
-      return showGame();
+      return openGame();
     case 'msg':
       return log(`${msg.name}: ${msg.data?.text ?? JSON.stringify(msg.data)}`);
     case 'error':
@@ -134,7 +159,7 @@ $('create').addEventListener('click', async () => {
       $('status').textContent = `Hashcash: ${bits} Bits, ${tries.toLocaleString('de-DE')} Versuche …`;
     });
     $('status').textContent = `Hashcash gelöst in ${((performance.now() - start) / 1000).toFixed(1)} s`;
-    connect(() => send({ t: 'create', proof, name: nameInput.value }));
+    connect(() => send({ t: 'create', proof, name: nameInput.value, returnUrl, maxPlayers }));
   } catch (err) {
     $('status').textContent = `Fehler: ${err.message}`;
   } finally {

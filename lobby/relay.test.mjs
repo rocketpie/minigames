@@ -6,10 +6,10 @@ import { sha256Hex, solve } from './public/hashcash.js';
 
 const BITS = 8;
 
-async function createRoom(relay, name = 'Host') {
+async function createRoom(relay, name = 'Host', returnUrl = '', maxPlayers) {
   const { challenge } = relay.issueChallenge();
   const proof = await solve(challenge, BITS);
-  return relay.create(proof, name);
+  return relay.create(proof, name, returnUrl, maxPlayers);
 }
 
 test('browser sha256 matches node crypto', () => {
@@ -35,6 +35,35 @@ test('expired challenge is rejected', async () => {
   const proof = await solve(challenge, BITS);
   now += 6 * 60 * 1000;
   assert.throws(() => relay.create(proof, 'Host'), /expired/);
+});
+
+test('the room carries the return url to every participant', async () => {
+  const relay = new Relay({ hashcashBits: BITS });
+  const returnUrl = 'https://co3d.eu/dreiziehn/dreiziehn.html';
+  const { room } = await createRoom(relay, 'Ada', returnUrl);
+  assert.equal(room.returnUrl, returnUrl);
+  relay.join(room.id, null, 'Bob');
+  assert.equal(room.returnUrl, returnUrl);
+});
+
+test('a dangerous return url is dropped', async () => {
+  const relay = new Relay({ hashcashBits: BITS });
+  const { room } = await createRoom(relay, 'Ada', 'javascript:alert(1)');
+  assert.equal(room.returnUrl, '');
+});
+
+test('a room enforces its own player limit', async () => {
+  const relay = new Relay({ hashcashBits: BITS, maxPlayers: 12 });
+  const { room } = await createRoom(relay, 'Host', '', 2);
+  assert.equal(room.maxPlayers, 2);
+  relay.join(room.id, null, 'Bob');
+  assert.throws(() => relay.join(room.id, null, 'Cara'), /full/);
+});
+
+test('a room limit cannot exceed the server cap', async () => {
+  const relay = new Relay({ hashcashBits: BITS, maxPlayers: 3 });
+  const { room } = await createRoom(relay, 'Host', '', 99);
+  assert.equal(room.maxPlayers, 3);
 });
 
 test('lobby join, host-only start, relay only after start', async () => {

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="de">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lobby – Integration guide</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 1.5rem;
+      font-family: system-ui, sans-serif;
+      line-height: 1.55;
+      background: #faf8ef;
+      color: #776e65;
+    }
+    main { width: min(46rem, 100%); margin: 0 auto; }
+    h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
+    h2 { margin: 1.6rem 0 .4rem; font-size: 1.1rem; }
+    h3 { margin: 1rem 0 .3rem; font-size: .95rem; }
+    p, ul { margin: .4rem 0; }
+    ul { padding-left: 1.2rem; }
+    code, pre {
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: .85em;
+    }
+    code { padding: .08rem .25rem; border-radius: .25rem; background: #eee4da; }
+    pre {
+      margin: .5rem 0;
+      padding: .7rem .8rem;
+      overflow-x: auto;
+      border-radius: .4rem;
+      background: #2f2a25;
+      color: #f9f6f2;
+    }
+    pre code { padding: 0; background: none; color: inherit; }
+    a { color: #8f7a66; }
+    .muted { color: #bbada0; font-size: .9rem; }
+    .warn {
+      margin: .8rem 0;
+      padding: .7rem .8rem;
+      border-left: 3px solid #d9ab55;
+      background: #f5ecd9;
+      border-radius: 0 .3rem .3rem 0;
+    }
+    table { width: 100%; border-collapse: collapse; margin: .5rem 0; font-size: .9rem; }
+    th, td { padding: .35rem .4rem; border-bottom: 1px solid #e5dbcb; text-align: left; vertical-align: top; }
+    th { color: #5f554c; }
+    footer { margin-top: 2rem; font-size: .85rem; color: #bbada0; }
+  </style>
+</head>
+
+<body>
+<main>
+  <h1>Lobby integration guide</h1>
+  <p class="muted">Generic WebSocket room relay for minigames. The server knows rooms, tokens and
+    whether a room has started. It does not run or validate game logic.</p>
+
+  <h2>Quick flow</h2>
+  <ol>
+    <li>The game opens the lobby with a return URL and its player limit:
+      <code>/?return=&lt;game-url&gt;&amp;maxPlayers=4</code>.</li>
+    <li>The host creates a room. The return URL and player limit are stored on the room.</li>
+    <li>Guests open the join link (<code>?room=&lt;id&gt;</code>); the server sends the stored
+      return URL and limit in <code>joined</code>.</li>
+    <li>The host sends <code>{"t":"start"}</code>. Every lobby client then opens the return URL
+      with the room id and its credentials:
+      <pre><code>&lt;returnUrl&gt;?room=&lt;id&gt;#token=&lt;token&gt;&amp;name=&lt;name&gt;&amp;lobby=&lt;ws-url&gt;</code></pre>
+    </li>
+    <li>The game connects to <code>&lt;ws-url&gt;</code> and joins the same room with
+      <code>{"t":"join","room":"…","token":"…","name":"…"}</code>.</li>
+  </ol>
+
+  <div class="warn">
+    The lobby page and the game are usually different origins. <code>sessionStorage</code> is not
+    shared, so the token is passed in the URL fragment. Fragments are not sent to the server or in
+    the <code>Referer</code>, but they do appear in browser history. Do not paste game URLs with
+    tokens into public places.
+  </div>
+
+  <p>Navigate in the <strong>same tab</strong> (the lobby uses <code>location.replace</code>).
+    Joining with the same token replaces the old socket: the server closes it with
+    <code>4000 replaced</code>.</p>
+
+  <h2>HTTP endpoints</h2>
+  <table>
+    <tr><th>endpoint</th><th>purpose</th></tr>
+    <tr><td><code>GET /</code></td><td>Lobby UI.</td></tr>
+    <tr><td><code>GET /guide.html</code></td><td>This page.</td></tr>
+    <tr><td><code>GET /challenge</code></td><td><code>{challenge, bits}</code> for room-creation hashcash.</td></tr>
+    <tr><td><code>GET /qr?text=…</code></td><td>SVG QR code, text max. 512 chars.</td></tr>
+    <tr><td><code>GET /healthz</code></td><td><code>ok</code>.</td></tr>
+    <tr><td><code>WS /ws</code></td><td>Room protocol below.</td></tr>
+  </table>
+
+  <h2>WebSocket messages</h2>
+  <h3>Client → server</h3>
+  <pre><code>{ "t": "create", "proof": "&lt;challenge&gt;:&lt;n&gt;", "name": "Ada",
+  "returnUrl": "https://co3d.eu/dreiziehn/dreiziehn.html", "maxPlayers": 4 }
+
+{ "t": "join", "room": "&lt;uuid&gt;", "token": "&lt;token or null&gt;", "name": "Bob" }
+{ "t": "start" }
+{ "t": "msg", "data": { … } }</code></pre>
+  <p><code>create</code> is hashcash-gated. <code>start</code> is host-only.
+    <code>msg</code> is forwarded verbatim to the other room members; the server never inspects
+    <code>data</code>.</p>
+
+  <h3>Server → client</h3>
+  <pre><code>{ "t": "joined", "room": "…", "token": "…", "you": "…", "name": "Ada",
+  "host": true, "started": false, "returnUrl": "https://…",
+  "maxPlayers": 4, "peers": [{ "id": "…", "name": "Ada", "host": true, "online": true }] }
+
+{ "t": "peers", "started": false, "maxPlayers": 4, "peers": [ … ] }
+{ "t": "started" }
+{ "t": "msg", "from": "…", "name": "Bob", "data": { … } }
+{ "t": "error", "code": "full", "message": "…" }
+{ "t": "closed", "reason": "idle-timeout" }</code></pre>
+  <p><code>joined</code> is sent to the joining socket. <code>peers</code> is broadcast on
+    join/leave/start. <code>msg</code> goes to everyone <em>except</em> the sender, so a client
+    must apply its own action locally.</p>
+
+  <h2>Return URL and player limit</h2>
+  <ul>
+    <li><code>returnUrl</code> is stored at create and sent to every participant. It must be an
+      <code>http</code>/<code>https</code> URL without credentials and at most 1024 characters.</li>
+    <li><code>maxPlayers</code> is per room, clamped to 1…12 (the server hard cap). A join beyond
+      the room limit gets <code>{"t":"error","code":"full"}</code>.</li>
+    <li>The lobby client only redirects to origins in
+      <code>ALLOWED_RETURN_ORIGINS</code> (<code>public/return-url.js</code>). Add your game origin
+      there.</li>
+  </ul>
+
+  <h2>Game data: validate it</h2>
+  <p>The relay is a dumb pipe. Any participant can send any <code>data</code>. Games must validate
+    the envelope and the payload before using it. Include a data version and a type allowlist:</p>
+  <pre><code>{ "v": 1, "type": "move", "to": "&lt;hostId&gt;", "move": { … } }
+{ "v": 1, "type": "state", "state": { … } }
+{ "v": 1, "type": "reject", "to": "&lt;guestId&gt;", "reason": "not your turn" }</code></pre>
+  <p>Reject unknown <code>v</code> or <code>type</code>, non-object payloads, wrong recipients and
+    out-of-range indices. For a friendly game, make the host authoritative: guests send moves to
+    the host, the host validates and broadcasts the resulting state.</p>
+
+  <h2>Rate limit and state size</h2>
+  <p>Each participant has a token bucket of <strong>5 KiB/s</strong> with a 1 s burst. Messages over
+    the limit are dropped and answered with <code>rate-limit</code> (at most one warning per
+    second).</p>
+  <ul>
+    <li>For 4 players, a full state with compact numeric card ids is roughly 1.5–2 KiB.</li>
+    <li>5 KiB/s is enough for a turn-based game if you coalesce state broadcasts (e.g. at most
+      every 250–500 ms) or send small move events and full state only on start/reconnect.</li>
+    <li>If you send a full JSON state with card objects after every single card, raise
+      <code>RATE_KBPS</code> (e.g. 16) or switch to deltas.</li>
+  </ul>
+
+  <h2>Security and caveats</h2>
+  <ul>
+    <li>WebSocket upgrades are checked against <code>ALLOWED_ORIGINS</code> when the browser sends
+      an <code>Origin</code>. Add every game/lobby origin you deploy; non-browser clients without
+      an Origin are allowed.</li>
+    <li>HTTP responses set <code>nosniff</code>, <code>no-referrer</code>,
+      <code>frame-ancestors 'none'</code> and a restrictive CSP.</li>
+    <li>Fairness and cheating are <strong>not</strong> enforced. The host is just whoever created
+      the room. Host-authoritative play is fine for friends; do not use this for ranked or public
+      competitive games without server-side validation.</li>
+    <li>Rooms live in process memory only. They disappear on restart and expire after
+      <code>ROOM_TTL_MIN</code> / <code>IDLE_TTL_MIN</code>.</li>
+    <li>One server instance only. No shared state, no sticky sessions, no persistence.</li>
+  </ul>
+
+  <footer><a href="/">← Back to the lobby</a></footer>
+</main>
+</body>
+
+</html>

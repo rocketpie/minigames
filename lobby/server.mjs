@@ -20,52 +20,87 @@ const types = {
 };
 
 const envNum = (key, fallback) => (process.env[key] ? Number(process.env[key]) : fallback);
+const envList = (key, fallback) =>
+  (process.env[key] ?? fallback).split(',').map((value) => value.trim()).filter(Boolean);
+
+const securityHeaders = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'no-referrer',
+  'x-frame-options': 'DENY',
+  'content-security-policy':
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+    "script-src 'self'; connect-src 'self' wss://lobby.co3d.eu ws://localhost:8080; " +
+    "frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+};
+
+const withSecurity = (headers = {}) => ({ ...securityHeaders, ...headers });
+
 const send = (ws, msg) => {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
 };
 
 export async function startServer(options = {}) {
   const relay = new Relay({
-    hashcashBits: options.hashcashBits ?? envNum('HASHCASH_BITS', 20),
+    hashcashBits: options.hashcashBits ?? envNum('HASHCASH_BITS', 19),
     roomTtlMs: options.roomTtlMs ?? envNum('ROOM_TTL_MIN', 120) * 60e3,
     idleTtlMs: options.idleTtlMs ?? envNum('IDLE_TTL_MIN', 10) * 60e3,
     rateBps: options.rateBps ?? envNum('RATE_KBPS', 5) * 1024,
   });
+  const allowedOrigins = new Set(Array.isArray(options.allowedOrigins)
+    ? options.allowedOrigins
+    : envList('ALLOWED_ORIGINS',
+      'https://lobby.co3d.eu,https://co3d.eu,' +
+      'http://localhost:8080,http://localhost:8000,http://127.0.0.1:8080,http://127.0.0.1:8000'));
 
   const httpServer = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     try {
       if (url.pathname === '/healthz') {
-        return res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
+        return res.writeHead(200, withSecurity({ 'content-type': 'text/plain' })).end('ok');
       }
       if (url.pathname === '/challenge') {
         const body = JSON.stringify(relay.issueChallenge());
-        return res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(body);
+        return res.writeHead(200, withSecurity({
+          'content-type': 'application/json',
+          'cache-control': 'no-store',
+        })).end(body);
       }
       if (url.pathname === '/qr') {
         const text = url.searchParams.get('text') ?? '';
-        if (!text || text.length > 512) return res.writeHead(400).end('text required (max 512 chars)');
+        if (!text || text.length > 512) return res.writeHead(400, withSecurity()).end('text required (max 512 chars)');
         const svg = await QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
-        return res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' }).end(svg);
+        return res.writeHead(200, withSecurity({
+          'content-type': 'image/svg+xml',
+          'cache-control': 'no-store',
+        })).end(svg);
       }
-      if (req.method !== 'GET' && req.method !== 'HEAD') return res.writeHead(405).end('method not allowed');
+      if (req.method !== 'GET' && req.method !== 'HEAD') return res.writeHead(405, withSecurity()).end('method not allowed');
 
       let path = normalize(decodeURIComponent(url.pathname));
       if (path.endsWith('/')) path += 'index.html';
       const file = join(publicDir, path);
-      if (!file.startsWith(publicDir)) return res.writeHead(403).end('forbidden');
+      if (!file.startsWith(publicDir)) return res.writeHead(403, withSecurity()).end('forbidden');
       const body = await readFile(file);
       res
-        .writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-cache' })
+        .writeHead(200, withSecurity({
+          'content-type': types[extname(file)] ?? 'application/octet-stream',
+          'cache-control': 'no-cache',
+        }))
         .end(req.method === 'HEAD' ? undefined : body);
     } catch (err) {
       const missing = err.code === 'ENOENT' || err.code === 'EISDIR';
-      res.writeHead(missing ? 404 : 500).end(missing ? 'not found' : 'error');
+      res.writeHead(missing ? 404 : 500, withSecurity()).end(missing ? 'not found' : 'error');
     }
   });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
   httpServer.on('upgrade', (req, socket, head) => {
+    const origin = req.headers.origin;
+    if (origin && !allowedOrigins.has(origin)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws));
   });
 
@@ -77,12 +112,16 @@ export async function startServer(options = {}) {
     name: member.name,
     host: member.token === room.host,
     started: room.started,
+    returnUrl: room.returnUrl,
+    maxPlayers: room.maxPlayers,
     peers: relay.peers(room),
   });
 
   const broadcastPeers = (room) => {
     const peers = relay.peers(room);
-    for (const m of room.members.values()) send(m.ws, { t: 'peers', started: room.started, peers });
+    for (const m of room.members.values()) {
+      send(m.ws, { t: 'peers', started: room.started, maxPlayers: room.maxPlayers, peers });
+    }
   };
 
   wss.on('connection', (ws) => {
@@ -108,7 +147,7 @@ export async function startServer(options = {}) {
 
       try {
         if (msg.t === 'create') {
-          const { room, member } = relay.create(msg.proof, msg.name);
+          const { room, member } = relay.create(msg.proof, msg.name, msg.returnUrl, msg.maxPlayers);
           me = { room, member };
           member.ws = ws;
           send(ws, joined(room, member));

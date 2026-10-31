@@ -80,6 +80,10 @@
       font-size: .9rem;
     }
 
+    a {
+      color: #8f7a66;
+    }
+
     code {
       padding: .1rem .3rem;
       border-radius: .25rem;
@@ -131,6 +135,7 @@
       </label>
       <button id="create">Raum erstellen</button>
       <p class="status" id="status"></p>
+      <p><a href="/guide.html">Integration guide</a></p>
     </section>
 
     <section id="lobby" hidden>
@@ -141,7 +146,7 @@
         <button id="showQr">QR-Code</button>
       </div>
       <div id="qrBox" hidden><img id="qr" alt="QR-Code zum Beitreten"></div>
-      <p>Teilnehmer:</p>
+      <p id="peerCount">Teilnehmer:</p>
       <ul id="peers"></ul>
       <button id="start" hidden>Start Game</button>
       <p class="status" id="lobbyStatus"></p>

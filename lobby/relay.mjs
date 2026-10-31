@@ -4,6 +4,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const MAX_NAME = 24;
+const MAX_RETURN_URL = 1024;
 
 export const fail = (code, message) => Object.assign(new Error(message), { code });
 
@@ -41,10 +42,23 @@ const cleanName = (name, fallback) =>
     .trim()
     .slice(0, MAX_NAME) || fallback;
 
+const cleanReturn = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text || text.length > MAX_RETURN_URL) return '';
+  try {
+    const url = new URL(text);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+    if (url.username || url.password) return '';
+    return url.href;
+  } catch {
+    return '';
+  }
+};
+
 export class Relay {
   constructor({
     now = Date.now,
-    hashcashBits = 20,
+    hashcashBits = 19,
     roomTtlMs = 2 * 3600e3,
     idleTtlMs = 10 * 60e3,
     rateBps = 5 * 1024,
@@ -80,15 +94,18 @@ export class Relay {
     this.challenges.delete(challenge); // single use
   }
 
-  create(proof, name) {
+  create(proof, name, returnUrl = '', maxPlayers) {
     const now = this.now();
     this.verifyProof(proof);
+    const limit = Number.isInteger(maxPlayers) ? maxPlayers : this.maxPlayers;
     const room = {
       id: randomUUID(),
       createdAt: now,
       idleAt: now,
       started: false,
       host: null,
+      returnUrl: cleanReturn(returnUrl),
+      maxPlayers: Math.max(1, Math.min(this.maxPlayers, limit)),
       members: new Map(),
     };
     const member = this.#member(name, room, now);
@@ -107,7 +124,7 @@ export class Relay {
       return { room, member: existing, rejoin: true };
     }
     if (room.started) throw fail('closed', 'room already started');
-    if (room.members.size >= this.maxPlayers) throw fail('full', 'room is full');
+    if (room.members.size >= room.maxPlayers) throw fail('full', 'room is full');
     const member = this.#member(name, room, this.now());
     room.members.set(member.token, member);
     return { room, member, rejoin: false };

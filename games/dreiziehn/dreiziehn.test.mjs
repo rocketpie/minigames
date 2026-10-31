@@ -25,6 +25,18 @@ const ctx = {
   },
   addEventListener() {}, requestAnimationFrame: fn => fn(), setTimeout: fn => fn(), clearTimeout() {},
   innerWidth: 900, innerHeight: 900, console,
+  location: {
+    href: 'http://localhost:8000/dreiziehn/dreiziehn.html',
+    origin: 'http://localhost:8000',
+    pathname: '/dreiziehn/dreiziehn.html',
+    hostname: 'localhost',
+    protocol: 'http:',
+    host: 'localhost:8000',
+    search: '',
+    hash: '',
+  },
+  URL,
+  URLSearchParams,
   localStorage: {
     getItem: k => store.get(k) ?? null,
     setItem: (k, v) => store.set(k, String(v)),
@@ -37,6 +49,13 @@ vm.runInContext(code, ctx);
 const run = expression => vm.runInContext(expression, ctx);
 const c = (r, s, j) => r === 0 ? { r: 0, s, j } : { r, s };
 const cid = x => x.s * 32 + x.r * 2 + (x.j || 0);
+const mc = id => {
+  const p = Math.floor(id / 60);
+  const k = id % 60;
+  const s = Math.floor(k / 15);
+  const m = k % 15;
+  return m < 13 ? { p, k, s, r: m + 1 } : { p, k, s, r: 0, j: m - 13 };
+};
 const allCards = () => {
   const cards = [];
   for (let s = 0; s < 4; s++) {
@@ -62,6 +81,10 @@ const setup = ({
     won = false;
     sel = null;
     undoStack = [];
+    MP.active = false; MP.host = false; MP.you = null; MP.hostId = null; MP.room = null;
+    MP.peers = []; MP.maxPlayers = 4; MP.state = null; MP.meIndex = -1;
+    MP.pending = false; MP.timer = null; MP.socket = null;
+    lobbyMax = 0;
     draw();
   `);
 };
@@ -343,4 +366,182 @@ test('the middle pile tells you the next rank', () => {
   assert.equal(run('nextRank([])'), 'A');
   assert.equal(run('nextRank([{r:1,s:0}])'), '2');
   assert.equal(run('nextRank(Array.from({length:12},(_,i)=>({r:i+1,s:0})))'), 'K');
+});
+
+test('the multiplayer button opens the lobby with the game as return url', () => {
+  assert.equal(run('gameUrl()'), 'http://localhost:8000/dreiziehn/dreiziehn.html');
+  assert.equal(
+    run('lobbyUrl(gameUrl())'),
+    'http://localhost:8080/?return=http%3A%2F%2Flocalhost%3A8000%2Fdreiziehn%2Fdreiziehn.html&maxPlayers=4',
+  );
+  assert.equal(run('defaultLobbyWs()'), 'ws://localhost:8080/ws');
+  assert.equal(run('safeLobby("wss://lobby.co3d.eu/ws")'), 'wss://lobby.co3d.eu/ws');
+  assert.equal(run('safeLobby("ws://localhost:8080/ws")'), 'ws://localhost:8080/ws');
+  assert.equal(run('safeLobby("wss://evil.example/ws")'), '');
+});
+
+test('room, token and name are read from the return url', () => {
+  assert.deepEqual(
+    JSON.parse(run(
+      `JSON.stringify(lobbyParams("?room=abc", "#token=t&name=Ada&lobby=ws%3A%2F%2Flocalhost%3A8080%2Fws"))`,
+    )),
+    { room: 'abc', token: 't', name: 'Ada', lobby: 'ws://localhost:8080/ws' },
+  );
+  assert.deepEqual(
+    JSON.parse(run('JSON.stringify(lobbyParams("", ""))')),
+    { room: null, token: null, name: null, lobby: null },
+  );
+});
+
+test('lobby messages update the room bar', () => {
+  run('handleLobby({t:"joined", room:"1234567890", host:false, you:"b1", started:true, maxPlayers:4, peers:[{id:"h1",name:"Ada",host:true,online:true},{id:"b1",name:"Bob",host:false,online:false}]})');
+  assert.equal(ctx.document.getElementById('lobbyState').textContent, 'Room 12345678 · player · started');
+  assert.equal(ctx.document.getElementById('lobbyPeers').textContent, '2/4 · Ada (host) · Bob (offline)');
+
+  run('handleLobby({t:"error", code:"closed"})');
+  assert.equal(ctx.document.getElementById('lobbyState').textContent, 'Lobby error: closed');
+  run('MP.active=false; MP.state=null; MP.host=false; MP.meIndex=-1;');
+});
+
+test('game data needs a known version and type', () => {
+  assert.equal(run('isGameMessage({v:1,type:"state"})'), true);
+  assert.equal(run('isGameMessage({v:1,type:"move"})'), true);
+  assert.equal(run('isGameMessage({v:2,type:"state"})'), false);
+  assert.equal(run('isGameMessage({type:"state"})'), false);
+  assert.equal(run('isGameMessage({v:1,type:"nope"})'), false);
+  assert.equal(run('isGameMessage(null)'), false);
+  assert.equal(run('isGameMessage([])'), false);
+});
+
+test('multiplayer state must have a valid shape', () => {
+  const good = {
+    turn: 0, winner: null, completed: 0, turnPlayed: false,
+    middle: [[0], [], [], []],
+    players: [{ id: 'h1', name: 'Host', stock: [], hand: [1], own: [[], [], [], []] }],
+  };
+  assert.equal(run(`isMultiState(${JSON.stringify(good)})`), true);
+  assert.equal(run(`isMultiState(${JSON.stringify({ ...good, turn: 5 })})`), false);
+  assert.equal(run(`isMultiState(${JSON.stringify({ ...good, middle: [[1], [], [], []] })})`), false);
+  assert.equal(run('isMultiState(null)'), false);
+});
+
+test('the host deals a full deck to every player', () => {
+  run(`
+    MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.state=null;
+    MP.peers=[{id:'h1',name:'Host',host:true,online:true},{id:'g1',name:'Guest',host:false,online:true}];
+    mpHostStart(MP.peers);
+  `);
+  assert.equal(run('MP.state.players.length'), 2);
+  assert.equal(run('MP.state.players[0].stock.length'), 55);
+  assert.equal(run('MP.state.players[0].hand.length'), 5);
+  assert.equal(run('MP.state.players[1].stock.length'), 55);
+  assert.equal(run('MP.state.players[1].hand.length'), 5);
+  const ids = JSON.parse(run(
+    'JSON.stringify(MP.state.players.flatMap(p => [...p.stock, ...p.hand]).map(sid))',
+  ));
+  assert.equal(new Set(ids).size, 120);
+});
+
+test('a played ace lands in the shared middle and serializes for guests', () => {
+  const state = {
+    turn: 0, winner: null, completed: 0, turnPlayed: false,
+    middle: [[], [], [], []],
+    players: [
+      { id: 'h1', name: 'Host', stock: [mc(2)], hand: [mc(0)], own: [[], [], [], []] },
+      { id: 'g1', name: 'Guest', stock: [mc(60)], hand: [mc(61)], own: [[], [], [], []] },
+    ],
+  };
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
+  run('sel={kind:"hand",i:0}; mpTapMiddle(0)');
+  assert.equal(run('MP.state.middle[0].length'), 1);
+  assert.equal(run('MP.state.middle[0][0].r'), 1);
+  assert.equal(run('MP.state.turnPlayed'), true);
+
+  const wire = JSON.parse(run('JSON.stringify(serializeState(MP.state))'));
+  assert.deepEqual(wire.middle[0], [0]);
+  const guestState = JSON.parse(run(`JSON.stringify(deserializeState(${JSON.stringify(wire)}))`));
+  assert.equal(guestState.middle[0][0].r, 1);
+  assert.equal(guestState.middle[0][0].s, 0);
+});
+
+test('a guest renders the shared middle from the host state', () => {
+  const hostState = {
+    turn: 1, winner: null, completed: 0, turnPlayed: false,
+    middle: [[mc(0)], [], [], []],
+    players: [
+      { id: 'h1', name: 'Host', stock: [], hand: [], own: [[], [], [], []] },
+      { id: 'g1', name: 'Guest', stock: [], hand: [mc(61)], own: [[], [], [], []] },
+    ],
+  };
+  const wire = JSON.parse(run(`JSON.stringify(serializeState(${JSON.stringify(hostState)}))`));
+  run(`MP.active=true; MP.host=false; MP.you='g1'; MP.hostId='h1'; MP.meIndex=1; MP.state=null;`);
+  run(`mpHandleGameMessage('h1', ${JSON.stringify({ v: 1, type: 'state', state: wire })})`);
+  assert.equal(run('MP.state.middle[0][0].r'), 1);
+  assert.match(ctx.document.getElementById('middle').innerHTML, /Ace of spades/);
+  assert.equal(ctx.document.getElementById('turnBar').textContent, 'Dein Zug!');
+});
+
+test('the host accepts a guest move and updates the shared middle', () => {
+  const state = {
+    turn: 1, winner: null, completed: 0, turnPlayed: false,
+    middle: [[], [], [], []],
+    players: [
+      { id: 'h1', name: 'Host', stock: [mc(2)], hand: [mc(0)], own: [[], [], [], []] },
+      { id: 'g1', name: 'Guest', stock: [mc(61)], hand: [mc(60)], own: [[], [], [], []] },
+    ],
+  };
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
+  run(`mpHandleGameMessage('g1', {v:1,type:'move',to:'h1',move:{kind:'middle',card:0,pile:0}})`);
+  assert.equal(run('MP.state.middle[0].length'), 1);
+  assert.equal(run('MP.state.middle[0][0].r'), 1);
+  assert.equal(run('MP.state.players[1].hand.length'), 0);
+});
+
+test('ending a turn passes it to the next player', () => {
+  const state = {
+    turn: 0, winner: null, completed: 0, turnPlayed: true,
+    middle: [[], [], [], []],
+    players: [
+      { id: 'h1', name: 'Host', stock: [mc(2), mc(3), mc(4), mc(5), mc(6)], hand: [mc(0)], own: [[], [], [], []] },
+      { id: 'g1', name: 'Guest', stock: [mc(60)], hand: [mc(61)], own: [[], [], [], []] },
+    ],
+  };
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
+  run('mpApplyHost({kind:"end"})');
+  assert.equal(run('MP.state.players[0].hand.length'), 5);
+  assert.equal(run('MP.state.players[0].stock.length'), 1);
+  assert.equal(run('MP.state.turn'), 1);
+  assert.equal(run('MP.state.turnPlayed'), false);
+  assert.equal(run('mpIsMyTurn()'), false);
+});
+
+test('drawing the last stock cards at the end of a turn wins', () => {
+  const state = {
+    turn: 0, winner: null, completed: 0, turnPlayed: true,
+    middle: [[], [], [], []],
+    players: [
+      { id: 'h1', name: 'Host', stock: [mc(2)], hand: [mc(0)], own: [[], [], [], []] },
+      { id: 'g1', name: 'Guest', stock: [mc(60)], hand: [mc(61)], own: [[], [], [], []] },
+    ],
+  };
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
+  run('mpApplyHost({kind:"end"})');
+  assert.equal(run('MP.state.players[0].hand.length'), 2);
+  assert.equal(run('MP.state.players[0].stock.length'), 0);
+  assert.equal(run('MP.state.winner'), 0);
+});
+
+test('a player with an empty stock and empty piles wins by playing a card', () => {
+  const state = {
+    turn: 0, winner: null, completed: 0, turnPlayed: false,
+    middle: [[], [], [], []],
+    players: [
+      { id: 'h1', name: 'Host', stock: [], hand: [mc(0)], own: [[], [], [], []] },
+      { id: 'g1', name: 'Guest', stock: [mc(60)], hand: [mc(61)], own: [[], [], [], []] },
+    ],
+  };
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
+  run('sel={kind:"hand",i:0}; mpTapMiddle(0)');
+  assert.equal(run('MP.state.winner'), 0);
+  assert.match(ctx.document.getElementById('winTitle').textContent, /Dreiziehn/);
 });

@@ -32,22 +32,31 @@ Behind a reverse proxy the WebSocket upgrade must pass through (nginx):
 | variable | default | meaning |
 |---|---|---|
 | `PORT` | `8080` | listen port |
-| `HASHCASH_BITS` | `20` | work required per room creation (~1–2 s on a laptop) |
+| `HASHCASH_BITS` | `19` | work required per room creation (~1s on a laptop) |
 | `ROOM_TTL_MIN` | `120` | hard limit per room, in minutes |
 | `IDLE_TTL_MIN` | `10` | delete a room after this long without a relayed message |
 | `RATE_KBPS` | `5` | send limit per participant, in KiB/s (burst = 1 s) |
 | `SWEEP_MS` | `30000` | timeout check interval |
+| `ALLOWED_ORIGINS` | lobby + game + localhost origins | comma-separated browser origins allowed on the WebSocket upgrade |
+
+The integration guide is served at `/guide.html`.
 
 ## Flow
 
 1. `GET /challenge` → `{challenge, bits}`. Browser solves `sha256("<challenge>:<n>")` with
-   `bits` leading zero bits, then sends `{t:"create", proof, name}`. Server verifies the
-   proof, marks the challenge used and generates a UUID room id. Room state 0 → 1.
+   `bits` leading zero bits, then sends `{t:"create", proof, name, returnUrl, maxPlayers}`.
+   Server verifies the proof, marks the challenge used and generates a UUID room id.
+   Room state 0 → 1.
 2. State 1 (`open`): participants join via `?room=<id>` (token in `sessionStorage` for
    reloads). Everyone sees the peer list; only the host can send `{t:"start"}`.
 3. State 2 (`active`): no new participants, existing tokens may rejoin. `{t:"msg", data}`
    is forwarded to the room's other members. The server never inspects `data`.
-4. State 3 (`timeout`): after `ROOM_TTL_MIN` or `IDLE_TTL_MIN` the room is deleted and
+4. A `?return=<game-url>` and `?maxPlayers=<n>` passed to the lobby are stored on the room at
+   create and sent in every `joined`. When the host sends `{t:"start"}`, each lobby client
+   opens that URL with `?room=<id>` plus `#token=...&name=...&lobby=<ws-url>`, so the game can
+   join the same room. Only origins in `ALLOWED_RETURN_ORIGINS`
+   (`public/return-url.js`) are accepted. The per-room player limit is clamped to 1…12.
+5. State 3 (`timeout`): after `ROOM_TTL_MIN` or `IDLE_TTL_MIN` the room is deleted and
    clients get `{t:"closed", reason}`.
 
 Rate limiting is a token bucket per participant: messages over `RATE_KBPS` are dropped
