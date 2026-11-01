@@ -413,10 +413,10 @@ test('a tunneled game uses the lobby on the same origin', () => {
       'https://abc.trycloudflare.com/lobby/?return=https%3A%2F%2Fabc.trycloudflare.com' +
         '%2Fgames%2Fdreiziehn%2Fdreiziehn.html&maxPlayers=4',
     );
-    assert.equal(run('defaultLobbyWs()'), 'wss://abc.trycloudflare.com/ws');
+    assert.equal(run('defaultLobbyWs()'), 'wss://abc.trycloudflare.com/lobby/ws');
     assert.equal(
-      run('safeLobby("wss://abc.trycloudflare.com/ws")'),
-      'wss://abc.trycloudflare.com/ws',
+      run('safeLobby("wss://abc.trycloudflare.com/lobby/ws")'),
+      'wss://abc.trycloudflare.com/lobby/ws',
     );
     assert.equal(run('safeLobby("wss://evil.example/ws")'), '');
   } finally {

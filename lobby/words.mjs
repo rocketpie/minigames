@@ -1,4 +1,3 @@
-// EFF short wordlist 1
 export const WORDS = `
 acid acorn acre acts afar affix aged agent agile aging agony ahead aide aids aim ajar alarm
 alias alibi alien alike alive aloe aloft aloha alone amend amino ample amuse angel anger angle

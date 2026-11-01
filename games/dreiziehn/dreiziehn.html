@@ -392,7 +392,7 @@ function lobbyParams(search, hash) {
 function defaultLobbyWs() {
   if (isLocal()) return 'ws://localhost:8080/ws';
   if (isProd()) return 'wss://lobby.co3d.eu/ws';
-  const url = new URL('/ws', location.origin);
+  const url = new URL('/lobby/ws', location.origin);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.href;
 }

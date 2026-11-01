@@ -94,6 +94,8 @@
     <tr><td><code>GET /healthz</code></td><td><code>ok</code>.</td></tr>
     <tr><td><code>WS /ws</code></td><td>Room protocol below.</td></tr>
   </table>
+  <p class="muted">Under the preview gateway the lobby is mounted at <code>/lobby/</code>;
+    prefix the HTTP and WebSocket paths above with <code>/lobby</code> there.</p>
 
   <h2>WebSocket messages</h2>
   <h3>Client → server</h3>
@@ -172,7 +174,7 @@
     <li>One server instance only. No shared state, no sticky sessions, no persistence.</li>
   </ul>
 
-  <footer><a href="/">← Back to the lobby</a></footer>
+  <footer><a href="./">← Back to the lobby</a></footer>
 </main>
 </body>
 

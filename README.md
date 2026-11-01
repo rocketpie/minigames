@@ -50,8 +50,16 @@ built from `games/` with `games/Dockerfile`) and `homelab/lobby` (see
 
 Preview, and share to your phone:
 
-    node serve.mjs                                   # http://localhost:8000 (serves games/ only)
+    ./start-tunnel.sh                                # one public https url, see below
+    node serve.mjs                                   # http://localhost:8000
     cloudflared tunnel --url http://localhost:8000   # public https url for the phone
+
+`serve.mjs` uses the first path segment for routing: `/` redirects to `/games/`, everything
+under `/games/` is static, and everything under `/lobby/` is proxied to `127.0.0.1:8080`
+after stripping the prefix (`/lobby/challenge` → `/challenge`, `/lobby/ws` → `/ws`).
+`start-tunnel.sh` starts the dev lobby on :8080 unless `/healthz` already answers (e.g. the
+lobby container). The production containers are unchanged: nginx still listens on :80 and
+the lobby on :8080.
 
 Run the game logic tests:
 

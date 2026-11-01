@@ -11,6 +11,17 @@ test('only allowed game origins are accepted as return urls', () => {
     safeReturn('http://localhost:8000/dreiziehn/dreiziehn.html'),
     'http://localhost:8000/dreiziehn/dreiziehn.html',
   );
+  assert.equal(
+    safeReturn(
+      'https://tunnel.example/games/dreiziehn/dreiziehn.html',
+      'https://tunnel.example',
+    ),
+    'https://tunnel.example/games/dreiziehn/dreiziehn.html',
+  );
+  assert.equal(
+    safeReturn('https://other.example/game.html', 'https://tunnel.example'),
+    '',
+  );
   assert.equal(safeReturn('https://evil.example/game.html'), '');
   assert.equal(safeReturn('javascript:alert(1)'), '');
   assert.equal(safeReturn('https://user:pass@co3d.eu/game.html'), '');

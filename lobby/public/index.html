@@ -140,9 +140,14 @@
         <input id="name" maxlength="24" placeholder="Player" autocomplete="nickname">
       </label>
       <button id="create">Raum erstellen</button>
-      <button id="join" hidden>Raum beitreten</button>
+      <form id="joinForm">
+        <label>Raumname
+          <input id="room" maxlength="64" autocomplete="off" placeholder="z. B. acid-acorn-acre-acts">
+        </label>
+        <button>Raum beitreten</button>
+      </form>
       <p class="status" id="status"></p>
-      <p><a href="/guide.html">Integration guide</a></p>
+      <p><a href="guide.html">Integration guide</a></p>
     </section>
 
     <section id="lobby" hidden>

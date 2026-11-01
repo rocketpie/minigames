@@ -3,6 +3,7 @@ import { safeReturn } from './return-url.js';
 
 const $ = (id) => document.getElementById(id);
 const nameInput = $('name');
+const roomInput = $('room');
 nameInput.value = localStorage.getItem('lobby-name') ?? '';
 nameInput.addEventListener('change', () => localStorage.setItem('lobby-name', nameInput.value));
 
@@ -13,12 +14,20 @@ let host = false;
 let started = false;
 let playerName = '';
 
-let returnUrl = safeReturn(new URLSearchParams(location.search).get('return'));
+let returnUrl = safeReturn(new URLSearchParams(location.search).get('return'), location.origin);
 let maxPlayers = Math.max(1, Math.min(12, Number.parseInt(
   new URLSearchParams(location.search).get('maxPlayers'), 10) || 12));
 
+const basePath = location.pathname.replace(/[^/]*$/, '');
+const endpoint = (path) => new URL(path, location.origin + basePath).href;
+const wsUrl = () => {
+  const url = new URL('ws', location.origin + basePath);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url.href;
+};
+
 const tokenStore = (id) => `lobby-token:${id}`;
-const joinUrl = (id) => `${location.origin}${location.pathname}?room=${id}`;
+const joinUrl = (id) => `${location.origin}${basePath}?room=${id}`;
 const send = (msg) => ws.send(JSON.stringify(msg));
 
 const log = (text) => {
@@ -30,7 +39,7 @@ const log = (text) => {
 
 function connect(onOpen) {
   ws?.close();
-  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  ws = new WebSocket(wsUrl());
   ws.addEventListener('open', onOpen);
   ws.addEventListener('message', (event) => handle(JSON.parse(event.data)));
   ws.addEventListener('close', () => {
@@ -64,7 +73,7 @@ function onJoined(msg) {
   host = msg.host;
   started = msg.started;
   playerName = msg.name;
-  returnUrl = safeReturn(msg.returnUrl) || returnUrl;
+  returnUrl = safeReturn(msg.returnUrl, location.origin) || returnUrl;
   maxPlayers = msg.maxPlayers ?? maxPlayers;
   sessionStorage.setItem(tokenStore(roomId), token);
   history.replaceState(null, '', `?room=${roomId}`);
@@ -98,7 +107,7 @@ function openGame() {
   url.hash = new URLSearchParams({
     token,
     name: playerName,
-    lobby: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`,
+    lobby: wsUrl(),
   }).toString();
   location.replace(url.toString());
 }
@@ -126,8 +135,6 @@ function onError(msg) {
     $('lobby').hidden = true;
     $('game').hidden = true;
     $('home').hidden = false;
-    $('create').hidden = false;
-    $('join').hidden = !roomParam;
   }
 }
 
@@ -163,7 +170,7 @@ $('create').addEventListener('click', async () => {
   $('create').disabled = true;
   $('status').textContent = 'Challenge anfordern …';
   try {
-    const { challenge, bits } = await (await fetch('/challenge')).json();
+    const { challenge, bits } = await (await fetch(endpoint('challenge'))).json();
     const start = performance.now();
     const proof = await solve(challenge, bits, (tries) => {
       $('status').textContent = `Hashcash: ${bits} Bits, ${tries.toLocaleString('de-DE')} Versuche …`;
@@ -190,7 +197,7 @@ $('copy').addEventListener('click', async () => {
 $('showQr').addEventListener('click', () => {
   const box = $('qrBox');
   box.hidden = !box.hidden;
-  if (!box.hidden) $('qr').src = `/qr?text=${encodeURIComponent(joinUrl(roomId))}`;
+  if (!box.hidden) $('qr').src = endpoint(`qr?text=${encodeURIComponent(joinUrl(roomId))}`);
 });
 
 $('start').addEventListener('click', () => send({ t: 'start' }));
@@ -219,12 +226,16 @@ function joinRoom(room) {
   );
 }
 
-$('join').addEventListener('click', () => joinRoom(roomParam));
+$('joinForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const room = roomInput.value.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!room) return ($('status').textContent = 'Bitte einen Raumname eingeben.');
+  joinRoom(room);
+});
 
 if (roomParam && sessionStorage.getItem(tokenStore(roomParam))) {
   joinRoom(roomParam);
 } else if (roomParam) {
-  $('create').hidden = true;
-  $('join').hidden = false;
+  roomInput.value = roomParam;
   $('status').textContent = `Raum: ${roomParam}`;
 }

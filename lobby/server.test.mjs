@@ -40,10 +40,15 @@ test('static files, challenge, QR and the full room flow', async (t) => {
 
   assert.equal((await fetch(`${server.url}/healthz`)).status, 200);
   const home = await fetch(`${server.url}/`);
-  assert.match(await home.text(), /Lobby/);
+  const homeHtml = await home.text();
+  assert.match(homeHtml, /Lobby/);
+  assert.match(homeHtml, /id="joinForm"/);
+  assert.match(homeHtml, /id="room"/);
   assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(home.headers.get('referrer-policy'), 'no-referrer');
   assert.match(home.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.ok(home.headers.get('content-security-policy')
+    .includes(`wss://${new URL(server.url).host}`));
   const guide = await fetch(`${server.url}/guide.html`);
   assert.equal(guide.status, 200);
   assert.match(await guide.text(), /Integration guide/);
@@ -128,6 +133,13 @@ test('websocket origins are checked when the browser sends one', async (t) => {
     ok.once('error', reject);
   });
   ok.close();
+
+  const same = new WsClient(url, { headers: { Origin: server.url } });
+  await new Promise((resolve, reject) => {
+    same.once('open', resolve);
+    same.once('error', reject);
+  });
+  same.close();
 
   const bad = new WsClient(url, { headers: { Origin: 'https://evil.example' } });
   const outcome = await new Promise((resolve) => {
