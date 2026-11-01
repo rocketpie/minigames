@@ -85,7 +85,7 @@ test('initial position: 32 figures, teleporters on the outer files and trebuchet
   for (const square of ['b2', 'g2', 'b7', 'g7']) {
     assert.equal(run(`game.board[${at(square)}]`), square[1] === '2' ? 'C' : 'c');
   }
-  assert.equal(run('allLegalMoves(game).length'), 96);
+  assert.equal(run('allLegalMoves(game).length'), 104);
 });
 
 test('double pawn push opens en passant for exactly one move', () => {
@@ -338,7 +338,7 @@ test('a teleporter teleports to any empty square without a capture', () => {
   assert.deepEqual(result.state.captured, []);
 });
 
-test('a teleporter may not attack the rival king, queen, trebuchet or another teleporter, but any other figure', () => {
+test('a teleporter may not attack the rival king or queen, but any other figure including trebuchets and teleporters', () => {
   const board = empty();
   put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'a2', 'T');
   put(board, 'd5', 'q'); put(board, 'h6', 'r'); put(board, 'f5', 't'); put(board, 'c4', 'c');
@@ -347,8 +347,8 @@ test('a teleporter may not attack the rival king, queen, trebuchet or another te
   const options = js(run(`legalMoves(game, ${at('a2')})`));
   assert.ok(!options.some(m => m.to === at('d5')));
   assert.ok(!options.some(m => m.to === at('e8')));
-  assert.ok(!options.some(m => m.to === at('f5')));
-  assert.ok(!options.some(m => m.to === at('c4')));
+  assert.ok(options.some(m => m.to === at('f5') && m.suicide));
+  assert.ok(options.some(m => m.to === at('c4') && m.suicide));
   assert.ok(options.some(m => m.to === at('h6') && m.suicide));
 });
 

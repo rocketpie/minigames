@@ -709,7 +709,7 @@
         <li><b>Goal:</b> trap the rival king. Gold is the light court and always moves first; Emerald is the dark court.</li>
         <li><b>Tap:</b> tap one of your figures, then a glowing square. Tap it again to let go.</li>
         <li><b>Pawns:</b> advance one or two squares at any time, as long as the path is clear, and capture one or two squares diagonally. A two-square capture needs a clear path and a rival figure on the far square.</li>
-        <li><b>Teleporter:</b> the crownless queen on a- and h-file replaces the outer pawns. It teleports to any square in one move. Landing on a rival figure explodes it and the teleporter dies with it — rival kings, queens, trebuchets and other teleporters are untouchable, and a teleporter never gives check.</li>
+        <li><b>Teleporter:</b> the crownless queen on a- and h-file replaces the outer pawns. It teleports to any square in one move. Landing on a rival figure explodes it and the teleporter dies with it — only rival kings and queens are untouchable, and a teleporter never gives check.</li>
         <li><b>Trebuchet:</b> the wooden crane on the b- and g-files replaces the second-outer pawns. It cannot march. It hurls a boulder up to four squares along a rank, file or diagonal, smashing the first figure in its path and staying where it stands; a boulder can strike any figure, the king included.</li>
         <li><b>Castling:</b> tap the king, then two squares toward a rook. The path must be clear and neither the king's square nor the crossed square may be attacked.</li>
         <li><b>En passant:</b> a pawn may take a rival pawn that has just dashed two squares past it. The chance vanishes after one move.</li>
@@ -957,7 +957,7 @@
           if (!target) { push(to); continue; }
           if (colorOf(target) === color) continue;
           const kind = typeOf(target);
-          if (kind === 'k' || kind === 'q' || kind === 't' || kind === 'c') continue;
+          if (kind === 'k' || kind === 'q') continue;
           push(to, { suicide: true });
         }
       } else if (type === 'c') {
