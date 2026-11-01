@@ -291,7 +291,8 @@
 <div id="app">
   <header>
     <h1><span class="logo" aria-hidden="true"><img src="card-back.svg" alt=""></span>Dreiziehn</h1>
-    <div class="stat"><span class="mini-back" aria-hidden="true"></span>STOCK<b id="stockCount">0</b></div>
+    <div class="stat"><span class="mini-back" aria-hidden="true"></span>STACK<b id="stackCount">0</b></div>
+    <div class="stat">DRAW<b id="drawCount">0</b></div>
     <div class="stat">DONE<b id="doneCount">0</b></div>
     <div class="stat" id="turnsStat">TURNS<b id="turns">0</b></div>
     <div class="stat" id="playsStat">PLAYS<b id="plays">0</b></div>
@@ -308,7 +309,7 @@
       <div id="middle" class="row"></div>
     </div>
     <div class="section">
-      <div class="label">Your piles · empty these too</div>
+      <div class="label">Your stack & caches · empty these; cache tops go to the middle</div>
       <div id="own" class="row"></div>
     </div>
     <div class="section">
@@ -332,20 +333,21 @@
     <summary>How to play</summary>
     <ul>
       <li><b>Deck:</b> one 60-card deck per player: 52 cards plus two jokers per suit. In multiplayer every player gets their own deck.</li>
-      <li><b>Cards:</b> numbered 1–13; the card colour runs from blue (1) to red (13).</li>
-      <li><b>Start:</b> shuffle the deck, deal yourself 5 hand cards, and leave the rest face down in the stock.</li>
-      <li><b>Turn:</b> play at least one card, then end your turn. Ending the turn draws back up to 5 from the stock; in multiplayer the turn then passes to the next player.</li>
-      <li><b>Middle:</b> four shared middle piles. Each starts with a 1 and counts up to a 13; suit doesn't matter. A joker is wild. A completed 13 pile is set aside and its slot starts again at 1. Everyone sees the same middle cards.</li>
-      <li><b>Your piles:</b> four free storage piles. Any card, any order. Click a pile to take its top card into your hand (when your hand has room), or play a selected hand card onto it. They must be empty to win.</li>
-      <li><b>Win:</b> empty the stock and all four of your piles. Cards left in your hand are fine. In multiplayer the first player to do this wins.</li>
+      <li><b>Cards:</b> numbered 1–13; the card colour runs from blue (1) to red (13). Cards only move up: hand or stack top to a cache or the middle, cache top to the middle. Nothing goes back.</li>
+      <li><b>Start:</b> shuffle each deck, put 15 cards in your personal stack, and add the rest to the shared draw stack. Deal yourself 5 hand cards from the draw stack.</li>
+      <li><b>Turn:</b> play at least one card, then end your turn. Ending the turn draws back up to 5 from the shared draw stack; in multiplayer the turn then passes to the next player.</li>
+      <li><b>Stack:</b> only the top card shows. Play it like a hand card: onto any cache or the middle. The next card is revealed.</li>
+      <li><b>Caches:</b> four personal piles. You may put one hand card on each cache per turn; a stack card may also go on a cache. A cache top can only move to the middle.</li>
+      <li><b>Middle:</b> four shared middle piles. Each starts with a 1 and counts up to a 13; suit doesn't matter. A joker is wild. When a pile reaches 13, its cards are shuffled into the shared draw stack and the slot starts again at 1.</li>
+      <li><b>Win:</b> empty your stack and all four caches. Cards left in your hand or the shared draw stack are fine. In multiplayer the first player to do this wins.</li>
     </ul>
-    <p>Tap a card in your hand, then tap a middle pile or one of your piles. Tap the selected card again to put it back.</p>
+    <p>Tap a hand card, your stack top or a cache top, then tap a middle pile or one of your caches. Tap the selected card again to put it back.</p>
   </details>
 </div>
 
 <div id="overlay">
   <div class="panel" role="dialog" aria-modal="true" aria-labelledby="winTitle">
-    <p class="eyebrow" id="winEyebrow">Stock and piles empty</p>
+    <p class="eyebrow" id="winEyebrow">Stack and caches empty</p>
     <h2 id="winTitle">Dreiziehn!</h2>
     <p id="winSingle">You cleared it in <b id="winTurns">0</b> turns and <b id="winPlays">0</b> plays.</p>
     <p id="winLine" hidden></p>
@@ -363,6 +365,7 @@ const esc = s => String(s).replace(/[&<>"']/g,
   ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const KEY = 'dreiziehn';
 const MAX_HAND = 5;
+const STACK_SIZE = 15;
 const DECK_SIZE = 60;
 const MAX_PLAYERS = 4;
 const isLocal = () => location.hostname === 'localhost' || location.hostname === '127.0.0.1';
@@ -421,7 +424,8 @@ const PIPS = {
   10: [[30,16],[70,16],[50,27],[30,39],[70,39],[30,61],[70,61],[50,73],[30,84],[70,84]],
 };
 
-let stock, hand, own, middle, completed, turnPlayed, turns, plays, won, sel;
+let stack, drawPile, hand, own, middle, completed, turnPlayed, turns, plays, won, sel;
+let placed = [false, false, false, false];
 let undoStack = [];
 
 const MP = {
@@ -451,14 +455,15 @@ function deck() {
   return cards;
 }
 
-function shuffled() {
-  const cards = deck();
+function shuffle(cards) {
   for (let i = cards.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [cards[i], cards[j]] = [cards[j], cards[i]];
   }
   return cards;
 }
+
+const shuffled = () => shuffle(deck());
 
 function deckFor(p) {
   const cards = [];
@@ -470,14 +475,7 @@ function deckFor(p) {
   return cards;
 }
 
-function shuffledFor(p) {
-  const cards = deckFor(p);
-  for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [cards[i], cards[j]] = [cards[j], cards[i]];
-  }
-  return cards;
-}
+const shuffledFor = p => shuffle(deckFor(p));
 
 function cardFromId(id) {
   const p = Math.floor(id / 60);
@@ -492,11 +490,13 @@ const sid = c => c.p * 60 + c.k;
 function serializeState(s) {
   return {
     turn: s.turn, winner: s.winner, completed: s.completed, turnPlayed: s.turnPlayed,
+    draw: s.draw.map(sid),
     middle: s.middle.map(pile => pile.map(sid)),
     players: s.players.map(p => ({
       id: p.id, name: p.name,
-      stock: p.stock.map(sid), hand: p.hand.map(sid),
+      stack: p.stack.map(sid), hand: p.hand.map(sid),
       own: p.own.map(pile => pile.map(sid)),
+      placed: p.placed,
     })),
   };
 }
@@ -504,11 +504,13 @@ function serializeState(s) {
 function deserializeState(s) {
   return {
     turn: s.turn, winner: s.winner, completed: s.completed, turnPlayed: s.turnPlayed,
+    draw: s.draw.map(cardFromId),
     middle: s.middle.map(pile => pile.map(cardFromId)),
     players: s.players.map(p => ({
       id: p.id, name: p.name,
-      stock: p.stock.map(cardFromId), hand: p.hand.map(cardFromId),
+      stack: p.stack.map(cardFromId), hand: p.hand.map(cardFromId),
       own: p.own.map(pile => pile.map(cardFromId)),
+      placed: p.placed.slice(),
     })),
   };
 }
@@ -520,19 +522,39 @@ function isMultiState(s) {
   if (!Number.isInteger(s.completed) || s.completed < 0) return false;
   if (typeof s.turnPlayed !== 'boolean') return false;
   if (!Array.isArray(s.middle) || s.middle.length !== 4) return false;
+  if (!Array.isArray(s.draw)) return false;
 
   const maxId = MAX_PLAYERS * 60;
   const cardOk = id => Number.isInteger(id) && id >= 0 && id < maxId;
+  if (!s.draw.every(cardOk)) return false;
   const middleOk = s.middle.every(pile => Array.isArray(pile) && pile.length < 13 &&
     pile.every((id, i) => cardOk(id) &&
       (isJoker(cardFromId(id)) || cardFromId(id).r === i + 1)));
   if (!middleOk) return false;
 
-  return s.players.every(p => p && typeof p.id === 'string' && typeof p.name === 'string' &&
-    Array.isArray(p.stock) && p.stock.every(cardOk) &&
+  if (!s.players.every(p => p && typeof p.id === 'string' && typeof p.name === 'string' &&
+    Array.isArray(p.stack) && p.stack.every(cardOk) &&
     Array.isArray(p.hand) && p.hand.length <= MAX_HAND && p.hand.every(cardOk) &&
     Array.isArray(p.own) && p.own.length === 4 &&
-    p.own.every(pile => Array.isArray(pile) && pile.every(cardOk)));
+    p.own.every(pile => Array.isArray(pile) && pile.every(cardOk)) &&
+    Array.isArray(p.placed) && p.placed.length === 4 &&
+    p.placed.every(v => typeof v === 'boolean'))) return false;
+
+  const ids = [
+    ...s.draw, ...s.middle.flat(),
+    ...s.players.flatMap(p => [...p.stack, ...p.hand, ...p.own.flat()]),
+  ];
+  // A kicked player's cards stay in the shared draw, so this is an upper bound.
+  return ids.length <= s.players.length * DECK_SIZE && new Set(ids).size === ids.length;
+}
+
+const cleared = p => p.stack.length === 0 && p.own.every(pile => pile.length === 0);
+
+function recycleMiddle(state, pile) {
+  state.draw.push(...state.middle[pile]);
+  shuffle(state.draw);
+  state.middle[pile] = [];
+  state.completed++;
 }
 
 function applyMove(state, playerIndex, move) {
@@ -544,41 +566,64 @@ function applyMove(state, playerIndex, move) {
   const kind = move && move.kind;
   const pile = move && move.pile;
   const hasPile = Number.isInteger(pile) && pile >= 0 && pile < 4;
+  const from = move && move.from;
+  let card;
 
-  if (kind === 'middle' || kind === 'own') {
-    const cardIndex = move.card;
-    if (!Number.isInteger(cardIndex) || cardIndex < 0 || cardIndex >= player.hand.length) {
-      return { ok: false, reason: 'Bad card.' };
-    }
+  if (kind === 'middle') {
     if (!hasPile) return { ok: false, reason: 'Bad pile.' };
-    const card = player.hand[cardIndex];
-    if (kind === 'middle') {
-      if (!canMiddle(card, state.middle[pile])) return { ok: false, reason: 'Card does not fit.' };
-      player.hand.splice(cardIndex, 1);
-      state.middle[pile].push(card);
-      if (state.middle[pile].length === 13) {
-        state.middle[pile] = [];
-        state.completed++;
+    if (from === 'hand') {
+      if (!Number.isInteger(move.card) || move.card < 0 || move.card >= player.hand.length) {
+        return { ok: false, reason: 'Bad card.' };
       }
+      card = player.hand[move.card];
+    } else if (from === 'stack') {
+      if (!player.stack.length) return { ok: false, reason: 'Your stack is empty.' };
+      card = player.stack[player.stack.length - 1];
+    } else if (from === 'own') {
+      if (!Number.isInteger(move.src) || move.src < 0 || move.src > 3) {
+        return { ok: false, reason: 'Bad cache.' };
+      }
+      if (!player.own[move.src].length) return { ok: false, reason: 'That cache is empty.' };
+      card = player.own[move.src][player.own[move.src].length - 1];
     } else {
-      player.hand.splice(cardIndex, 1);
-      player.own[pile].push(card);
+      return { ok: false, reason: 'Unknown move.' };
     }
+    if (!canMiddle(card, state.middle[pile])) return { ok: false, reason: 'Card does not fit.' };
+
+    if (from === 'hand') player.hand.splice(move.card, 1);
+    else if (from === 'stack') player.stack.pop();
+    else player.own[move.src].pop();
+    state.middle[pile].push(card);
+    if (state.middle[pile].length === 13) recycleMiddle(state, pile);
     state.turnPlayed = true;
-  } else if (kind === 'pickup') {
+  } else if (kind === 'own') {
     if (!hasPile) return { ok: false, reason: 'Bad pile.' };
-    if (!player.own[pile].length) return { ok: false, reason: 'Pile is empty.' };
-    if (player.hand.length >= MAX_HAND) return { ok: false, reason: 'Hand is full.' };
-    player.hand.push(player.own[pile].pop());
+    if (from === 'hand') {
+      if (!Number.isInteger(move.card) || move.card < 0 || move.card >= player.hand.length) {
+        return { ok: false, reason: 'Bad card.' };
+      }
+      if (player.placed[pile]) return { ok: false, reason: 'One hand card per cache each turn.' };
+      card = player.hand[move.card];
+      player.hand.splice(move.card, 1);
+      player.placed[pile] = true;
+    } else if (from === 'stack') {
+      if (!player.stack.length) return { ok: false, reason: 'Your stack is empty.' };
+      card = player.stack.pop();
+    } else {
+      return { ok: false, reason: 'Unknown move.' };
+    }
+    player.own[pile].push(card);
+    state.turnPlayed = true;
   } else if (kind === 'end') {
     if (!state.turnPlayed) return { ok: false, reason: 'Play at least one card first.' };
-    if (player.stock.length === 0 && player.own.every(p => p.length === 0)) {
+    if (cleared(player)) {
       state.winner = playerIndex;
       state.turnPlayed = false;
       return { ok: true };
     }
-    while (player.hand.length < MAX_HAND && player.stock.length) player.hand.push(player.stock.pop());
-    if (player.stock.length === 0 && player.own.every(p => p.length === 0)) {
+    while (player.hand.length < MAX_HAND && state.draw.length) player.hand.push(state.draw.pop());
+    player.placed = [false, false, false, false];
+    if (cleared(player)) {
       state.winner = playerIndex;
       state.turnPlayed = false;
       return { ok: true };
@@ -590,14 +635,16 @@ function applyMove(state, playerIndex, move) {
     return { ok: false, reason: 'Unknown move.' };
   }
 
-  if (player.stock.length === 0 && player.own.every(p => p.length === 0)) {
+  if (cleared(player)) {
     state.winner = playerIndex;
     state.turnPlayed = false;
   }
   return { ok: true };
 }
 
-const snapshot = () => JSON.stringify({ stock, hand, own, middle, completed, turnPlayed, turns, plays, won });
+const snapshot = () => JSON.stringify({
+  stack, drawPile, hand, own, middle, completed, placed, turnPlayed, turns, plays, won,
+});
 
 function pushUndo() {
   undoStack.push(snapshot());
@@ -605,7 +652,7 @@ function pushUndo() {
 }
 
 function checkWin() {
-  won = stock.length === 0 && own.every(pile => pile.length === 0);
+  won = cleared({ stack, own });
   return won;
 }
 
@@ -614,17 +661,19 @@ const isCard = c => c && Number.isInteger(c.s) && c.s >= 0 && c.s <= 3 &&
   (c.r === 0 ? (c.j === 0 || c.j === 1) : c.j === undefined);
 
 function isState(s) {
-  if (!s || !Array.isArray(s.stock) || !Array.isArray(s.hand)) return false;
+  if (!s || !Array.isArray(s.stack) || !Array.isArray(s.drawPile) || !Array.isArray(s.hand)) return false;
   if (!Array.isArray(s.own) || s.own.length !== 4 || !s.own.every(Array.isArray)) return false;
   if (!Array.isArray(s.middle) || s.middle.length !== 4 || !s.middle.every(Array.isArray)) return false;
-  if (!Number.isInteger(s.completed) || s.completed < 0 || s.completed > 4) return false;
+  if (!Array.isArray(s.placed) || s.placed.length !== 4 ||
+    !s.placed.every(v => typeof v === 'boolean')) return false;
+  if (!Number.isInteger(s.completed) || s.completed < 0) return false;
   if (!Number.isInteger(s.turns) || s.turns < 0) return false;
   if (!Number.isInteger(s.plays) || s.plays < 0) return false;
   if (typeof s.turnPlayed !== 'boolean' || typeof s.won !== 'boolean') return false;
   if (s.hand.length > MAX_HAND) return false;
 
-  const cards = [...s.stock, ...s.hand, ...s.own.flat(), ...s.middle.flat()];
-  if (cards.length !== DECK_SIZE - s.completed * 13) return false;
+  const cards = [...s.stack, ...s.drawPile, ...s.hand, ...s.own.flat(), ...s.middle.flat()];
+  if (cards.length !== DECK_SIZE) return false;
   if (!cards.every(isCard)) return false;
   if (new Set(cards.map(cid)).size !== cards.length) return false;
 
@@ -635,7 +684,7 @@ function isState(s) {
 function save() {
   try {
     localStorage.setItem(KEY, JSON.stringify({
-      stock, hand, own, middle, completed, turnPlayed, turns, plays, won, undoStack,
+      stack, drawPile, hand, own, middle, completed, placed, turnPlayed, turns, plays, won, undoStack,
     }));
   } catch { /* storage unavailable: keep playing in memory */ }
 }
@@ -645,11 +694,13 @@ function load() {
   try { saved = JSON.parse(localStorage.getItem(KEY)); } catch { return false; }
   if (!isState(saved)) return false;
 
-  stock = saved.stock;
+  stack = saved.stack;
+  drawPile = saved.drawPile;
   hand = saved.hand;
   own = saved.own;
   middle = saved.middle;
   completed = saved.completed;
+  placed = saved.placed;
   turnPlayed = saved.turnPlayed;
   turns = saved.turns;
   plays = saved.plays;
@@ -665,12 +716,15 @@ function newGame() {
     location.href = lobbyUrl(gameUrl());
     return;
   }
-  stock = shuffled();
+  const cards = shuffled();
+  stack = cards.splice(0, STACK_SIZE);
+  drawPile = cards;
   hand = [];
-  for (let i = 0; i < MAX_HAND; i++) hand.push(stock.pop());
+  while (hand.length < MAX_HAND && drawPile.length) hand.push(drawPile.pop());
   own = [[], [], [], []];
   middle = [[], [], [], []];
   completed = 0;
+  placed = [false, false, false, false];
   turnPlayed = false;
   turns = 0;
   plays = 0;
@@ -710,19 +764,23 @@ function sendLobby(data) {
 function mpHostStart(peers) {
   if (!MP.host || MP.state || !peers.length) return;
 
+  const draw = [];
   const players = peers.map((peer, i) => {
     const deck = shuffledFor(i);
-    const hand = [];
-    for (let n = 0; n < MAX_HAND; n++) hand.push(deck.pop());
+    const stack = deck.splice(0, STACK_SIZE);
+    draw.push(...deck);
     return {
       id: peer.id, name: peer.name,
-      stock: deck, hand, own: [[], [], [], []],
+      stack, hand: [], own: [[], [], [], []], placed: [false, false, false, false],
     };
   });
+  for (const player of players) {
+    while (player.hand.length < MAX_HAND && draw.length) player.hand.push(draw.pop());
+  }
 
   MP.state = {
     turn: 0, winner: null, completed: 0, turnPlayed: false,
-    middle: [[], [], [], []], players,
+    draw, middle: [[], [], [], []], players,
   };
   MP.meIndex = players.findIndex(p => p.id === MP.you);
   drawMulti();
@@ -734,7 +792,7 @@ function mpBroadcast(now = false) {
   clearTimeout(MP.timer);
   const send = () => {
     MP.timer = null;
-    sendLobby({ v: 1, type: 'state', state: serializeState(MP.state) });
+    sendLobby({ v: DATA_VERSION, type: 'state', state: serializeState(MP.state) });
   };
   if (now) send();
   else MP.timer = setTimeout(send, 500);
@@ -759,7 +817,7 @@ function mpSendMove(move) {
     say('Host not found.');
     return;
   }
-  if (!sendLobby({ v: 1, type: 'move', to: MP.hostId, move })) {
+  if (!sendLobby({ v: DATA_VERSION, type: 'move', to: MP.hostId, move })) {
     say('Lobby is not connected.');
     return;
   }
@@ -777,7 +835,7 @@ function mpHandleGameMessage(from, data) {
     if (index < 0) return;
     const result = applyMove(MP.state, index, data.move);
     if (!result.ok) {
-      sendLobby({ v: 1, type: 'reject', to: from, reason: result.reason });
+      sendLobby({ v: DATA_VERSION, type: 'reject', to: from, reason: result.reason });
       return;
     }
     drawMulti();
@@ -823,6 +881,18 @@ function mpRemovePlayer(id) {
   }
 }
 
+function mpSelectedCard() {
+  const me = mpMe();
+  if (!me || !sel) return null;
+  if (sel.kind === 'hand') return me.hand[sel.i];
+  if (sel.kind === 'stack') return me.stack[me.stack.length - 1];
+  if (sel.kind === 'own') {
+    const pile = me.own[sel.i];
+    return pile && pile[pile.length - 1];
+  }
+  return null;
+}
+
 function mpTapHand(i) {
   const me = mpMe();
   if (!me || !mpIsMyTurn()) return mpSayWait();
@@ -836,39 +906,67 @@ function mpTapHand(i) {
   drawMulti();
 }
 
+function mpTapStack() {
+  const me = mpMe();
+  if (!me || !mpIsMyTurn()) return mpSayWait();
+  if (sel && sel.kind === 'stack') {
+    sel = null;
+    drawMulti();
+    return;
+  }
+  if (!me.stack.length) {
+    say('Your stack is empty.');
+    return;
+  }
+  sel = { kind: 'stack' };
+  drawMulti();
+}
+
 function mpTapMiddle(i) {
   const me = mpMe();
   if (!me || !mpIsMyTurn()) return mpSayWait();
-  if (!sel || sel.kind !== 'hand' || !me.hand[sel.i]) {
-    say('Pick a card from your hand first.');
+  const card = mpSelectedCard();
+  if (!card) {
+    say('Pick a card from your hand, your stack or a cache first.');
     return;
   }
-  if (!canMiddle(me.hand[sel.i], MP.state.middle[i])) {
+  if (!canMiddle(card, MP.state.middle[i])) {
     say(`That card doesn't fit here. This pile needs ${nextRank(MP.state.middle[i])}.`);
     return;
   }
-  const move = { kind: 'middle', card: sel.i, pile: i };
+  const move = sel.kind === 'hand'
+    ? { kind: 'middle', from: 'hand', card: sel.i, pile: i }
+    : sel.kind === 'stack'
+      ? { kind: 'middle', from: 'stack', pile: i }
+      : { kind: 'middle', from: 'own', src: sel.i, pile: i };
   if (MP.host) mpApplyHost(move); else mpSendMove(move);
 }
 
 function mpTapOwn(i) {
   const me = mpMe();
   if (!me || !mpIsMyTurn()) return mpSayWait();
-  if (sel && sel.kind === 'hand') {
-    const move = { kind: 'own', card: sel.i, pile: i };
+  if (sel && (sel.kind === 'hand' || sel.kind === 'stack')) {
+    if (sel.kind === 'hand' && me.placed[i]) {
+      say('One hand card per cache each turn.');
+      return;
+    }
+    const move = sel.kind === 'hand'
+      ? { kind: 'own', from: 'hand', card: sel.i, pile: i }
+      : { kind: 'own', from: 'stack', pile: i };
     if (MP.host) mpApplyHost(move); else mpSendMove(move);
     return;
   }
+  if (sel && sel.kind === 'own' && sel.i === i) {
+    sel = null;
+    drawMulti();
+    return;
+  }
   if (!me.own[i].length) {
-    say('That pile is empty.');
+    say('That cache is empty.');
     return;
   }
-  if (me.hand.length >= MAX_HAND) {
-    say('Your hand is full. Play a card first.');
-    return;
-  }
-  const move = { kind: 'pickup', pile: i };
-  if (MP.host) mpApplyHost(move); else mpSendMove(move);
+  sel = { kind: 'own', i };
+  drawMulti();
 }
 
 function mpEndTurn() {
@@ -896,7 +994,8 @@ function drawMulti() {
     $('turnBar').textContent = 'Warte auf Host…';
     $('players').hidden = true;
     $('end').disabled = true;
-    $('stockCount').textContent = '–';
+    $('stackCount').textContent = '–';
+    $('drawCount').textContent = '–';
     $('doneCount').textContent = '–';
     $('handCount').textContent = '0';
     $('middle').innerHTML = '';
@@ -913,7 +1012,8 @@ function drawMulti() {
     $('turnBar').textContent = 'Du bist nicht mehr im Spiel.';
     $('players').hidden = true;
     $('end').disabled = true;
-    $('stockCount').textContent = '–';
+    $('stackCount').textContent = '–';
+    $('drawCount').textContent = '–';
     $('doneCount').textContent = '–';
     $('handCount').textContent = '0';
     $('middle').innerHTML = '';
@@ -932,7 +1032,7 @@ function drawMulti() {
 
   const active = st.turn;
   const mine = active === MP.meIndex && st.winner === null && !MP.pending;
-  const held = sel && sel.kind === 'hand' ? me.hand[sel.i] : null;
+  const held = mpSelectedCard();
 
   $('turnBar').classList.toggle('waiting', !mine);
   $('turnBar').textContent = st.winner !== null
@@ -940,15 +1040,18 @@ function drawMulti() {
     : MP.pending ? 'Warte auf Host…'
     : mine ? 'Dein Zug!' : `${mpName(active)} ist am Zug…`;
 
-  $('stockCount').textContent = me.stock.length;
+  $('stackCount').textContent = me.stack.length;
+  $('drawCount').textContent = st.draw.length;
   $('doneCount').textContent = st.completed;
   $('handCount').textContent = me.hand.length;
 
   $('middle').innerHTML = st.middle.map((pile, i) =>
     pileHTML(pile, 'middle', i, 3, held && mine && canMiddle(held, pile))).join('');
 
-  $('own').innerHTML = me.own.map((pile, i) =>
-    pileHTML(pile, 'own', i, 5, held && mine)).join('');
+  $('own').innerHTML =
+    pileHTML(me.stack, 'stack', 0, 1, false) +
+    me.own.map((pile, i) => pileHTML(pile, 'own', i, 5, mine &&
+      (sel?.kind === 'stack' || (sel?.kind === 'hand' && !me.placed[i])))).join('');
 
   $('hand').innerHTML = Array.from({ length: MAX_HAND }, (_, i) => {
     const card = me.hand[i];
@@ -965,7 +1068,7 @@ function drawMulti() {
       : '';
     return `<span class="player-chip${i === st.turn ? ' active' : ''}${online ? '' : ' offline'}">
       <b>${esc(p.name)}${p.id === MP.you ? ' (du)' : ''}</b>
-      <span class="counts">Stock ${p.stock.length} · Hand ${p.hand.length} · Piles ${piles}</span>${kick}
+      <span class="counts">Stack ${p.stack.length} · Hand ${p.hand.length} · Caches ${piles}</span>${kick}
     </span>`;
   }).join('');
 
@@ -981,7 +1084,7 @@ function drawMulti() {
     $('winLine').textContent = winner === MP.meIndex ? 'Du hast gewonnen.' : `${mpName(winner)} hat gewonnen.`;
     $('again').textContent = '★ Back to lobby';
   } else {
-    $('winEyebrow').textContent = 'Stock and piles empty';
+    $('winEyebrow').textContent = 'Stack and caches empty';
     $('winTitle').textContent = 'Dreiziehn!';
     $('winSingle').hidden = false;
     $('winLine').hidden = true;
@@ -990,31 +1093,48 @@ function drawMulti() {
 
   if (winner !== null) say('Game over.');
   else if (!mine) say(MP.pending ? 'Waiting for the host…' : `${mpName(active)} ist am Zug…`);
-  else if (held) say(`Holding ${cardName(held)}. Tap a middle pile or one of your piles.`);
+  else if (held) say(sel.kind === 'own'
+    ? `Holding cache top ${cardName(held)}. Tap a glowing middle pile.`
+    : `Holding ${cardName(held)}. Tap a middle pile or one of your caches.`);
   else if (st.turnPlayed) {
-    say(me.hand.length ? 'Play another card, take a card from a pile, or end your turn.'
-      : me.own.some(pile => pile.length) ? 'Take a card from a pile, or end your turn.'
+    say(me.hand.length || me.stack.length
+      ? 'Play another card, play a cache top to the middle, or end your turn.'
+      : me.own.some(pile => pile.length) ? 'Play a cache top to the middle, or end your turn.'
       : 'End your turn to refill.');
-  } else if (!me.hand.length) {
+  } else if (!me.hand.length && !me.stack.length) {
     say(me.own.some(pile => pile.length)
-      ? 'Take a card from one of your piles, then play it.'
+      ? 'Play a cache top to the middle, then end your turn.'
       : 'End your turn to refill.');
   } else {
     say('Play at least one card, then end your turn.');
   }
 }
 
+function selectedCard() {
+  if (!sel) return null;
+  if (sel.kind === 'hand') return hand[sel.i];
+  if (sel.kind === 'stack') return stack[stack.length - 1];
+  if (sel.kind === 'own') {
+    const pile = own[sel.i];
+    return pile && pile[pile.length - 1];
+  }
+  return null;
+}
+
 function playMiddle(i) {
-  if (!sel || sel.kind !== 'hand') return false;
-  const card = hand[sel.i];
+  const card = selectedCard();
   if (!card || !canMiddle(card, middle[i])) return false;
 
   pushUndo();
-  hand.splice(sel.i, 1);
+  if (sel.kind === 'hand') hand.splice(sel.i, 1);
+  else if (sel.kind === 'stack') stack.pop();
+  else own[sel.i].pop();
   middle[i].push(card);
   plays++;
   turnPlayed = true;
   if (middle[i].length === 13) {
+    drawPile.push(...middle[i]);
+    shuffle(drawPile);
     middle[i] = [];
     completed++;
   }
@@ -1024,29 +1144,24 @@ function playMiddle(i) {
 }
 
 function playOwn(i) {
-  if (!sel || sel.kind !== 'hand') return false;
-  const card = hand[sel.i];
+  if (!sel || (sel.kind !== 'hand' && sel.kind !== 'stack')) return false;
+  const card = selectedCard();
   if (!card) return false;
-
-  pushUndo();
-  hand.splice(sel.i, 1);
-  own[i].push(card);
-  plays++;
-  turnPlayed = true;
-  sel = null;
-  settle();
-  return true;
-}
-
-function pickUpOwn(i) {
-  if (!own[i].length) return false;
-  if (hand.length >= MAX_HAND) {
-    say('Your hand is full. Play a card first.');
+  if (sel.kind === 'hand' && placed[i]) {
+    say('One hand card per cache each turn.');
     return false;
   }
 
   pushUndo();
-  hand.push(own[i].pop());
+  if (sel.kind === 'hand') {
+    hand.splice(sel.i, 1);
+    placed[i] = true;
+  } else {
+    stack.pop();
+  }
+  own[i].push(card);
+  plays++;
+  turnPlayed = true;
   sel = null;
   settle();
   return true;
@@ -1057,7 +1172,8 @@ function endTurn() {
   if (won || !turnPlayed) return false;
 
   pushUndo();
-  while (hand.length < MAX_HAND && stock.length) hand.push(stock.pop());
+  while (hand.length < MAX_HAND && drawPile.length) hand.push(drawPile.pop());
+  placed = [false, false, false, false];
   turnPlayed = false;
   turns++;
   sel = null;
@@ -1072,11 +1188,13 @@ function undo() {
   try { state = JSON.parse(saved); } catch { return; }
   if (!isState(state)) return;
 
-  stock = state.stock;
+  stack = state.stack;
+  drawPile = state.drawPile;
   hand = state.hand;
   own = state.own;
   middle = state.middle;
   completed = state.completed;
+  placed = state.placed;
   turnPlayed = state.turnPlayed;
   turns = state.turns;
   plays = state.plays;
@@ -1102,18 +1220,21 @@ function hintText(held) {
   if (won) return `Cleared in ${turns + 1} turns and ${plays} plays.`;
   if (held) {
     const fits = middle.some(pile => canMiddle(held, pile));
-    return `Holding ${cardName(held)}. ${fits ? 'Tap a glowing middle pile' : 'No middle pile takes it'} — or one of your own piles.`;
+    if (sel.kind === 'own') {
+      return `Cache top ${cardName(held)}. ${fits ? 'Tap a glowing middle pile.' : 'No middle pile takes it.'}`;
+    }
+    return `Holding ${cardName(held)}. ${fits ? 'Tap a glowing middle pile' : 'No middle pile takes it'} — or one of your caches.`;
   }
-  if (!hand.length) {
+  if (!hand.length && !stack.length) {
     if (own.some(pile => pile.length)) {
       return turnPlayed
-        ? 'Take a card from one of your piles, or end your turn.'
-        : 'Take a card from one of your piles, then play it.';
+        ? 'Play a cache top to the middle, or end your turn.'
+        : 'Play a cache top to the middle, then end your turn.';
     }
-    if (stock.length) return 'End your turn to draw.';
+    if (drawPile.length) return 'End your turn to draw.';
     return `Turn ${turns + 1}: play at least one card.`;
   }
-  if (turnPlayed) return 'Play another card, take a card from a pile, or end your turn.';
+  if (turnPlayed) return 'Play another card, play a cache top to the middle, or end your turn.';
   return `Turn ${turns + 1}: play at least one card, then end your turn.`;
 }
 
@@ -1140,7 +1261,7 @@ function faceHTML(c) {
 }
 
 function cardHTML(c, kind, i, under = false, idx = 0) {
-  const selected = sel && sel.kind === kind && sel.i === i;
+  const selected = sel && sel.kind === kind && !under && (kind === 'stack' || sel.i === i);
   const attrs = under
     ? ' aria-hidden="true"'
     : ` role="button" tabindex="0" data-focus="c${cid(c)}"`;
@@ -1160,13 +1281,16 @@ function pileHTML(pile, kind, i, visible, valid = false) {
   const on = top ? '' : ' role="button" tabindex="0"';
   const label = kind === 'middle'
     ? `Middle pile ${i + 1}, next ${nextRank(pile)}`
-    : `Your pile ${i + 1}${top ? `, top ${cardName(top)}` : ', empty'}`;
+    : kind === 'stack'
+      ? `Your stack, ${pile.length} cards${top ? `, top ${cardName(top)}` : ', empty'}`
+      : `Your cache ${i + 1}${top ? `, top ${cardName(top)}` : ', empty'}`;
   const hole = kind === 'middle' ? '1' : '+';
   return `<div class="slot${valid ? ' valid' : ''}" data-slot="${kind}" data-i="${i}"
     style="--n:${n || 1}" aria-label="${label}"${on}>
     <div class="hole" aria-hidden="true">${top ? '' : hole}</div>
     ${cards.map((c, idx) => cardHTML(c, kind, i, idx < cards.length - 1, idx)).join('')}
-    ${kind === 'own' && pile.length > 1 ? `<span class="badge" aria-hidden="true">${pile.length}</span>` : ''}
+    ${(kind === 'own' || kind === 'stack') && pile.length > 1
+      ? `<span class="badge" aria-hidden="true">${pile.length}</span>` : ''}
   </div>`;
 }
 
@@ -1177,7 +1301,7 @@ function draw() {
   $('playsStat').hidden = false;
   $('multi').hidden = false;
   $('new').disabled = false;
-  $('winEyebrow').textContent = 'Stock and piles empty';
+  $('winEyebrow').textContent = 'Stack and caches empty';
   $('winTitle').textContent = 'Dreiziehn!';
   $('winSingle').hidden = false;
   $('winLine').hidden = true;
@@ -1186,9 +1310,10 @@ function draw() {
   const active = document.activeElement && document.activeElement.dataset
     ? document.activeElement.dataset.focus
     : null;
-  const held = sel && sel.kind === 'hand' ? hand[sel.i] : null;
+  const held = selectedCard();
 
-  $('stockCount').textContent = stock.length;
+  $('stackCount').textContent = stack.length;
+  $('drawCount').textContent = drawPile.length;
   $('doneCount').textContent = completed;
   $('turns').textContent = turns + 1;
   $('plays').textContent = plays;
@@ -1197,8 +1322,10 @@ function draw() {
   $('middle').innerHTML = middle.map((pile, i) =>
     pileHTML(pile, 'middle', i, 3, held && canMiddle(held, pile))).join('');
 
-  $('own').innerHTML = own.map((pile, i) =>
-    pileHTML(pile, 'own', i, 5, held)).join('');
+  $('own').innerHTML =
+    pileHTML(stack, 'stack', 0, 1, false) +
+    own.map((pile, i) => pileHTML(pile, 'own', i, 5,
+      sel?.kind === 'stack' || (sel?.kind === 'hand' && !placed[i]))).join('');
 
   $('hand').innerHTML = Array.from({ length: MAX_HAND }, (_, i) => {
     const card = hand[i];
@@ -1231,11 +1358,27 @@ function tapHand(i) {
   draw();
 }
 
+function tapStack() {
+  if (MP.active) return mpTapStack();
+  if (won) return;
+  if (sel && sel.kind === 'stack') {
+    sel = null;
+    draw();
+    return;
+  }
+  if (!stack.length) {
+    say('Your stack is empty.');
+    return;
+  }
+  sel = { kind: 'stack' };
+  draw();
+}
+
 function tapMiddle(i) {
   if (MP.active) return mpTapMiddle(i);
   if (won) return;
-  if (!sel || sel.kind !== 'hand') {
-    say('Pick a card from your hand first.');
+  if (!selectedCard()) {
+    say('Pick a card from your hand, your stack or a cache first.');
     return;
   }
   if (!playMiddle(i)) say(`That card doesn't fit here. This pile needs ${nextRank(middle[i])}.`);
@@ -1244,11 +1387,21 @@ function tapMiddle(i) {
 function tapOwn(i) {
   if (MP.active) return mpTapOwn(i);
   if (won) return;
-  if (sel && sel.kind === 'hand') {
+  if (sel && (sel.kind === 'hand' || sel.kind === 'stack')) {
     playOwn(i);
     return;
   }
-  if (own[i].length) pickUpOwn(i);
+  if (sel && sel.kind === 'own' && sel.i === i) {
+    sel = null;
+    draw();
+    return;
+  }
+  if (!own[i].length) {
+    say('That cache is empty.');
+    return;
+  }
+  sel = { kind: 'own', i };
+  draw();
 }
 
 function activate(el) {
@@ -1256,10 +1409,12 @@ function activate(el) {
     const kind = el.dataset.kind;
     const i = Number(el.dataset.i);
     if (kind === 'hand') return tapHand(i);
+    if (kind === 'stack') return tapStack();
     if (kind === 'own') return tapOwn(i);
     if (kind === 'middle') return tapMiddle(i);
   }
   const slot = el.dataset.slot;
+  if (slot === 'stack') return tapStack();
   if (slot === 'middle') return tapMiddle(Number(el.dataset.i));
   if (slot === 'own') return tapOwn(Number(el.dataset.i));
 }
@@ -1286,7 +1441,7 @@ function renderLobbyPeers(peers, max) {
     `${(peers || []).length}/${lobbyMax || '?'}${list ? ` · ${list}` : ''}`;
 }
 
-const DATA_VERSION = 1;
+const DATA_VERSION = 2;
 const GAME_MESSAGE_TYPES = new Set(['state', 'move', 'reject']);
 
 function isGameMessage(data) {

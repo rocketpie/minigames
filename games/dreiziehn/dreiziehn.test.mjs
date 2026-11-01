@@ -66,16 +66,19 @@ const allCards = () => {
   return cards;
 };
 const setup = ({
-  stock = [], hand = [], own = [[], [], [], []], middle = [[], [], [], []],
-  completed = 0, turnPlayed = false, turns = 0, plays = 0,
+  stack = [], drawPile = [], hand = [], own = [[], [], [], []], middle = [[], [], [], []],
+  completed = 0, placed = [false, false, false, false],
+  turnPlayed = false, turns = 0, plays = 0,
 }) => {
   store.delete('dreiziehn');
   run(`
-    stock = ${JSON.stringify(stock)};
+    stack = ${JSON.stringify(stack)};
+    drawPile = ${JSON.stringify(drawPile)};
     hand = ${JSON.stringify(hand)};
     own = ${JSON.stringify(own)};
     middle = ${JSON.stringify(middle)};
     completed = ${completed};
+    placed = ${JSON.stringify(placed)};
     turnPlayed = ${turnPlayed};
     turns = ${turns};
     plays = ${plays};
@@ -100,15 +103,18 @@ test('a deck is 60 cards: 52 plus two jokers per suit', () => {
   assert.equal(new Set(cards.map(cid)).size, 60);
 });
 
-test('new game deals five cards and leaves the rest in the stock', () => {
+test('new game deals a 15-card stack and a 5-card hand from the shared draw', () => {
   run('newGame()');
   assert.equal(run('hand.length'), 5);
-  assert.equal(run('stock.length'), 55);
+  assert.equal(run('stack.length'), 15);
+  assert.equal(run('drawPile.length'), 40);
   assert.equal(run('own.every(p => p.length === 0)'), true);
   assert.equal(run('middle.every(p => p.length === 0)'), true);
   assert.equal(run('completed'), 0);
   assert.equal(run('turnPlayed'), false);
-  const ids = JSON.parse(run('JSON.stringify([...stock, ...hand].map(cid))'));
+  const ids = JSON.parse(run(
+    'JSON.stringify([...stack, ...drawPile, ...hand].map(cid))',
+  ));
   assert.equal(new Set(ids).size, 60);
 });
 
@@ -134,12 +140,15 @@ test('a joker is wild on the middle piles', () => {
   assert.equal(run('middle[0][1].r'), 2);
 });
 
-test('a 13 completes a middle pile and frees its slot', () => {
+test('a 13 recycles the middle pile into the shared draw stack', () => {
   const twelve = Array.from({ length: 12 }, (_, i) => c(i + 1, 0));
-  setup({ hand: [c(13, 0), c(1, 1)], middle: [twelve, [], [], []] });
+  setup({
+    hand: [c(13, 0), c(1, 1)], middle: [twelve, [], [], []], drawPile: [c(2, 3)],
+  });
   run('sel = {kind:"hand", i:0}; playMiddle(0)');
   assert.equal(run('completed'), 1);
   assert.equal(run('middle[0].length'), 0);
+  assert.equal(run('drawPile.length'), 14);
   assert.equal(run('plays'), 1);
   run('sel = {kind:"hand", i:0}; playMiddle(0)');
   assert.equal(run('middle[0].length'), 1);
@@ -148,42 +157,74 @@ test('a 13 completes a middle pile and frees its slot', () => {
 
 test('a joker can finish a pile', () => {
   const twelve = Array.from({ length: 12 }, (_, i) => c(i + 1, 0));
-  setup({ hand: [c(0, 1, 1)], middle: [twelve, [], [], []] });
+  setup({ hand: [c(0, 1, 1)], middle: [twelve, [], [], []], drawPile: [] });
   run('sel = {kind:"hand", i:0}; playMiddle(0)');
   assert.equal(run('completed'), 1);
   assert.equal(run('middle[0].length'), 0);
+  assert.equal(run('drawPile.length'), 13);
 });
 
-test('own piles take any card in any order and give the top one back', () => {
+test('caches take any card and never give one back to the hand', () => {
   setup({ hand: [c(5, 0), c(9, 1)] });
   run('sel = {kind:"hand", i:0}; playOwn(2)');
   assert.equal(run('own[2].length'), 1);
   assert.equal(run('own[2][0].r'), 5);
-  run('sel = {kind:"hand", i:0}; playOwn(2)');
-  assert.deepEqual(Array.from(run('own[2].map(c => c.r)')), [5, 9]);
+  run('sel = {kind:"hand", i:0}; playOwn(3)');
+  assert.equal(run('own[3][0].r'), 9);
   assert.equal(run('hand.length'), 0);
 
-  run('pickUpOwn(2)');
-  assert.equal(run('own[2].length'), 1);
-  assert.equal(run('hand[0].r'), 9);
-  run('pickUpOwn(2)');
-  assert.equal(run('own[2].length'), 0);
-  assert.equal(run('hand[1].r'), 5);
+  run('tapOwn(2)');
+  assert.equal(run('hand.length'), 0, 'selecting a cache top does not take it into the hand');
+  assert.deepEqual(JSON.parse(run('JSON.stringify(sel)')), { kind: 'own', i: 2 });
+  assert.equal(run('selectedCard().r'), 5);
 });
 
-test('the hand never holds more than five cards', () => {
-  setup({
-    hand: [c(1, 0), c(2, 1), c(3, 2), c(4, 3), c(5, 0)],
-    own: [[c(6, 1)], [], [], []],
-  });
-  assert.equal(run('pickUpOwn(0)'), false);
+test('a cache top can only go to the middle, not to another cache', () => {
+  setup({ own: [[c(1, 0), c(2, 1)], [], [], []], middle: [[c(1, 2)], [], [], []] });
+  run('tapOwn(0)');
+  run('tapOwn(1)');
+  assert.equal(run('own[1].length'), 0, 'an own top is not a cache card');
+  run('tapMiddle(0)');
+  assert.deepEqual(Array.from(run('middle[0].map(c => c.r)')), [1, 2]);
+  assert.deepEqual(Array.from(run('own[0].map(c => c.r)')), [1]);
+  assert.equal(run('hand.length'), 0);
+});
+
+test('one hand card per cache each turn', () => {
+  setup({ hand: [c(1, 0), c(2, 1), c(3, 2)] });
+  run('sel = {kind:"hand", i:0}; playOwn(0)');
+  assert.equal(run('placed[0]'), true);
+  assert.equal(run('hand.length'), 2);
+  run('sel = {kind:"hand", i:0}; playOwn(0)');
+  assert.equal(run('hand.length'), 2, 'the second hand card stays put');
   assert.equal(run('own[0].length'), 1);
-  assert.equal(run('hand.length'), 5);
+  run('sel = {kind:"hand", i:0}; playOwn(1)');
+  assert.equal(run('hand.length'), 1);
+  assert.equal(run('own[1].length'), 1);
+
+  run('endTurn()');
+  assert.deepEqual(Array.from(run('placed')), [false, false, false, false]);
 });
 
-test('a turn needs a card, then refills from the stock', () => {
-  const stock = Array.from({ length: 10 }, (_, i) => c(i + 1, i % 4));
-  setup({ stock, hand: [c(1, 0)] });
+test('the stack top plays like a hand card and reveals the next one', () => {
+  setup({ stack: [c(5, 0), c(1, 1)] });
+  run('tapStack()');
+  assert.deepEqual(JSON.parse(run('JSON.stringify(sel)')), { kind: 'stack' });
+  assert.equal(run('selectedCard().r'), 1);
+  run('tapMiddle(0)');
+  assert.equal(run('middle[0][0].r'), 1);
+  assert.equal(run('stack.length'), 1);
+
+  run('tapStack()');
+  assert.equal(run('selectedCard().r'), 5);
+  run('tapOwn(2)');
+  assert.equal(run('stack.length'), 0);
+  assert.equal(run('own[2][0].r'), 5);
+});
+
+test('a turn needs a card, then refills from the shared draw, never the stack', () => {
+  const drawPile = Array.from({ length: 10 }, (_, i) => c(i + 1, i % 4));
+  setup({ drawPile, hand: [c(1, 0)], stack: [c(11, 0)] });
   assert.equal(run('endTurn()'), false);
   assert.equal(run('turns'), 0);
 
@@ -192,34 +233,28 @@ test('a turn needs a card, then refills from the stock', () => {
   assert.equal(run('endTurn()'), true);
   assert.equal(run('turns'), 1);
   assert.equal(run('hand.length'), 5);
-  assert.equal(run('stock.length'), 5);
+  assert.equal(run('drawPile.length'), 5);
+  assert.equal(run('stack.length'), 1);
   assert.equal(run('turnPlayed'), false);
 });
 
-test('you can take a card from a pile before the stock refills you', () => {
-  const stock = Array.from({ length: 10 }, (_, i) => c(i + 1, i % 4));
-  setup({ stock, hand: [c(1, 0)], own: [[c(6, 1)], [], [], []] });
-  run('sel = {kind:"hand", i:0}; playMiddle(0)');
-  run('pickUpOwn(0)');
-  assert.equal(run('hand.length'), 1);
-  run('endTurn()');
-  assert.equal(run('hand.length'), 5);
-  assert.equal(run('stock.length'), 6);
-});
-
-test('clearing the stock and all four piles wins, even with cards in hand', () => {
-  setup({ stock: [], hand: [c(5, 0)], middle: [[c(1, 0)], [], [], []] });
-  run('sel = {kind:"hand", i:0}; playOwn(0)');
-  assert.equal(run('won'), false, 'the own pile is not empty yet');
-  run('pickUpOwn(0)');
+test('clearing the stack and all caches wins, even with cards in hand', () => {
+  setup({ stack: [], hand: [c(5, 0)], own: [[c(1, 0)], [], [], []] });
+  run('tapOwn(0)');
+  assert.equal(run('won'), false, 'the cache is not empty yet');
+  run('tapMiddle(0)');
   assert.equal(run('won'), true);
   assert.equal(run('hand.length'), 1);
 });
 
-test('a card in the stock keeps the game going', () => {
-  setup({ stock: [c(2, 0)], middle: [[c(1, 0)], [], [], []] });
+test('cards left in the stack or a cache keep the game going', () => {
+  setup({ stack: [c(2, 0)] });
   run('checkWin()');
-  assert.equal(run('won'), false);
+  assert.equal(run('won'), false, 'the stack is not empty');
+
+  setup({ own: [[c(2, 0)], [], [], []] });
+  run('checkWin()');
+  assert.equal(run('won'), false, 'a cache is not empty');
 });
 
 test('a full table can be cleared', () => {
@@ -234,13 +269,13 @@ test('a full table can be cleared', () => {
   }
   assert.equal(run('won'), true);
   assert.equal(run('hand.length'), 0);
-  assert.equal(run('stock.length'), 0);
+  assert.equal(run('stack.length'), 0);
 });
 
 test('undo restores the card, counters and turn flag', () => {
   const all = allCards();
   const ace = c(1, 0);
-  setup({ stock: all.filter(x => cid(x) !== cid(ace)), hand: [ace] });
+  setup({ drawPile: all.filter(x => cid(x) !== cid(ace)), hand: [ace] });
   run('sel = {kind:"hand", i:0}; playMiddle(0)');
   assert.equal(run('plays'), 1);
   assert.equal(run('turnPlayed'), true);
@@ -252,62 +287,73 @@ test('undo restores the card, counters and turn flag', () => {
   assert.equal(run('undoStack.length'), 0);
 });
 
-test('undo takes back a refill', () => {
+test('undo takes back a refill and the per-cache hand limit', () => {
   const all = allCards();
   const ace = c(1, 0);
-  setup({ stock: all.filter(x => cid(x) !== cid(ace)), hand: [ace] });
+  const stackCard = c(11, 0);
+  setup({
+    stack: [stackCard], hand: [ace],
+    drawPile: all.filter(x => cid(x) !== cid(ace) && cid(x) !== cid(stackCard)),
+  });
   run('sel = {kind:"hand", i:0}; playMiddle(0)');
   run('endTurn()');
   assert.equal(run('hand.length'), 5);
-  assert.equal(run('stock.length'), 54);
+  assert.equal(run('drawPile.length'), 53);
+  assert.deepEqual(Array.from(run('placed')), [false, false, false, false]);
   run('undo()');
   assert.equal(run('hand.length'), 0);
-  assert.equal(run('stock.length'), 59);
+  assert.equal(run('drawPile.length'), 58);
   assert.equal(run('turns'), 0);
   assert.equal(run('turnPlayed'), true);
 });
 
 test('saves and restores a game', () => {
   const all = allCards();
-  const middle0 = [c(1, 0), c(2, 0)];
-  const own0 = [c(5, 1), c(9, 2)];
-  const own1 = [c(12, 3)];
-  const handCards = [c(1, 1), c(2, 2), c(3, 3), c(4, 0), c(6, 1)];
-  const used = new Set([...middle0, ...own0, ...own1, ...handCards].map(cid));
-  const stock = all.filter(x => !used.has(cid(x)));
+  const stackCards = all.slice(0, 15);
+  const middle0 = [all[15], all[16]];
+  const own0 = [all[17], all[18]];
+  const own1 = [all[19]];
+  const handCards = all.slice(20, 25);
+  const used = new Set([...stackCards, ...middle0, ...own0, ...own1, ...handCards].map(cid));
+  const drawPile = all.filter(x => !used.has(cid(x)));
 
   setup({
-    stock, hand: handCards, own: [own0, own1, [], []], middle: [middle0, [], [], []],
-    turns: 2, plays: 3, turnPlayed: true,
+    stack: stackCards, drawPile, hand: handCards, own: [own0, own1, [], []],
+    middle: [middle0, [], [], []], turns: 2, plays: 3, turnPlayed: true,
+    placed: [true, false, false, false],
   });
   run('save()');
-  run('stock=[]; hand=[]; own=[[],[],[],[]]; middle=[[],[],[],[]]; completed=0; turns=0; plays=0; turnPlayed=false; won=false;');
+  run('stack=[]; drawPile=[]; hand=[]; own=[[],[],[],[]]; middle=[[],[],[],[]]; completed=0; placed=[false,false,false,false]; turns=0; plays=0; turnPlayed=false; won=false;');
   assert.equal(run('load()'), true);
+  assert.equal(run('stack.length'), 15);
+  assert.equal(run('drawPile.length'), 35);
   assert.equal(run('hand.length'), 5);
   assert.equal(run('own[0].length'), 2);
-  assert.equal(run('own[1][0].r'), 12);
+  assert.equal(run('own[1][0].r'), all[19].r);
   assert.equal(run('middle[0].length'), 2);
   assert.equal(run('turns'), 2);
   assert.equal(run('plays'), 3);
   assert.equal(run('turnPlayed'), true);
+  assert.deepEqual(Array.from(run('placed')), [true, false, false, false]);
   assert.equal(run('won'), false);
 });
 
 test('a completed pile is part of the save', () => {
   const all = allCards();
-  const removed = new Set(Array.from({ length: 13 }, (_, i) => cid(c(i + 1, 0))));
-  const rest = all.filter(x => !removed.has(cid(x)));
   setup({
-    stock: rest.slice(5), hand: rest.slice(0, 5), completed: 1,
+    stack: all.slice(0, 15), drawPile: all.slice(15, 55), hand: all.slice(55, 60),
+    completed: 1,
   });
   run('save()');
-  run('completed=0; stock=[]; hand=[];');
+  run('completed=0; stack=[]; drawPile=[]; hand=[];');
   assert.equal(run('load()'), true);
   assert.equal(run('completed'), 1);
-  assert.equal(run('stock.length'), 42);
+  assert.equal(run('stack.length'), 15);
+  assert.equal(run('drawPile.length'), 40);
+  assert.equal(run('hand.length'), 5);
 });
 
-test('a corrupt save is ignored', () => {
+test('a corrupt or old save is ignored', () => {
   ctx.localStorage.setItem('dreiziehn', '{"stock":[]}');
   assert.equal(run('load()'), false);
 
@@ -315,8 +361,10 @@ test('a corrupt save is ignored', () => {
   const two = c(2, 0);
   const rest = all.filter(x => cid(x) !== cid(two));
   const bad = {
-    stock: rest, hand: [], own: [[], [], [], []], middle: [[two], [], [], []],
-    completed: 0, turnPlayed: false, turns: 0, plays: 0, won: false, undoStack: [],
+    stack: rest.slice(0, 15), drawPile: rest.slice(15, 54), hand: rest.slice(54, 59),
+    own: [[], [], [], []], middle: [[two], [], [], []],
+    completed: 0, placed: [false, false, false, false],
+    turnPlayed: false, turns: 0, plays: 0, won: false, undoStack: [],
   };
   ctx.localStorage.setItem('dreiziehn', JSON.stringify(bad));
   assert.equal(run('load()'), false, 'a middle pile must start with 1 or a joker');
@@ -344,12 +392,14 @@ test('card colours run from blue for 1 to red for 13', () => {
   assert.match(run('cardColor({ r:0, s:0, j:0 })'), /#b8860b/);
 });
 
-test('the middle shows three cards and your piles show five', () => {
+test('the middle shows three, caches five and the stack only its top', () => {
   const mid = Array.from({ length: 5 }, (_, i) => c(i + 1, 0));
   const own = Array.from({ length: 7 }, (_, i) => c(i + 1, 1));
-  setup({ middle: [mid, [], [], []], own: [own, [], [], []] });
+  const stack = Array.from({ length: 10 }, (_, i) => c(i + 1, 3));
+  setup({ middle: [mid, [], [], []], own: [own, [], [], []], stack });
   assert.equal((ctx.document.getElementById('middle').innerHTML.match(/class="card/g) || []).length, 3);
-  assert.equal((ctx.document.getElementById('own').innerHTML.match(/class="card/g) || []).length, 5);
+  assert.equal((ctx.document.getElementById('own').innerHTML.match(/class="card/g) || []).length, 6);
+  assert.match(ctx.document.getElementById('own').innerHTML, /Your stack, 10 cards/);
 });
 
 test('tapping a hand card then a middle pile plays it', () => {
@@ -362,18 +412,25 @@ test('tapping a hand card then a middle pile plays it', () => {
   assert.equal(run('sel'), null);
 });
 
-test('tapping your pile without a selected card takes its top card', () => {
+test('tapping a cache without a selected card selects its top card', () => {
   setup({ hand: [c(1, 0)], own: [[c(7, 2)], [], [], []] });
   run('tapOwn(0)');
-  assert.equal(run('own[0].length'), 0);
-  assert.equal(run('hand.length'), 2);
-  assert.equal(run('hand[1].r'), 7);
+  assert.equal(run('own[0].length'), 1);
+  assert.equal(run('hand.length'), 1);
+  assert.deepEqual(JSON.parse(run('JSON.stringify(sel)')), { kind: 'own', i: 0 });
+  run('tapOwn(0)');
+  assert.equal(run('sel'), null);
 });
 
 test('tapping the selected card again puts it back', () => {
   setup({ hand: [c(1, 0)] });
   run('tapHand(0)');
   run('tapHand(0)');
+  assert.equal(run('sel'), null);
+
+  setup({ stack: [c(1, 0)] });
+  run('tapStack()');
+  run('tapStack()');
   assert.equal(run('sel'), null);
 });
 
@@ -448,40 +505,80 @@ test('lobby messages update the room bar', () => {
 });
 
 test('game data needs a known version and type', () => {
-  assert.equal(run('isGameMessage({v:1,type:"state"})'), true);
-  assert.equal(run('isGameMessage({v:1,type:"move"})'), true);
-  assert.equal(run('isGameMessage({v:2,type:"state"})'), false);
+  assert.equal(run('isGameMessage({v:2,type:"state"})'), true);
+  assert.equal(run('isGameMessage({v:2,type:"move"})'), true);
+  assert.equal(run('isGameMessage({v:1,type:"state"})'), false);
   assert.equal(run('isGameMessage({type:"state"})'), false);
-  assert.equal(run('isGameMessage({v:1,type:"nope"})'), false);
+  assert.equal(run('isGameMessage({v:2,type:"nope"})'), false);
   assert.equal(run('isGameMessage(null)'), false);
   assert.equal(run('isGameMessage([])'), false);
+});
+
+test('host broadcasts and guest moves use the current game message version', () => {
+  const state = {
+    turn: 0, winner: null, completed: 0, turnPlayed: false,
+    draw: [mc(2)],
+    middle: [[], [], [], []],
+    players: [
+      {
+        id: 'h1', name: 'Host', stack: [mc(3)], hand: [mc(0)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(63)], hand: [mc(62)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+    ],
+  };
+  run(`
+    MP.state=${JSON.stringify(state)}; MP.host=true; MP.socket={readyState:1, send(raw){ globalThis.sent=JSON.parse(raw).data; }};
+    mpBroadcast(true);
+  `);
+  assert.equal(run('sent.v'), 2);
+  assert.equal(run('sent.type'), 'state');
+
+  run(`
+    MP.host=false; MP.active=true; MP.you='g1'; MP.hostId='h1'; MP.pending=false;
+    mpSendMove({kind:'end'});
+  `);
+  assert.equal(run('sent.v'), 2);
+  assert.equal(run('sent.type'), 'move');
 });
 
 test('multiplayer state must have a valid shape', () => {
   const good = {
     turn: 0, winner: null, completed: 0, turnPlayed: false,
+    draw: [2],
     middle: [[0], [], [], []],
-    players: [{ id: 'h1', name: 'Host', stock: [], hand: [1], own: [[], [], [], []] }],
+    players: [{
+      id: 'h1', name: 'Host', stack: [60], hand: [1], own: [[], [], [], []],
+      placed: [false, false, false, false],
+    }],
   };
   assert.equal(run(`isMultiState(${JSON.stringify(good)})`), true);
   assert.equal(run(`isMultiState(${JSON.stringify({ ...good, turn: 5 })})`), false);
+  assert.equal(run(`isMultiState(${JSON.stringify({ ...good, draw: null })})`), false);
   assert.equal(run(`isMultiState(${JSON.stringify({ ...good, middle: [[1], [], [], []] })})`), false);
+  assert.equal(run(`isMultiState(${JSON.stringify({
+    ...good, players: [{ ...good.players[0], placed: [false] }],
+  })})`), false);
   assert.equal(run('isMultiState(null)'), false);
 });
 
-test('the host deals a full deck to every player', () => {
+test('the host deals a 15-card stack each and shares the rest in the draw', () => {
   run(`
     MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.state=null;
     MP.peers=[{id:'h1',name:'Host',host:true,online:true},{id:'g1',name:'Guest',host:false,online:true}];
     mpHostStart(MP.peers);
   `);
   assert.equal(run('MP.state.players.length'), 2);
-  assert.equal(run('MP.state.players[0].stock.length'), 55);
+  assert.equal(run('MP.state.players[0].stack.length'), 15);
   assert.equal(run('MP.state.players[0].hand.length'), 5);
-  assert.equal(run('MP.state.players[1].stock.length'), 55);
+  assert.equal(run('MP.state.players[1].stack.length'), 15);
   assert.equal(run('MP.state.players[1].hand.length'), 5);
+  assert.equal(run('MP.state.draw.length'), 80);
   const ids = JSON.parse(run(
-    'JSON.stringify(MP.state.players.flatMap(p => [...p.stock, ...p.hand]).map(sid))',
+    'JSON.stringify([...MP.state.draw, ...MP.state.players.flatMap(p => [...p.stack, ...p.hand])].map(sid))',
   ));
   assert.equal(new Set(ids).size, 120);
 });
@@ -489,13 +586,20 @@ test('the host deals a full deck to every player', () => {
 test('a played 1 lands in the shared middle and serializes for guests', () => {
   const state = {
     turn: 0, winner: null, completed: 0, turnPlayed: false,
+    draw: [mc(2), mc(60)],
     middle: [[], [], [], []],
     players: [
-      { id: 'h1', name: 'Host', stock: [mc(2)], hand: [mc(0)], own: [[], [], [], []] },
-      { id: 'g1', name: 'Guest', stock: [mc(60)], hand: [mc(61)], own: [[], [], [], []] },
+      {
+        id: 'h1', name: 'Host', stack: [mc(3)], hand: [mc(0)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(63)], hand: [mc(61)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
     ],
   };
-  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; sel=null; MP.pending=false; MP.state=${JSON.stringify(state)};`);
   run('sel={kind:"hand",i:0}; mpTapMiddle(0)');
   assert.equal(run('MP.state.middle[0].length'), 1);
   assert.equal(run('MP.state.middle[0][0].r'), 1);
@@ -503,104 +607,233 @@ test('a played 1 lands in the shared middle and serializes for guests', () => {
 
   const wire = JSON.parse(run('JSON.stringify(serializeState(MP.state))'));
   assert.deepEqual(wire.middle[0], [0]);
+  assert.deepEqual(wire.draw, [2, 60]);
   const guestState = JSON.parse(run(`JSON.stringify(deserializeState(${JSON.stringify(wire)}))`));
   assert.equal(guestState.middle[0][0].r, 1);
   assert.equal(guestState.middle[0][0].s, 0);
+  assert.equal(guestState.draw.length, 2);
 });
 
 test('a guest renders the shared middle from the host state', () => {
   const hostState = {
     turn: 1, winner: null, completed: 0, turnPlayed: false,
+    draw: [mc(2), mc(60)],
     middle: [[mc(0)], [], [], []],
     players: [
-      { id: 'h1', name: 'Host', stock: [], hand: [], own: [[], [], [], []] },
-      { id: 'g1', name: 'Guest', stock: [], hand: [mc(61)], own: [[], [], [], []] },
+      {
+        id: 'h1', name: 'Host', stack: [mc(3)], hand: [], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(63)], hand: [mc(61)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
     ],
   };
   const wire = JSON.parse(run(`JSON.stringify(serializeState(${JSON.stringify(hostState)}))`));
   run(`MP.active=true; MP.host=false; MP.you='g1'; MP.hostId='h1'; MP.meIndex=1; MP.state=null;`);
-  run(`mpHandleGameMessage('h1', ${JSON.stringify({ v: 1, type: 'state', state: wire })})`);
+  run(`mpHandleGameMessage('h1', ${JSON.stringify({ v: 2, type: 'state', state: wire })})`);
   assert.equal(run('MP.state.middle[0][0].r'), 1);
   assert.match(ctx.document.getElementById('middle').innerHTML, /1 of spades/);
   assert.equal(ctx.document.getElementById('turnBar').textContent, 'Dein Zug!');
 });
 
-test('the host accepts a guest move and updates the shared middle', () => {
+test('the host accepts a guest hand move and updates the shared middle', () => {
   const state = {
     turn: 1, winner: null, completed: 0, turnPlayed: false,
+    draw: [mc(2), mc(61)],
     middle: [[], [], [], []],
     players: [
-      { id: 'h1', name: 'Host', stock: [mc(2)], hand: [mc(0)], own: [[], [], [], []] },
-      { id: 'g1', name: 'Guest', stock: [mc(61)], hand: [mc(60)], own: [[], [], [], []] },
+      {
+        id: 'h1', name: 'Host', stack: [mc(3)], hand: [mc(0)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(63)], hand: [mc(60)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
     ],
   };
-  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
-  run(`mpHandleGameMessage('g1', {v:1,type:'move',to:'h1',move:{kind:'middle',card:0,pile:0}})`);
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; sel=null; MP.pending=false; MP.state=${JSON.stringify(state)};`);
+  run(`mpHandleGameMessage('g1', {v:2,type:'move',to:'h1',move:{kind:'middle',from:'hand',card:0,pile:0}})`);
   assert.equal(run('MP.state.middle[0].length'), 1);
   assert.equal(run('MP.state.middle[0][0].r'), 1);
   assert.equal(run('MP.state.players[1].hand.length'), 0);
 });
 
-test('ending a turn passes it to the next player', () => {
+test('multiplayer stack tops and cache tops move up', () => {
   const state = {
-    turn: 0, winner: null, completed: 0, turnPlayed: true,
+    turn: 0, winner: null, completed: 0, turnPlayed: false,
+    draw: [],
     middle: [[], [], [], []],
     players: [
-      { id: 'h1', name: 'Host', stock: [mc(2), mc(3), mc(4), mc(5), mc(6)], hand: [mc(0)], own: [[], [], [], []] },
-      { id: 'g1', name: 'Guest', stock: [mc(60)], hand: [mc(61)], own: [[], [], [], []] },
+      {
+        id: 'h1', name: 'Host', stack: [mc(0)], hand: [], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(63)], hand: [mc(62)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
     ],
   };
-  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; sel=null; MP.pending=false; MP.state=${JSON.stringify(state)};`);
+  run('mpTapStack()');
+  assert.equal(run('mpSelectedCard().r'), 1);
+  run('mpTapOwn(2)');
+  assert.equal(run('MP.state.players[0].stack.length'), 0);
+  assert.equal(run('MP.state.players[0].own[2].length'), 1);
+  run('mpTapOwn(2)');
+  run('mpTapMiddle(0)');
+  assert.equal(run('MP.state.players[0].own[2].length'), 0);
+  assert.equal(run('MP.state.middle[0][0].r'), 1);
+  assert.equal(run('MP.state.winner'), 0, 'stack and caches are now empty');
+});
+
+test('the host enforces one hand card per cache each turn', () => {
+  const state = {
+    turn: 0, winner: null, completed: 0, turnPlayed: false,
+    draw: [],
+    middle: [[], [], [], []],
+    players: [
+      {
+        id: 'h1', name: 'Host', stack: [], hand: [mc(0), mc(1)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(63)], hand: [mc(62)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+    ],
+  };
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; sel=null; MP.pending=false; MP.state=${JSON.stringify(state)};`);
+  run('mpTapHand(0); mpTapOwn(0)');
+  assert.equal(run('MP.state.players[0].placed[0]'), true);
+  assert.equal(run('MP.state.players[0].hand.length'), 1);
+  run('mpTapHand(0); mpTapOwn(0)');
+  assert.equal(run('MP.state.players[0].hand.length'), 1);
+  assert.equal(run('MP.state.players[0].own[0].length'), 1);
+});
+
+test('a completed middle pile recycles into the shared draw in multiplayer', () => {
+  const twelve = Array.from({ length: 12 }, (_, i) => mc(i));
+  const state = {
+    turn: 0, winner: null, completed: 0, turnPlayed: false,
+    draw: [mc(20)],
+    middle: [twelve, [], [], []],
+    players: [
+      {
+        id: 'h1', name: 'Host', stack: [], hand: [mc(12)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(63)], hand: [mc(62)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+    ],
+  };
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; sel=null; MP.pending=false; MP.state=${JSON.stringify(state)};`);
+  run('mpTapHand(0); mpTapMiddle(0)');
+  assert.equal(run('MP.state.completed'), 1);
+  assert.equal(run('MP.state.middle[0].length'), 0);
+  assert.equal(run('MP.state.draw.length'), 14);
+});
+
+test('ending a turn refills from the shared draw and passes it on', () => {
+  const state = {
+    turn: 0, winner: null, completed: 0, turnPlayed: true,
+    draw: [mc(2), mc(3), mc(4), mc(5), mc(6)],
+    middle: [[], [], [], []],
+    players: [
+      {
+        id: 'h1', name: 'Host', stack: [mc(7)], hand: [mc(0)], own: [[], [], [], []],
+        placed: [true, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(63)], hand: [mc(61)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+    ],
+  };
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; sel=null; MP.pending=false; MP.state=${JSON.stringify(state)};`);
   run('mpApplyHost({kind:"end"})');
   assert.equal(run('MP.state.players[0].hand.length'), 5);
-  assert.equal(run('MP.state.players[0].stock.length'), 1);
+  assert.equal(run('MP.state.players[0].stack.length'), 1);
+  assert.equal(run('MP.state.draw.length'), 1);
+  assert.deepEqual(Array.from(run('MP.state.players[0].placed')),
+    [false, false, false, false]);
   assert.equal(run('MP.state.turn'), 1);
   assert.equal(run('MP.state.turnPlayed'), false);
   assert.equal(run('mpIsMyTurn()'), false);
 });
 
-test('drawing the last stock cards at the end of a turn wins', () => {
-  const state = {
-    turn: 0, winner: null, completed: 0, turnPlayed: true,
-    middle: [[], [], [], []],
-    players: [
-      { id: 'h1', name: 'Host', stock: [mc(2)], hand: [mc(0)], own: [[], [], [], []] },
-      { id: 'g1', name: 'Guest', stock: [mc(60)], hand: [mc(61)], own: [[], [], [], []] },
-    ],
-  };
-  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
-  run('mpApplyHost({kind:"end"})');
-  assert.equal(run('MP.state.players[0].hand.length'), 2);
-  assert.equal(run('MP.state.players[0].stock.length'), 0);
-  assert.equal(run('MP.state.winner'), 0);
-});
-
-test('a player with an empty stock and empty piles wins by playing a card', () => {
+test('a player with an empty stack and caches wins by playing a card', () => {
   const state = {
     turn: 0, winner: null, completed: 0, turnPlayed: false,
+    draw: [mc(2)],
     middle: [[], [], [], []],
     players: [
-      { id: 'h1', name: 'Host', stock: [], hand: [mc(0)], own: [[], [], [], []] },
-      { id: 'g1', name: 'Guest', stock: [mc(60)], hand: [mc(61)], own: [[], [], [], []] },
+      {
+        id: 'h1', name: 'Host', stack: [], hand: [mc(0)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(63)], hand: [mc(61)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
     ],
   };
-  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; sel=null; MP.pending=false; MP.state=${JSON.stringify(state)};`);
   run('sel={kind:"hand",i:0}; mpTapMiddle(0)');
   assert.equal(run('MP.state.winner'), 0);
   assert.match(ctx.document.getElementById('winTitle').textContent, /Dreiziehn/);
 });
 
+test('drawing cards from the shared draw does not decide the win', () => {
+  const state = {
+    turn: 0, winner: null, completed: 0, turnPlayed: true,
+    draw: [mc(2)],
+    middle: [[], [], [], []],
+    players: [
+      {
+        id: 'h1', name: 'Host', stack: [mc(7)], hand: [], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(63)], hand: [mc(61)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+    ],
+  };
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; sel=null; MP.pending=false; MP.state=${JSON.stringify(state)};`);
+  run('mpApplyHost({kind:"end"})');
+  assert.equal(run('MP.state.players[0].hand.length'), 1);
+  assert.equal(run('MP.state.draw.length'), 0);
+  assert.equal(run('MP.state.players[0].stack.length'), 1);
+  assert.equal(run('MP.state.winner'), null);
+});
+
 test('the host can remove a player and the turn adjusts', () => {
   const state = {
     turn: 1, winner: null, completed: 0, turnPlayed: true,
+    draw: [mc(2)],
     middle: [[], [], [], []],
     players: [
-      { id: 'h1', name: 'Host', stock: [mc(2)], hand: [mc(0)], own: [[], [], [], []] },
-      { id: 'g1', name: 'Guest', stock: [mc(60)], hand: [mc(61)], own: [[], [], [], []] },
-      { id: 'g2', name: 'Other', stock: [mc(120)], hand: [mc(121)], own: [[], [], [], []] },
+      {
+        id: 'h1', name: 'Host', stack: [mc(3)], hand: [mc(0)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g1', name: 'Guest', stack: [mc(60)], hand: [mc(61)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g2', name: 'Other', stack: [mc(120)], hand: [mc(121)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
     ],
   };
-  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; sel=null; MP.pending=false; MP.state=${JSON.stringify(state)};`);
   run(`mpRemovePlayer('g1')`);
   assert.equal(run('MP.state.players.length'), 2);
   assert.equal(run('MP.state.players.map(p => p.id).join(",")'), 'h1,g2');
@@ -611,10 +844,17 @@ test('the host can remove a player and the turn adjusts', () => {
 test('a removed player sees the removal overlay', () => {
   const state = {
     turn: 0, winner: null, completed: 0, turnPlayed: false,
+    draw: [mc(2)],
     middle: [[], [], [], []],
     players: [
-      { id: 'h1', name: 'Host', stock: [mc(2)], hand: [mc(0)], own: [[], [], [], []] },
-      { id: 'g2', name: 'Other', stock: [mc(120)], hand: [mc(121)], own: [[], [], [], []] },
+      {
+        id: 'h1', name: 'Host', stack: [mc(3)], hand: [mc(0)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
+      {
+        id: 'g2', name: 'Other', stack: [mc(120)], hand: [mc(121)], own: [[], [], [], []],
+        placed: [false, false, false, false],
+      },
     ],
   };
   run(`MP.active=true; MP.host=false; MP.you='g1'; MP.hostId='h1'; MP.meIndex=-1; MP.state=${JSON.stringify(state)}; drawMulti();`);
