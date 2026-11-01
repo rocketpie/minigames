@@ -75,7 +75,7 @@ function setPosition({ board, turn = 'w', castle = {}, ep = null, half = 0, full
   })}; sel = -1; targets = []; promo = null;`);
 }
 
-test('initial position: 32 figures, bewegues and trebuchets on the outer files, Gold starts', () => {
+test('initial position: 32 figures, teleporters on the outer files and trebuchets beside them, Gold starts', () => {
   run('game = newChess()');
   assert.equal(run('game.board.filter(Boolean).length'), 32);
   assert.equal(run('game.turn'), 'w');
@@ -258,12 +258,12 @@ test('promotion needs a choice and allows underpromotion', () => {
   assert.equal(knight.state.board[at('a8')], 'N');
 
   setPosition({ board });
-  const beweg = apply({ from: at('a7'), to: at('a8'), promo: 'T' });
-  assert.equal(beweg.ok, true);
-  assert.equal(beweg.state.board[at('a8')], 'T');
+  const teleporter = apply({ from: at('a7'), to: at('a8'), promo: 'T' });
+  assert.equal(teleporter.ok, true);
+  assert.equal(teleporter.state.board[at('a8')], 'T');
 });
 
-test('a beweg can block a queen check', () => {
+test('a teleporter can block a queen check', () => {
   const board = empty();
   put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'a2', 'T'); put(board, 'h4', 'q');
   setPosition({ board });
@@ -320,7 +320,7 @@ test('fifty-move rule and insufficient material are draws', () => {
   assert.equal(run(`insufficientMaterial(${JSON.stringify(rook)})`), false);
 });
 
-test('a beweg teleports to any empty square without a capture', () => {
+test('a teleporter teleports to any empty square without a capture', () => {
   const board = empty();
   put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'a2', 'T');
   setPosition({ board });
@@ -338,7 +338,7 @@ test('a beweg teleports to any empty square without a capture', () => {
   assert.deepEqual(result.state.captured, []);
 });
 
-test('a beweg may not attack the rival king, queen, trebuchet or another beweg, but any other figure', () => {
+test('a teleporter may not attack the rival king, queen, trebuchet or another teleporter, but any other figure', () => {
   const board = empty();
   put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'a2', 'T');
   put(board, 'd5', 'q'); put(board, 'h6', 'r'); put(board, 'f5', 't'); put(board, 'c4', 'c');
@@ -352,7 +352,7 @@ test('a beweg may not attack the rival king, queen, trebuchet or another beweg, 
   assert.ok(options.some(m => m.to === at('h6') && m.suicide));
 });
 
-test('a beweg capture explodes both figures and leaves a crater', () => {
+test('a teleporter capture explodes both figures and leaves a crater', () => {
   const board = empty();
   put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'a2', 'T'); put(board, 'h6', 'r');
   setPosition({ board });
@@ -369,7 +369,7 @@ test('a beweg capture explodes both figures and leaves a crater', () => {
   assert.deepEqual(js(run(`spoils({ captured: ${JSON.stringify(result.state.captured)} }, 'w')`)), ['T']);
 });
 
-test('a beweg never gives check, even next to the rival king', () => {
+test('a teleporter never gives check, even next to the rival king', () => {
   const board = empty();
   put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'd7', 'T');
   setPosition({ board, turn: 'b' });
@@ -378,7 +378,7 @@ test('a beweg never gives check, even next to the rival king', () => {
   assert.ok(js(run(`legalMoves(game, ${at('e8')})`)).some(m => m.to === at('d7')));
 });
 
-test('a beweg may not teleport away from a pinned square', () => {
+test('a teleporter may not teleport away from a pinned square', () => {
   const board = empty();
   put(board, 'e1', 'K'); put(board, 'e2', 'T'); put(board, 'e8', 'r'); put(board, 'h8', 'k');
   setPosition({ board });
@@ -388,7 +388,7 @@ test('a beweg may not teleport away from a pinned square', () => {
   assert.ok(options.some(m => m.to === at('e3')));
 });
 
-test('a lone beweg cannot force mate', () => {
+test('a lone teleporter cannot force mate', () => {
   const bare = empty();
   put(bare, 'e1', 'K'); put(bare, 'e8', 'k');
   assert.equal(run(`insufficientMaterial(${JSON.stringify(put(bare.slice(), 'a1', 'T'))})`), true);
