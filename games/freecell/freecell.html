@@ -32,6 +32,7 @@
     font-size: clamp(1rem, 3.2vw, 1.45rem); letter-spacing: .1em; color: #f4e4bd;
     text-shadow: 0 1px 0 #0009, 0 0 18px rgba(243, 196, 107, .18);
   }
+  h1 a { display: flex; align-items: center; gap: .42rem; color: inherit; font-size: inherit; text-decoration: none; }
   .logo {
     width: 1.3rem; aspect-ratio: 5 / 7; overflow: hidden; border-radius: 2px;
     box-shadow: 0 1px 4px #000a, 0 0 0 1px #c7a04a55;
@@ -212,7 +213,7 @@
 <div id="debug" role="status" aria-live="polite"></div>
 <div id="app">
   <header>
-    <h1><span class="logo" aria-hidden="true"><img src="card-back.svg" alt=""></span>FreeCell</h1>
+    <h1><a href="freecell.html"><span class="logo" aria-hidden="true"><img src="card-back.svg" alt=""></span>FreeCell</a></h1>
     <div class="stat">MOVES<b id="moves">0</b></div>
     <button id="undo" class="tool" disabled><span aria-hidden="true">↺</span> Undo</button>
     <button id="new" class="tool"><span aria-hidden="true">★</span> New game</button>

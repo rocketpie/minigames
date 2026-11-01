@@ -15,6 +15,7 @@
   }
   header { width: min(96vw, 46vh); display: flex; align-items: center; gap: .6rem; }
   h1 { margin: 0 auto 0 0; font-size: 1.4rem; letter-spacing: .15em; }
+  h1 a { color: inherit; text-decoration: none; }
   .stat { background: #223154; padding: .35rem .7rem; border-radius: 6px; font-size: .7rem; text-align: center; line-height: 1.3; }
   .stat b { display: block; font-size: 1.05rem; color: #9fe8ff; }
   button { font: inherit; font-size: .85rem; padding: .5rem .8rem; border: 0; border-radius: 6px; background: #3d6ea8; color: #eaf6ff; cursor: pointer; }
@@ -97,7 +98,7 @@
 </head>
 <body>
 <header>
-  <h1>ICEWALL</h1>
+  <h1><a href="icewall.html">ICEWALL</a></h1>
   <div class="stat">Score<b id="score">0</b></div>
   <div class="stat">Mult<b id="mult">×1</b></div>
   <button id="reset">Reset</button>

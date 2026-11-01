@@ -35,6 +35,7 @@
       -webkit-background-clip: text; background-clip: text; color: transparent;
       filter: drop-shadow(0 1px 0 rgba(0, 0, 0, .55));
     }
+    h1 a { display: flex; align-items: center; gap: .45rem; color: inherit; text-decoration: none; }
     .crest { width: 1.45rem; height: 1.45rem; display: block; color: #f2e0ac; --accent: #2f6b47; --stroke: #1d2a16; flex: 0 0 auto; }
     .crest svg { display: block; width: 100%; height: 100%; }
     .tools { display: flex; gap: .35rem; }
@@ -670,7 +671,7 @@
 
   <div id="app">
     <header>
-      <h1><span class="crest"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p-t" /></svg></span>Beweg</h1>
+      <h1><a href="beweg.html"><span class="crest"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p-t" /></svg></span>Beweg</a></h1>
       <div class="tools">
         <button id="multi" class="tool">Multiplayer</button>
         <button id="new" class="tool">New game</button>
