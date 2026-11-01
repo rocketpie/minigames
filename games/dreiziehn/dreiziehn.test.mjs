@@ -37,6 +37,7 @@ const ctx = {
   },
   URL,
   URLSearchParams,
+  confirm: () => true,
   localStorage: {
     getItem: k => store.get(k) ?? null,
     setItem: (k, v) => store.set(k, String(v)),
@@ -111,7 +112,7 @@ test('new game deals five cards and leaves the rest in the stock', () => {
   assert.equal(new Set(ids).size, 60);
 });
 
-test('the middle piles build from ace upward, whatever the suit', () => {
+test('the middle piles build from 1 upward, whatever the suit', () => {
   setup({ hand: [c(1, 0), c(2, 1), c(5, 2)] });
   run('sel = {kind:"hand", i:0}; playMiddle(0)');
   assert.deepEqual(Array.from(run('middle[0].map(c => c.r)')), [1]);
@@ -127,13 +128,13 @@ test('a joker is wild on the middle piles', () => {
   assert.equal(run('middle[0].length'), 1);
   assert.equal(run('middle[0][0].r'), 0);
   run('sel = {kind:"hand", i:0}; playMiddle(0)');
-  assert.equal(run('middle[0].length'), 1, 'the joker stood in for an ace, so an ace no longer fits');
+  assert.equal(run('middle[0].length'), 1, 'the joker stood in for a 1, so a 1 no longer fits');
   run('sel = {kind:"hand", i:1}; playMiddle(0)');
   assert.equal(run('middle[0].length'), 2);
   assert.equal(run('middle[0][1].r'), 2);
 });
 
-test('a king completes a middle pile and frees its slot', () => {
+test('a 13 completes a middle pile and frees its slot', () => {
   const twelve = Array.from({ length: 12 }, (_, i) => c(i + 1, 0));
   setup({ hand: [c(13, 0), c(1, 1)], middle: [twelve, [], [], []] });
   run('sel = {kind:"hand", i:0}; playMiddle(0)');
@@ -142,7 +143,7 @@ test('a king completes a middle pile and frees its slot', () => {
   assert.equal(run('plays'), 1);
   run('sel = {kind:"hand", i:0}; playMiddle(0)');
   assert.equal(run('middle[0].length'), 1);
-  assert.equal(run('middle[0][0].r'), 1, 'the slot starts again at an ace');
+  assert.equal(run('middle[0][0].r'), 1, 'the slot starts again at 1');
 });
 
 test('a joker can finish a pile', () => {
@@ -318,7 +319,7 @@ test('a corrupt save is ignored', () => {
     completed: 0, turnPlayed: false, turns: 0, plays: 0, won: false, undoStack: [],
   };
   ctx.localStorage.setItem('dreiziehn', JSON.stringify(bad));
-  assert.equal(run('load()'), false, 'a middle pile must start with an ace or joker');
+  assert.equal(run('load()'), false, 'a middle pile must start with 1 or a joker');
   store.delete('dreiziehn');
 });
 
@@ -335,6 +336,20 @@ test('jokers render as jokers', () => {
   const html = run('faceHTML({ r:0, s:0, j:0 })');
   assert.match(html, /JOKER/);
   assert.equal((html.match(/class="corner /g) || []).length, 2);
+});
+
+test('card colours run from blue for 1 to red for 13', () => {
+  assert.match(run('cardColor({ r:1, s:0 })'), /hsl\(220/);
+  assert.match(run('cardColor({ r:13, s:0 })'), /hsl\(360/);
+  assert.match(run('cardColor({ r:0, s:0, j:0 })'), /#b8860b/);
+});
+
+test('the middle shows three cards and your piles show five', () => {
+  const mid = Array.from({ length: 5 }, (_, i) => c(i + 1, 0));
+  const own = Array.from({ length: 7 }, (_, i) => c(i + 1, 1));
+  setup({ middle: [mid, [], [], []], own: [own, [], [], []] });
+  assert.equal((ctx.document.getElementById('middle').innerHTML.match(/class="card/g) || []).length, 3);
+  assert.equal((ctx.document.getElementById('own').innerHTML.match(/class="card/g) || []).length, 5);
 });
 
 test('tapping a hand card then a middle pile plays it', () => {
@@ -363,9 +378,9 @@ test('tapping the selected card again puts it back', () => {
 });
 
 test('the middle pile tells you the next rank', () => {
-  assert.equal(run('nextRank([])'), 'A');
+  assert.equal(run('nextRank([])'), '1');
   assert.equal(run('nextRank([{r:1,s:0}])'), '2');
-  assert.equal(run('nextRank(Array.from({length:12},(_,i)=>({r:i+1,s:0})))'), 'K');
+  assert.equal(run('nextRank(Array.from({length:12},(_,i)=>({r:i+1,s:0})))'), '13');
 });
 
 test('the multiplayer button opens the lobby with the game as return url', () => {
@@ -378,6 +393,35 @@ test('the multiplayer button opens the lobby with the game as return url', () =>
   assert.equal(run('safeLobby("wss://lobby.co3d.eu/ws")'), 'wss://lobby.co3d.eu/ws');
   assert.equal(run('safeLobby("ws://localhost:8080/ws")'), 'ws://localhost:8080/ws');
   assert.equal(run('safeLobby("wss://evil.example/ws")'), '');
+});
+
+test('a tunneled game uses the lobby on the same origin', () => {
+  const saved = ctx.location;
+  ctx.location = {
+    ...saved,
+    href: 'https://abc.trycloudflare.com/games/dreiziehn/dreiziehn.html',
+    origin: 'https://abc.trycloudflare.com',
+    pathname: '/games/dreiziehn/dreiziehn.html',
+    hostname: 'abc.trycloudflare.com',
+    protocol: 'https:',
+    host: 'abc.trycloudflare.com',
+  };
+  try {
+    assert.equal(run('lobbyBase()'), 'https://abc.trycloudflare.com/lobby/');
+    assert.equal(
+      run('lobbyUrl(gameUrl())'),
+      'https://abc.trycloudflare.com/lobby/?return=https%3A%2F%2Fabc.trycloudflare.com' +
+        '%2Fgames%2Fdreiziehn%2Fdreiziehn.html&maxPlayers=4',
+    );
+    assert.equal(run('defaultLobbyWs()'), 'wss://abc.trycloudflare.com/ws');
+    assert.equal(
+      run('safeLobby("wss://abc.trycloudflare.com/ws")'),
+      'wss://abc.trycloudflare.com/ws',
+    );
+    assert.equal(run('safeLobby("wss://evil.example/ws")'), '');
+  } finally {
+    ctx.location = saved;
+  }
 });
 
 test('room, token and name are read from the return url', () => {
@@ -442,7 +486,7 @@ test('the host deals a full deck to every player', () => {
   assert.equal(new Set(ids).size, 120);
 });
 
-test('a played ace lands in the shared middle and serializes for guests', () => {
+test('a played 1 lands in the shared middle and serializes for guests', () => {
   const state = {
     turn: 0, winner: null, completed: 0, turnPlayed: false,
     middle: [[], [], [], []],
@@ -477,7 +521,7 @@ test('a guest renders the shared middle from the host state', () => {
   run(`MP.active=true; MP.host=false; MP.you='g1'; MP.hostId='h1'; MP.meIndex=1; MP.state=null;`);
   run(`mpHandleGameMessage('h1', ${JSON.stringify({ v: 1, type: 'state', state: wire })})`);
   assert.equal(run('MP.state.middle[0][0].r'), 1);
-  assert.match(ctx.document.getElementById('middle').innerHTML, /Ace of spades/);
+  assert.match(ctx.document.getElementById('middle').innerHTML, /1 of spades/);
   assert.equal(ctx.document.getElementById('turnBar').textContent, 'Dein Zug!');
 });
 
@@ -544,4 +588,36 @@ test('a player with an empty stock and empty piles wins by playing a card', () =
   run('sel={kind:"hand",i:0}; mpTapMiddle(0)');
   assert.equal(run('MP.state.winner'), 0);
   assert.match(ctx.document.getElementById('winTitle').textContent, /Dreiziehn/);
+});
+
+test('the host can remove a player and the turn adjusts', () => {
+  const state = {
+    turn: 1, winner: null, completed: 0, turnPlayed: true,
+    middle: [[], [], [], []],
+    players: [
+      { id: 'h1', name: 'Host', stock: [mc(2)], hand: [mc(0)], own: [[], [], [], []] },
+      { id: 'g1', name: 'Guest', stock: [mc(60)], hand: [mc(61)], own: [[], [], [], []] },
+      { id: 'g2', name: 'Other', stock: [mc(120)], hand: [mc(121)], own: [[], [], [], []] },
+    ],
+  };
+  run(`MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.meIndex=0; MP.state=${JSON.stringify(state)};`);
+  run(`mpRemovePlayer('g1')`);
+  assert.equal(run('MP.state.players.length'), 2);
+  assert.equal(run('MP.state.players.map(p => p.id).join(",")'), 'h1,g2');
+  assert.equal(run('MP.state.turn'), 1);
+  assert.equal(run('MP.state.turnPlayed'), false);
+});
+
+test('a removed player sees the removal overlay', () => {
+  const state = {
+    turn: 0, winner: null, completed: 0, turnPlayed: false,
+    middle: [[], [], [], []],
+    players: [
+      { id: 'h1', name: 'Host', stock: [mc(2)], hand: [mc(0)], own: [[], [], [], []] },
+      { id: 'g2', name: 'Other', stock: [mc(120)], hand: [mc(121)], own: [[], [], [], []] },
+    ],
+  };
+  run(`MP.active=true; MP.host=false; MP.you='g1'; MP.hostId='h1'; MP.meIndex=-1; MP.state=${JSON.stringify(state)}; drawMulti();`);
+  assert.equal(ctx.document.getElementById('turnBar').textContent, 'Du bist nicht mehr im Spiel.');
+  assert.equal(ctx.document.getElementById('winTitle').textContent, 'Entfernt');
 });

@@ -96,6 +96,13 @@
   .player-chip b { color: #f4e4bd; font-weight: 600; }
   .player-chip .counts { color: #9fc0a1; }
   .player-chip.offline { opacity: .5; }
+  .player-chip .kick {
+    margin-left: .15rem; padding: 0 .32rem; border: 1px solid rgba(243, 196, 107, .3);
+    border-radius: 4px; background: rgba(165, 35, 28, .55); color: #ffe6b0;
+    font: inherit; font-size: .7rem; line-height: 1.35; cursor: pointer;
+  }
+  .player-chip .kick:hover { background: #a5231c; }
+  .player-chip .kick:focus-visible { outline: 2px solid #f3c46b; outline-offset: 1px; }
 
   #table {
     --cw: 72px; --ch: 101px; --gap: 4px;
@@ -107,11 +114,15 @@
     font-size: .52rem; letter-spacing: .16em; text-transform: uppercase;
     color: #9fc0a1; text-align: center;
   }
-  .row { display: flex; gap: var(--gap); justify-content: center; }
+  .row { display: flex; gap: var(--gap); justify-content: center; align-items: flex-start; }
 
   /* Wooden trays, same language as the freecell table. */
   .slot {
-    position: relative; width: var(--cw); height: var(--ch); padding: calc(var(--cw) * .045);
+    --slot-pad: calc(var(--cw) * .045);
+    --peek: calc(var(--cw) * .15);
+    position: relative; width: var(--cw);
+    height: calc(var(--ch) + (var(--n, 1) - 1) * var(--peek));
+    padding: var(--slot-pad);
     border-radius: calc(var(--cw) * .09);
     background:
       linear-gradient(90deg, rgba(255, 242, 207, .17), transparent 14% 86%, rgba(40, 20, 4, .3)),
@@ -134,7 +145,11 @@
     box-shadow: inset 0 3px 8px #000c, inset 0 0 0 1px #000a;
     color: rgba(228, 197, 122, .2); font-size: calc(var(--cw) * .38); line-height: 1;
   }
-  .slot .card { position: absolute; inset: calc(var(--cw) * .045); width: auto; height: auto; }
+  .slot .card {
+    position: absolute; left: var(--slot-pad); right: var(--slot-pad);
+    top: calc(var(--slot-pad) + var(--idx, 0) * var(--peek));
+    width: auto; height: calc(var(--ch) - 2 * var(--slot-pad));
+  }
   .badge {
     position: absolute; right: 5%; bottom: 5%; z-index: 5;
     min-width: 1.15em; padding: .04em .22em; border-radius: 99px;
@@ -169,12 +184,11 @@
     backface-visibility: hidden; -webkit-backface-visibility: hidden;
   }
   .front {
-    background: linear-gradient(150deg, #fffef9, #f3ecd8); color: #1c1b18;
+    background: linear-gradient(150deg, #fffef9, #f3ecd8); color: var(--card-color, #1c1b18);
     box-shadow:
       inset 0 0 0 1px rgba(0, 0, 0, .16), inset 0 0 0 3px rgba(255, 255, 255, .55),
       0 2px 4px rgba(0, 0, 0, .42);
   }
-  .card.red .front { color: #a5231c; }
   .back {
     transform: rotateY(180deg);
     background: #03170e url("card-back.svg") center / 100% 100% no-repeat;
@@ -290,7 +304,7 @@
 
   <div id="table">
     <div class="section">
-      <div class="label">Middle · build A → K, suit doesn't matter</div>
+      <div class="label">Middle · build 1 → 13, suit doesn't matter</div>
       <div id="middle" class="row"></div>
     </div>
     <div class="section">
@@ -318,9 +332,10 @@
     <summary>How to play</summary>
     <ul>
       <li><b>Deck:</b> one 60-card deck per player: 52 cards plus two jokers per suit. In multiplayer every player gets their own deck.</li>
+      <li><b>Cards:</b> numbered 1–13; the card colour runs from blue (1) to red (13).</li>
       <li><b>Start:</b> shuffle the deck, deal yourself 5 hand cards, and leave the rest face down in the stock.</li>
       <li><b>Turn:</b> play at least one card, then end your turn. Ending the turn draws back up to 5 from the stock; in multiplayer the turn then passes to the next player.</li>
-      <li><b>Middle:</b> four shared middle piles. Each starts with an ace and counts up to a king; suit doesn't matter. A joker is wild. A completed king pile is set aside and its slot starts again at ace. Everyone sees the same middle cards.</li>
+      <li><b>Middle:</b> four shared middle piles. Each starts with a 1 and counts up to a 13; suit doesn't matter. A joker is wild. A completed 13 pile is set aside and its slot starts again at 1. Everyone sees the same middle cards.</li>
       <li><b>Your piles:</b> four free storage piles. Any card, any order. Click a pile to take its top card into your hand (when your hand has room), or play a selected hand card onto it. They must be empty to win.</li>
       <li><b>Win:</b> empty the stock and all four of your piles. Cards left in your hand are fine. In multiplayer the first player to do this wins.</li>
     </ul>
@@ -339,26 +354,30 @@
 </div>
 
 <script>
-const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-const RANK_NAMES = ['Ace','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Jack','Queen','King'];
+const RANKS = ['1','2','3','4','5','6','7','8','9','10','11','12','13'];
+const RANK_NAMES = ['1','2','3','4','5','6','7','8','9','10','11','12','13'];
 const SUITS = ['♠','♥','♦','♣'];
 const SUIT_NAMES = ['spades','hearts','diamonds','clubs'];
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g,
   ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-const isRed = s => s === 1 || s === 2;
 const KEY = 'dreiziehn';
 const MAX_HAND = 5;
 const DECK_SIZE = 60;
 const MAX_PLAYERS = 4;
-const LOBBY_URL = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
-  ? 'http://localhost:8080/'
-  : 'https://lobby.co3d.eu/';
+const isLocal = () => location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const isProd = () => location.hostname === 'co3d.eu' || location.hostname === 'www.co3d.eu';
 
 const gameUrl = () => location.origin + location.pathname;
 
+function lobbyBase() {
+  if (isLocal()) return 'http://localhost:8080/';
+  if (isProd()) return 'https://lobby.co3d.eu/';
+  return new URL('/lobby/', location.origin).href;
+}
+
 function lobbyUrl(returnUrl) {
-  const url = new URL(LOBBY_URL);
+  const url = new URL(lobbyBase());
   url.searchParams.set('return', returnUrl);
   url.searchParams.set('maxPlayers', String(MAX_PLAYERS));
   return url.toString();
@@ -371,15 +390,18 @@ function lobbyParams(search, hash) {
 }
 
 function defaultLobbyWs() {
-  return location.hostname === 'localhost' || location.hostname === '127.0.0.1'
-    ? 'ws://localhost:8080/ws'
-    : 'wss://lobby.co3d.eu/ws';
+  if (isLocal()) return 'ws://localhost:8080/ws';
+  if (isProd()) return 'wss://lobby.co3d.eu/ws';
+  const url = new URL('/ws', location.origin);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url.href;
 }
 
 function safeLobby(value) {
   try {
     const url = new URL(String(value ?? ''));
     if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return '';
+    if (url.host === location.host) return url.href;
     return ['lobby.co3d.eu', 'localhost', '127.0.0.1'].includes(url.hostname) ? url.href : '';
   } catch {
     return '';
@@ -416,6 +438,9 @@ const cardName = c => isJoker(c)
 const canMiddle = (card, pile) => !!card && pile.length < 13 &&
   (isJoker(card) || card.r === pile.length + 1);
 const nextRank = pile => pile.length >= 13 ? '—' : RANKS[pile.length];
+const cardColor = c => isJoker(c)
+  ? '#b8860b'
+  : `hsl(${220 + (c.r - 1) * (140 / 12)}, 72%, 46%)`;
 
 function deck() {
   const cards = [];
@@ -776,6 +801,28 @@ function mpHandleGameMessage(from, data) {
   }
 }
 
+function mpRemovePlayer(id) {
+  if (!MP.host || !MP.state || MP.state.winner !== null) return;
+  const index = MP.state.players.findIndex(p => p.id === id);
+  if (index < 0 || MP.state.players[index].id === MP.you) return;
+  const name = MP.state.players[index].name;
+  if (!confirm(`"${name}" aus der Runde entfernen?`)) return;
+
+  MP.state.players.splice(index, 1);
+  if (index < MP.meIndex) MP.meIndex--;
+  if (MP.state.turn > index) MP.state.turn--;
+  else if (MP.state.turn === index) {
+    MP.state.turn = MP.state.turn % MP.state.players.length;
+    MP.state.turnPlayed = false;
+  }
+  sel = null;
+  drawMulti();
+  mpBroadcast(true);
+  if (MP.socket && MP.socket.readyState === 1) {
+    MP.socket.send(JSON.stringify({ t: 'kick', id }));
+  }
+}
+
 function mpTapHand(i) {
   const me = mpMe();
   if (!me || !mpIsMyTurn()) return mpSayWait();
@@ -844,7 +891,7 @@ function drawMulti() {
   $('undo').disabled = true;
   $('new').disabled = true;
 
-  if (!st || !st.players[MP.meIndex]) {
+  if (!st) {
     $('turnBar').classList.add('waiting');
     $('turnBar').textContent = 'Warte auf Host…';
     $('players').hidden = true;
@@ -861,6 +908,28 @@ function drawMulti() {
   }
 
   const me = st.players[MP.meIndex];
+  if (!me) {
+    $('turnBar').classList.add('waiting');
+    $('turnBar').textContent = 'Du bist nicht mehr im Spiel.';
+    $('players').hidden = true;
+    $('end').disabled = true;
+    $('stockCount').textContent = '–';
+    $('doneCount').textContent = '–';
+    $('handCount').textContent = '0';
+    $('middle').innerHTML = '';
+    $('own').innerHTML = '';
+    $('hand').innerHTML = '';
+    $('overlay').classList.add('show');
+    $('winEyebrow').textContent = 'Runde';
+    $('winTitle').textContent = 'Entfernt';
+    $('winSingle').hidden = true;
+    $('winLine').hidden = false;
+    $('winLine').textContent = 'Der Host hat dich aus der Runde entfernt.';
+    $('again').textContent = '★ Back to lobby';
+    say('Du bist nicht mehr im Spiel.');
+    return;
+  }
+
   const active = st.turn;
   const mine = active === MP.meIndex && st.winner === null && !MP.pending;
   const held = sel && sel.kind === 'hand' ? me.hand[sel.i] : null;
@@ -875,27 +944,11 @@ function drawMulti() {
   $('doneCount').textContent = st.completed;
   $('handCount').textContent = me.hand.length;
 
-  $('middle').innerHTML = st.middle.map((pile, i) => {
-    const top = pile[pile.length - 1];
-    const valid = held && mine && canMiddle(held, pile);
-    const on = top ? '' : ' role="button" tabindex="0"';
-    return `<div class="slot${valid ? ' valid' : ''}" data-slot="middle" data-i="${i}"
-      aria-label="Middle pile ${i + 1}, next ${nextRank(pile)}"${on}>
-      <div class="hole" aria-hidden="true">${top ? '' : 'A'}</div>
-      ${top ? cardHTML(top, 'middle', i) : ''}
-    </div>`;
-  }).join('');
+  $('middle').innerHTML = st.middle.map((pile, i) =>
+    pileHTML(pile, 'middle', i, 3, held && mine && canMiddle(held, pile))).join('');
 
-  $('own').innerHTML = me.own.map((pile, i) => {
-    const top = pile[pile.length - 1];
-    const on = top ? '' : ' role="button" tabindex="0"';
-    return `<div class="slot${held && mine ? ' valid' : ''}" data-slot="own" data-i="${i}"
-      aria-label="Your pile ${i + 1}${top ? `, top ${cardName(top)}` : ', empty'}"${on}>
-      <div class="hole" aria-hidden="true">${top ? '' : '+'}</div>
-      ${top ? cardHTML(top, 'own', i) : ''}
-      ${pile.length > 1 ? `<span class="badge" aria-hidden="true">${pile.length}</span>` : ''}
-    </div>`;
-  }).join('');
+  $('own').innerHTML = me.own.map((pile, i) =>
+    pileHTML(pile, 'own', i, 5, held && mine)).join('');
 
   $('hand').innerHTML = Array.from({ length: MAX_HAND }, (_, i) => {
     const card = me.hand[i];
@@ -906,9 +959,13 @@ function drawMulti() {
     const peer = MP.peers.find(x => x.id === p.id);
     const online = peer ? peer.online : true;
     const piles = p.own.map(pile => pile.length).join('/');
+    const kick = MP.host && p.id !== MP.you
+      ? `<button class="kick" data-id="${p.id}" title="Remove ${esc(p.name)}"
+          aria-label="Remove ${esc(p.name)}">×</button>`
+      : '';
     return `<span class="player-chip${i === st.turn ? ' active' : ''}${online ? '' : ' offline'}">
       <b>${esc(p.name)}${p.id === MP.you ? ' (du)' : ''}</b>
-      <span class="counts">Stock ${p.stock.length} · Hand ${p.hand.length} · Piles ${piles}</span>
+      <span class="counts">Stock ${p.stock.length} · Hand ${p.hand.length} · Piles ${piles}</span>${kick}
     </span>`;
   }).join('');
 
@@ -1082,13 +1139,34 @@ function faceHTML(c) {
   return corner('tl') + middle + corner('br');
 }
 
-function cardHTML(c, kind, i) {
+function cardHTML(c, kind, i, under = false, idx = 0) {
   const selected = sel && sel.kind === kind && sel.i === i;
-  return `<div class="card${isRed(c.s) ? ' red' : ''}${selected ? ' sel' : ''}"
-    role="button" tabindex="0" data-focus="c${cid(c)}" data-kind="${kind}" data-i="${i}"
+  const attrs = under
+    ? ' aria-hidden="true"'
+    : ` role="button" tabindex="0" data-focus="c${cid(c)}"`;
+  const style = `--card-color:${cardColor(c)}${idx ? `;--idx:${idx}` : ''}`;
+  return `<div class="card${selected ? ' sel' : ''}"
+    ${attrs} data-kind="${kind}" data-i="${i}" style="${style}"
     aria-label="${cardName(c)}">
     <div class="face front">${faceHTML(c)}</div>
     <div class="face back" aria-hidden="true"></div>
+  </div>`;
+}
+
+function pileHTML(pile, kind, i, visible, valid = false) {
+  const n = Math.min(visible, pile.length);
+  const cards = n ? pile.slice(-n) : [];
+  const top = cards[cards.length - 1];
+  const on = top ? '' : ' role="button" tabindex="0"';
+  const label = kind === 'middle'
+    ? `Middle pile ${i + 1}, next ${nextRank(pile)}`
+    : `Your pile ${i + 1}${top ? `, top ${cardName(top)}` : ', empty'}`;
+  const hole = kind === 'middle' ? '1' : '+';
+  return `<div class="slot${valid ? ' valid' : ''}" data-slot="${kind}" data-i="${i}"
+    style="--n:${n || 1}" aria-label="${label}"${on}>
+    <div class="hole" aria-hidden="true">${top ? '' : hole}</div>
+    ${cards.map((c, idx) => cardHTML(c, kind, i, idx < cards.length - 1, idx)).join('')}
+    ${kind === 'own' && pile.length > 1 ? `<span class="badge" aria-hidden="true">${pile.length}</span>` : ''}
   </div>`;
 }
 
@@ -1116,27 +1194,11 @@ function draw() {
   $('plays').textContent = plays;
   $('handCount').textContent = hand.length;
 
-  $('middle').innerHTML = middle.map((pile, i) => {
-    const top = pile[pile.length - 1];
-    const valid = held && canMiddle(held, pile);
-    const on = top ? '' : ' role="button" tabindex="0"';
-    return `<div class="slot${valid ? ' valid' : ''}" data-slot="middle" data-i="${i}"
-      aria-label="Middle pile ${i + 1}, next ${nextRank(pile)}"${on}>
-      <div class="hole" aria-hidden="true">${top ? '' : 'A'}</div>
-      ${top ? cardHTML(top, 'middle', i) : ''}
-    </div>`;
-  }).join('');
+  $('middle').innerHTML = middle.map((pile, i) =>
+    pileHTML(pile, 'middle', i, 3, held && canMiddle(held, pile))).join('');
 
-  $('own').innerHTML = own.map((pile, i) => {
-    const top = pile[pile.length - 1];
-    const on = top ? '' : ' role="button" tabindex="0"';
-    return `<div class="slot${held ? ' valid' : ''}" data-slot="own" data-i="${i}"
-      aria-label="Your pile ${i + 1}${top ? `, top ${cardName(top)}` : ', empty'}"${on}>
-      <div class="hole" aria-hidden="true">${top ? '' : '+'}</div>
-      ${top ? cardHTML(top, 'own', i) : ''}
-      ${pile.length > 1 ? `<span class="badge" aria-hidden="true">${pile.length}</span>` : ''}
-    </div>`;
-  }).join('');
+  $('own').innerHTML = own.map((pile, i) =>
+    pileHTML(pile, 'own', i, 5, held)).join('');
 
   $('hand').innerHTML = Array.from({ length: MAX_HAND }, (_, i) => {
     const card = hand[i];
@@ -1207,7 +1269,7 @@ function fit() {
   const wide = innerWidth - 24;
   const tall = innerHeight - 250;
   const handRail = gap * 1.8 + 2; // the hand rail's padding and border
-  const cw = Math.max(30, Math.min((wide - gap * 4 - handRail) / 5, tall / 5.2, 118));
+  const cw = Math.max(30, Math.min((wide - gap * 4 - handRail) / 5, tall / 6.1, 118));
   const t = $('table');
   t.style.setProperty('--gap', gap.toFixed(2) + 'px');
   t.style.setProperty('--cw', cw.toFixed(2) + 'px');
@@ -1281,7 +1343,9 @@ function handleLobby(msg) {
     $('lobbyState').textContent = `Lobby error: ${msg.code}`;
     if (msg.code === 'rate-limit' && MP.host) setTimeout(() => mpBroadcast(true), 1000);
   } else if (msg.t === 'closed') {
-    $('lobbyState').textContent = `Room closed: ${msg.reason}`;
+    $('lobbyState').textContent = msg.reason === 'removed'
+      ? 'Du wurdest aus dem Raum entfernt.'
+      : `Room closed: ${msg.reason}`;
   }
 }
 
@@ -1323,6 +1387,10 @@ $('table').addEventListener('keydown', e => {
   if (!el) return;
   e.preventDefault();
   activate(el);
+});
+$('players').addEventListener('click', e => {
+  const btn = e.target.closest('.kick');
+  if (btn) mpRemovePlayer(btn.dataset.id);
 });
 $('multi').addEventListener('click', () => {
   location.href = lobbyUrl(gameUrl());
