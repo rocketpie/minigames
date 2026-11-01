@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-COPY relay.mjs server.mjs ./
+COPY *.mjs ./
 COPY public ./public
 
 ENV NODE_ENV=production PORT=8080
