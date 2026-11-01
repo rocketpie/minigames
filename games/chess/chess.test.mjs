@@ -13,6 +13,7 @@ const el = () => ({
   classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
   append() {}, appendChild: c => c, remove() {}, focus() {}, querySelectorAll: () => [],
   querySelector: () => null, addEventListener() {}, closest: () => null,
+  getBoundingClientRect: () => ({ width: 800, height: 800, left: 0, top: 0 }),
 });
 const nodes = new Map();
 const store = new Map();
@@ -70,7 +71,7 @@ function setPosition({ board, turn = 'w', castle = {}, ep = null, half = 0, full
   const rights = { K: false, Q: false, k: false, q: false, ...castle };
   run(`game = ${JSON.stringify({
     board, turn, castle: rights, ep, half, full,
-    status: 'playing', winner: null, reason: '', last: null, captured: [],
+    status: 'playing', winner: null, reason: '', last: null, captured: [], scars: [],
   })}; sel = -1; targets = []; promo = null;`);
 }
 
@@ -98,6 +99,9 @@ test('double pawn push opens en passant for exactly one move', () => {
   assert.equal(result.state.board[at('d6')], 'P');
   assert.equal(result.state.board[at('d5')], null);
   assert.equal(result.state.ep, null);
+  assert.equal(result.state.last.captureAt, at('d5'));
+  assert.equal(result.state.last.attack, 'beam');
+  assert.deepEqual(result.state.scars, [{ sq: at('d5'), kind: 'burn' }]);
 });
 
 test('castling moves king and rook, and rights disappear', () => {
@@ -171,6 +175,7 @@ test('promotion needs a choice and allows underpromotion', () => {
   assert.equal(queen.ok, true);
   assert.equal(queen.state.board[at('a8')], 'Q');
   assert.deepEqual(queen.state.captured, []);
+  assert.deepEqual(queen.state.scars, []);
 
   setPosition({ board });
   const knight = apply({ from: at('a7'), to: at('a8'), promo: 'N' });
@@ -224,7 +229,26 @@ test('fifty-move rule and insufficient material are draws', () => {
   assert.equal(run(`insufficientMaterial(${JSON.stringify(rook)})`), false);
 });
 
-test('captures are recorded for the spoils tray', () => {
+test('attack styles map to the attacking figure', () => {
+  assert.equal(run("attackOf('p')"), 'beam');
+  assert.equal(run("attackOf('b')"), 'arc');
+  assert.equal(run("attackOf('r')"), 'arc');
+  assert.equal(run("attackOf('n')"), 'dash');
+  assert.equal(run("attackOf('q')"), 'beam');
+  assert.equal(run("attackOf('k')"), 'beam');
+});
+
+test('attack coordinates follow the flipped board', () => {
+  run("MP.active = true; MP.meColor = 'b'");
+  assert.equal(run('visualIndex(0)'), 63);
+  assert.deepEqual(js(run('boardPoint(0, 80)')), { x: 600, y: 600 });
+  assert.deepEqual(js(run('boardPoint(63, 80)')), { x: 40, y: 40 });
+  run("MP.meColor = 'w'");
+  assert.deepEqual(js(run('boardPoint(0, 80)')), { x: 40, y: 40 });
+  run('MP.active = false; MP.meColor = null');
+});
+
+test('captures are recorded for the spoils tray and leave a scar', () => {
   run('game = newChess()');
   play([
     { from: at('e2'), to: at('e4') },
@@ -234,6 +258,20 @@ test('captures are recorded for the spoils tray', () => {
   assert.deepEqual(js(run('game.captured')), ['p']);
   assert.deepEqual(js(run(`spoils(game, 'b')`)), ['p']);
   assert.deepEqual(js(run(`spoils(game, 'w')`)), []);
+  assert.deepEqual(js(run('game.scars')), [{ sq: at('d5'), kind: 'burn' }]);
+});
+
+test('a knight capture leaves a crater', () => {
+  run('game = newChess()');
+  play([
+    { from: at('b1'), to: at('c3') },
+    { from: at('d7'), to: at('d5') },
+    { from: at('c3'), to: at('d5') },
+  ]);
+  assert.equal(run('game.last.attack'), 'dash');
+  assert.deepEqual(js(run('game.scars')), [{ sq: at('d5'), kind: 'crater' }]);
+  play([{ from: at('e7'), to: at('e5') }]);
+  assert.deepEqual(js(run('game.scars')), [{ sq: at('d5'), kind: 'crater' }]);
 });
 
 test('tapping the selected figure lets go', () => {
@@ -275,6 +313,10 @@ test('state serialization validates tampered payloads and envelopes', () => {
   badStatus.status = 'exploded';
   assert.equal(run(`validState(${JSON.stringify(badStatus)})`), false);
 
+  const badScar = js(run('newChess()'));
+  badScar.scars = [{ sq: 3, kind: 'lava' }];
+  assert.equal(run(`validState(${JSON.stringify(badScar)})`), false);
+
   assert.equal(run(`isGameMessage({ v: 1, type: 'move', to: 'x', move: {} })`), true);
   assert.equal(run(`isGameMessage({ v: 2, type: 'move' })`), false);
   assert.equal(run(`isGameMessage({ v: 1, type: 'explode' })`), false);
@@ -299,6 +341,20 @@ test('tapping a piece then a target plays the move', () => {
   assert.deepEqual(js(run('targets')), []);
 });
 
+test('a capture updates the board and leaves a scar', () => {
+  run('game = newChess()');
+  const tap = square => run(`onSquare(${at(square)})`);
+  tap('e2'); tap('e4');
+  tap('d7'); tap('d5');
+  tap('e4'); tap('d5');
+  assert.equal(run(`game.board[${at('d5')}]`), 'P');
+  assert.equal(run(`game.board[${at('e4')}]`), null);
+  assert.deepEqual(js(run('game.scars')), [{ sq: at('d5'), kind: 'burn' }]);
+  assert.equal(run('game.turn'), 'b');
+  assert.equal(run('animating'), false);
+  assert.equal(run('view'), null);
+});
+
 test('the host applies guest moves and guests accept host state', () => {
   run(`
     MP.active = true; MP.host = true; MP.you = 'host'; MP.meColor = 'w'; MP.socket = null;
@@ -321,4 +377,90 @@ test('the host applies guest moves and guests accept host state', () => {
   assert.equal(run('MP.meColor'), 'b');
   assert.equal(run('MP.pending'), false);
   assert.equal(run(`game.board[${at('e5')}]`), 'p');
+});
+
+test('arc and dash capture spells apply their own wounds', () => {
+  run('MP.active = false; MP.host = false; MP.meColor = null');
+
+  const knightBoard = empty();
+  put(knightBoard, 'e1', 'K'); put(knightBoard, 'e8', 'k');
+  put(knightBoard, 'c3', 'N'); put(knightBoard, 'd5', 'p');
+  setPosition({ board: knightBoard });
+  run(`onSquare(${at('c3')})`);
+  run(`onSquare(${at('d5')})`);
+  assert.equal(run(`game.board[${at('d5')}]`), 'N');
+  assert.equal(run('game.last.attack'), 'dash');
+  assert.deepEqual(js(run('game.scars')), [{ sq: at('d5'), kind: 'crater' }]);
+
+  const bishopBoard = empty();
+  put(bishopBoard, 'e1', 'K'); put(bishopBoard, 'e8', 'k');
+  put(bishopBoard, 'c1', 'B'); put(bishopBoard, 'g5', 'p');
+  setPosition({ board: bishopBoard });
+  run(`onSquare(${at('c1')})`);
+  run(`onSquare(${at('g5')})`);
+  assert.equal(run(`game.board[${at('g5')}]`), 'B');
+  assert.equal(run('game.last.attack'), 'arc');
+  assert.deepEqual(js(run('game.scars')), [{ sq: at('g5'), kind: 'cracked' }]);
+});
+
+test('a capture keeps the victim on the board until the spell resolves', () => {
+  const realTimer = ctx.setTimeout;
+  ctx.timers = [];
+  ctx.setTimeout = (fn, ms) => { ctx.timers.push({ fn, ms }); };
+  try {
+    run('MP.active = false; MP.host = false; game = newChess(); sel = -1; targets = [];');
+    const board = empty();
+    put(board, 'e1', 'K'); put(board, 'e8', 'k');
+    put(board, 'e4', 'P'); put(board, 'd5', 'p');
+    setPosition({ board });
+
+    run(`onSquare(${at('e4')})`);
+    run(`onSquare(${at('d5')})`);
+
+    // The board still shows the old position while the spell is in flight.
+    const during = run(`$('board').innerHTML`);
+    assert.match(during, new RegExp(`data-sq="${at('d5')}" aria-label="[^"]*Emerald pawn"`));
+    assert.match(during, new RegExp(`data-sq="${at('e4')}" aria-label="[^"]*Gold pawn"`));
+    assert.equal(run('animating'), true);
+    assert.equal(run('view') === null, false);
+    assert.equal(run('game.turn'), 'b');
+
+    run(`
+      while (timers.length) {
+        timers.sort((a, b) => a.ms - b.ms);
+        timers.shift().fn();
+      }
+    `);
+
+    const after = run(`$('board').innerHTML`);
+    assert.match(after, new RegExp(`data-sq="${at('d5')}" aria-label="[^"]*Gold pawn"`));
+    assert.match(after, new RegExp(`data-sq="${at('e4')}" aria-label="[^"]*empty"`));
+    assert.match(after, /class="scar burn"/);
+    assert.equal(run('animating'), false);
+    assert.equal(run('view'), null);
+    assert.deepEqual(js(run('game.scars')), [{ sq: at('d5'), kind: 'burn' }]);
+  } finally {
+    ctx.setTimeout = realTimer;
+    delete ctx.timers;
+  }
+});
+
+test('a guest plays the incoming capture spell and applies its scar', () => {
+  const board = empty();
+  put(board, 'e1', 'K'); put(board, 'e8', 'k');
+  put(board, 'e4', 'P'); put(board, 'd5', 'p');
+  setPosition({ board });
+  run(`next = applyMove(game, { from: ${at('e4')}, to: ${at('d5')} }).state`);
+  run(`
+    MP.active = true; MP.host = false; MP.you = 'guest'; MP.hostId = 'host'; MP.meColor = 'w'; MP.socket = null;
+    MP.players = [{ id: 'host', name: 'H', color: 'b' }, { id: 'guest', name: 'G', color: 'w' }];
+    MP.pending = true;
+    handleGameMessage('host', { v: 1, type: 'state', state: next,
+      players: [{ id: 'host', name: 'H', color: 'b' }, { id: 'guest', name: 'G', color: 'w' }] });
+  `);
+  assert.equal(run(`game.board[${at('d5')}]`), 'P');
+  assert.deepEqual(js(run('game.scars')), [{ sq: at('d5'), kind: 'burn' }]);
+  assert.equal(run('MP.pending'), false);
+  assert.equal(run('animating'), false);
+  assert.equal(run('view'), null);
 });

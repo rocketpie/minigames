@@ -135,16 +135,6 @@
     }
 
     #fx { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
-    .spell-orb {
-      position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
-      background: #fff6d0; box-shadow: 0 0 12px #f6d87a, 0 0 30px #2f9e63, 0 0 46px rgba(47, 158, 99, .7);
-      animation: hurl .26s cubic-bezier(.4, 0, .85, .6) forwards;
-    }
-    .spell-trail {
-      position: absolute; height: 2px; transform-origin: 0 50%; border-radius: 2px;
-      background: linear-gradient(90deg, transparent, rgba(246, 216, 122, .85), #fff6d0);
-      box-shadow: 0 0 8px #f6d87a; animation: trailFade .45s ease-out forwards;
-    }
     .spark { position: absolute; width: 7px; height: 7px; border-radius: 50%; animation: spark var(--t, .6s) ease-out forwards; }
     .spark.gold { background: #f6d87a; box-shadow: 0 0 10px #f6d87a; }
     .spark.green { background: #63c98d; box-shadow: 0 0 10px #63c98d; }
@@ -154,6 +144,122 @@
       box-shadow: 0 0 20px #f6d87a, inset 0 0 20px rgba(47, 158, 99, .6);
       animation: rune .72s ease-out forwards;
     }
+    .impact-rune.fire { border-color: #ffb45e; box-shadow: 0 0 22px #ffb45e, inset 0 0 22px rgba(255, 90, 40, .65); }
+    .impact-rune.stone { border-color: #d9c08a; box-shadow: 0 0 20px #d9c08a, inset 0 0 20px rgba(90, 70, 40, .6); }
+    .spark.ember { background: #ff8a4c; box-shadow: 0 0 10px #ff8a4c; }
+    .spark.dust { background: #d9c08a; box-shadow: 0 0 8px #b9945c; }
+
+    .cast-flare {
+      position: absolute; z-index: 5; border-radius: 50%; pointer-events: none;
+      background: radial-gradient(circle, #fff 0 6%, var(--beam) 18%, transparent 65%);
+      box-shadow: 0 0 26px var(--glow); animation: castFlare .55s ease-out forwards;
+    }
+    .cast-flare.gold { --beam: #fff2b0; --glow: #f6d87a; }
+    .cast-flare.emerald { --beam: #c9ffdf; --glow: #63c98d; }
+    @keyframes castFlare { 0% { transform: scale(.2); opacity: .95; } 100% { transform: scale(1.35); opacity: 0; } }
+
+    .fx-beam {
+      position: absolute; z-index: 5; pointer-events: none; transform-origin: 0 50%; border-radius: 999px;
+      background: linear-gradient(90deg, transparent, var(--beam) 10%, #fff 48%, var(--beam) 90%, transparent);
+      box-shadow: 0 0 14px var(--glow), 0 0 40px var(--glow);
+      animation: beamOut .5s ease-out forwards;
+    }
+    @keyframes beamOut {
+      0% { opacity: 0; transform: rotate(var(--ang)) scaleX(.02); }
+      12% { opacity: 1; }
+      55% { opacity: 1; transform: rotate(var(--ang)) scaleX(1); }
+      100% { opacity: 0; transform: rotate(var(--ang)) scaleX(1); }
+    }
+
+    .fx-arc { position: absolute; z-index: 6; pointer-events: none; will-change: transform; }
+    .fx-arc.bishop { color: #f6e6ae; }
+    .fx-arc.bishop svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 10px var(--glow, #f6d87a)); }
+    .fx-arc.rook {
+      border-radius: 45% 55% 48% 52%;
+      background: radial-gradient(circle at 34% 28%, #e0cea4, #7c6440 46%, #3a2c17 82%);
+      border: 1px solid rgba(232, 199, 111, .55);
+      box-shadow: 0 0 16px rgba(232, 199, 111, .45), inset -3px -4px 7px rgba(0, 0, 0, .55);
+    }
+    .fx-arc.rook::before { content: ''; position: absolute; inset: 22%; border-radius: 50%; border: 1px dashed rgba(40, 26, 10, .5); }
+
+    .fx-dash { position: absolute; z-index: 6; pointer-events: none; will-change: transform; }
+    .fx-dash .horse {
+      display: block; width: 100%; height: 100%; transform: scaleX(var(--dir, 1));
+      filter: drop-shadow(0 0 12px var(--glow)); animation: dashGallop .16s steps(2) infinite;
+    }
+    .fx-dash .horse svg { display: block; width: 100%; height: 100%; overflow: visible; }
+    @keyframes dashGallop {
+      0% { transform: scaleX(var(--dir, 1)) translateY(0); }
+      50% { transform: scaleX(var(--dir, 1)) translateY(-5%); }
+      100% { transform: scaleX(var(--dir, 1)) translateY(0); }
+    }
+
+    .fx-dust {
+      position: absolute; z-index: 5; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%;
+      background: var(--beam); box-shadow: 0 0 9px var(--glow);
+      animation: dustOut .55s ease-out forwards; pointer-events: none;
+    }
+    @keyframes dustOut {
+      from { transform: translate(0, 0) scale(1); opacity: .9; }
+      to { transform: translate(var(--dx), var(--dy)) scale(.15); opacity: 0; }
+    }
+
+    .fire-bloom {
+      position: absolute; z-index: 5; border-radius: 50%; pointer-events: none;
+      background: radial-gradient(circle, #fff6d0 0 7%, #ffb45e 18%, #ff6a3c 36%, rgba(120, 30, 10, 0) 68%);
+      filter: blur(1px); animation: bloom .78s ease-out forwards;
+    }
+    @keyframes bloom { 0% { transform: scale(.2); opacity: .95; } 100% { transform: scale(1.7); opacity: 0; } }
+
+    .shard {
+      position: absolute; z-index: 6; pointer-events: none; background: var(--shard, #c9a84e);
+      clip-path: polygon(50% 0, 100% 42%, 62% 100%, 0 54%);
+      animation: shardOut .72s ease-out forwards;
+    }
+    @keyframes shardOut {
+      from { transform: translate(-50%, -50%) rotate(0); opacity: 1; }
+      to { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--spin)); opacity: 0; }
+    }
+
+    .scar { position: absolute; inset: 2%; z-index: 0; pointer-events: none; opacity: .9; }
+    .scar.burn { filter: drop-shadow(0 0 7px rgba(232, 130, 60, .25)); }
+    .scar.cracked { opacity: .9; }
+    .scar.crater { opacity: .95; }
+
+    .sq.casting .fig { animation: castCharge .42s ease-out; }
+    .sq.casting.arc .fig { animation: castDraw .42s ease-out; }
+    .sq.casting.dash .fig { animation: castCrouch .42s ease-out; }
+    @keyframes castCharge { 0% { transform: scale(1); } 32% { transform: scale(.93) translateY(3%); } 100% { transform: scale(1.06); } }
+    @keyframes castDraw { 0% { transform: rotate(0); } 45% { transform: rotate(-7deg) translateX(-4%); } 100% { transform: rotate(0); } }
+    @keyframes castCrouch { 0% { transform: scale(1); } 45% { transform: scaleX(1.07) scaleY(.9); } 100% { transform: scale(1.04); } }
+
+    .piece.dying { z-index: 3; animation: none !important; animation-delay: 0s !important; }
+    .piece.dying.burn { animation: burnDie .68s ease-in forwards !important; }
+    .piece.dying.break { animation: breakDie .64s ease-in forwards !important; }
+    .piece.dying.explode { animation: explodeDie .68s cubic-bezier(.2, .7, .3, 1) forwards !important; }
+    .piece.dying.burn .fig { animation: burnChar .68s ease-in forwards; }
+    .piece.dying.break .fig { animation: breakCrack .64s ease-in forwards; }
+    .piece.dying.explode .fig { animation: explodeGlow .68s ease-out forwards; }
+    @keyframes burnDie {
+      0% { filter: brightness(1); }
+      28% { filter: brightness(2.3) drop-shadow(0 0 16px #ffb45e); }
+      100% { transform: translateY(-10%) scale(.3) rotate(8deg); opacity: 0; }
+    }
+    @keyframes burnChar { 0%, 42% { filter: none; } 100% { filter: brightness(0) sepia(1) saturate(2); } }
+    @keyframes breakDie {
+      0%, 14% { transform: translateX(0) rotate(0); }
+      30% { transform: translateX(-5%) rotate(-4deg); }
+      46% { transform: translateX(5%) rotate(4deg); }
+      62% { transform: translateX(-4%) rotate(-2deg); }
+      100% { transform: scale(.42) rotate(10deg); opacity: 0; }
+    }
+    @keyframes breakCrack { 0%, 38% { filter: none; } 55% { filter: brightness(2) contrast(2.2); } 100% { filter: brightness(.2) contrast(3); opacity: .15; } }
+    @keyframes explodeDie {
+      0% { transform: scale(1); filter: brightness(1); }
+      14% { transform: scale(1.15); filter: brightness(2.6) drop-shadow(0 0 18px #f6d87a); }
+      100% { transform: translate(var(--ex, 0), -72%) scale(.05) rotate(170deg); opacity: 0; filter: brightness(3); }
+    }
+    @keyframes explodeGlow { 0%, 20% { filter: none; } 45% { filter: brightness(2.2) saturate(1.6); } 100% { filter: brightness(4); } }
 
     #status {
       margin: .1rem 0 0; min-height: 1.5em; font-family: Georgia, "Times New Roman", serif;
@@ -228,8 +334,6 @@
     @keyframes markPulse { 0%, 100% { opacity: .75; transform: translate(-50%, -50%) scale(.9); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); } }
     @keyframes checkPulse { 0%, 100% { box-shadow: inset 0 0 0 3px rgba(255, 118, 88, .9), inset 0 0 24px rgba(255, 88, 56, .42); } 50% { box-shadow: inset 0 0 0 3px rgba(255, 150, 110, 1), inset 0 0 44px rgba(255, 88, 56, .75); } }
     @keyframes shake { 0%, 100% { transform: translate(0, 0); } 20% { transform: translate(-4px, 2px) rotate(-.25deg); } 40% { transform: translate(4px, -2px) rotate(.25deg); } 60% { transform: translate(-3px, -1px); } 80% { transform: translate(2px, 2px); } }
-    @keyframes hurl { to { transform: translate(var(--dx), var(--dy)) scale(.35); opacity: .55; } }
-    @keyframes trailFade { from { opacity: .9; } to { opacity: 0; } }
     @keyframes spark { 0% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50%) translate(var(--dx), var(--dy)) scale(.15); } }
     @keyframes rune { 0% { opacity: .95; transform: scale(.4) rotate(0deg); } 100% { opacity: 0; transform: scale(1.5) rotate(130deg); } }
     @keyframes ember {
@@ -251,9 +355,10 @@
       #rules { font-size: .7rem; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .piece, .mark, .sq.check, #embers i { animation: none !important; }
+      .piece, .mark, .sq.check, #embers i, .piece.dying, .sq.casting .fig { animation: none !important; }
       .piece .fig { transition: none !important; }
-      .spell-orb, .spell-trail, .spark, .impact-rune { display: none !important; }
+      .spark, .impact-rune,
+      .cast-flare, .fx-beam, .fx-arc, .fx-dash, .fx-dust, .fire-bloom, .shard { display: none !important; }
       .board-shell.shake { animation: none !important; }
     }
   </style>
@@ -346,6 +451,29 @@
           <path d="M24 88h52" fill="none" stroke="var(--accent)" stroke-width="1.8" />
         </g>
       </symbol>
+
+      <symbol id="scar-burn" viewBox="0 0 100 100">
+        <path d="M50 16c15 1 27 10 30 24 3 15-7 29-21 35-14 5-30 0-36-12-7-13 0-29 11-37 5-4 10-7 16-10z" fill="#080b07" opacity=".82" />
+        <path d="M49 26c10 0 19 6 21 16 2 11-5 21-15 25-9 4-20 1-25-7-5-9 1-21 9-27 3-2 6-5 10-7z" fill="#1c2417" opacity=".8" />
+        <path d="M39 38l9 10-7 11M59 32l-5 16 9 9M49 58l3 12M30 48l9 2M68 58l-8 3" fill="none" stroke="#e8a34a" stroke-width="1.8" stroke-linecap="round" opacity=".65" />
+        <circle cx="42" cy="63" r="1.5" fill="#f6d87a" opacity=".9" />
+        <circle cx="64" cy="47" r="1.2" fill="#e8a34a" opacity=".8" />
+      </symbol>
+
+      <symbol id="scar-cracked" viewBox="0 0 100 100">
+        <circle cx="50" cy="52" r="13" fill="#0a0d08" opacity=".55" />
+        <path d="M50 22l-3 19 8 7-13 9 5 12-9 9M47 41l-13-7M55 48l14-6M42 57l-12 12M55 57l11 13M47 70l-2 12" fill="none" stroke="#0a0d08" stroke-width="3" stroke-linecap="round" />
+        <path d="M50 24l-2 18 8 7-13 9 4 11-8 9M48 42l-12-7M56 49l13-6M43 58l-11 11M56 58l10 12" fill="none" stroke="#d9c08a" stroke-width="1" stroke-linecap="round" opacity=".55" />
+      </symbol>
+
+      <symbol id="scar-crater" viewBox="0 0 100 100">
+        <ellipse cx="50" cy="55" rx="31" ry="23" fill="#0a0d08" opacity=".78" />
+        <ellipse cx="50" cy="57" rx="23" ry="16" fill="#020503" opacity=".8" />
+        <ellipse cx="50" cy="55" rx="31" ry="23" fill="none" stroke="#b9945c" stroke-width="1.6" opacity=".55" />
+        <path d="M23 42l8 5-6 6M78 66l-9-4 5-8M34 74l5-8M66 35l-7 7" fill="none" stroke="#8a6b3a" stroke-width="2" stroke-linecap="round" opacity=".6" />
+        <circle cx="31" cy="64" r="1.6" fill="#c9a84e" opacity=".7" />
+        <circle cx="69" cy="43" r="1.4" fill="#c9a84e" opacity=".6" />
+      </symbol>
     </defs>
   </svg>
 
@@ -391,6 +519,7 @@
         <li><b>En passant:</b> a pawn may take a rival pawn that has just dashed two squares past it. The chance vanishes after one move.</li>
         <li><b>Promotion:</b> a pawn reaching the far rank becomes a queen, rook, bishop or knight — choose the guise.</li>
         <li><b>Draws:</b> stalemate, fifty moves without a capture or pawn move, or too little material to force mate.</li>
+        <li><b>Spells:</b> pawns and royalty cast beams, bishops and rooks hurl arcing magic, and knights charge as spectral horses. A capture burns, breaks or explodes the rival figure and leaves a scar on the square for the rest of the duel.</li>
         <li><b>Local duel:</b> two players share this screen. <b>Multiplayer:</b> open the lobby with a friend; the host is Gold, the guest Emerald, and the board turns for Emerald.</li>
       </ul>
     </details>
@@ -448,6 +577,8 @@
     const onBoard = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
     const sqIndex = (r, c) => r * 8 + c;
     const sqName = i => FILES[i & 7] + (8 - (i >> 3));
+    const attackOf = type => type === 'n' ? 'dash' : (type === 'b' || type === 'r') ? 'arc' : 'beam';
+    const SCAR_KIND = { beam: 'burn', arc: 'cracked', dash: 'crater' };
     const isLocal = () => location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const isProd = () => location.hostname === 'co3d.eu' || location.hostname === 'www.co3d.eu';
     const gameUrl = () => location.origin + location.pathname;
@@ -465,6 +596,7 @@
         reason: '',
         last: null,
         captured: [],
+        scars: [],
       };
     }
 
@@ -481,6 +613,7 @@
         reason: g.reason,
         last: g.last ? { ...g.last, rook: g.last.rook ? { ...g.last.rook } : undefined } : null,
         captured: g.captured.slice(),
+        scars: g.scars.map(scar => ({ ...scar })),
       };
     }
 
@@ -706,11 +839,18 @@
       }
 
       const captured = found.ep ? (g.turn === 'w' ? 'p' : 'P') : (g.board[found.to] || null);
+      const attackerType = typeOf(piece);
+      const attack = attackOf(attackerType);
+      const captureAt = found.ep ? found.to + (g.turn === 'w' ? 8 : -8) : found.to;
       const next = cloneState(g);
       next.board = makeBoard(g, found);
-      if (captured) next.captured.push(captured);
-      next.ep = typeOf(piece) === 'p' && Math.abs(found.to - found.from) === 16 ? (found.from + found.to) / 2 : null;
-      next.half = typeOf(piece) === 'p' || captured ? 0 : g.half + 1;
+      if (captured) {
+        next.scars = g.scars.filter(scar => scar.sq !== captureAt);
+        next.scars.push({ sq: captureAt, kind: SCAR_KIND[attack] });
+        next.captured.push(captured);
+      }
+      next.ep = attackerType === 'p' && Math.abs(found.to - found.from) === 16 ? (found.from + found.to) / 2 : null;
+      next.half = attackerType === 'p' || captured ? 0 : g.half + 1;
       next.full = g.full + (g.turn === 'b' ? 1 : 0);
 
       if (typeOf(piece) === 'k') {
@@ -733,7 +873,11 @@
       next.turn = other(g.turn);
       next.last = { from: found.from, to: found.to };
       if (promo) next.last.promo = promo;
-      if (captured) next.last.captured = captured;
+      if (captured) {
+        next.last.captured = captured;
+        next.last.captureAt = captureAt;
+        next.last.attack = attack;
+      }
       if (found.ep) next.last.ep = true;
       if (found.castle) {
         next.last.castle = found.castle;
@@ -770,8 +914,16 @@
       if (!(s.winner === null || s.winner === 'w' || s.winner === 'b')) return false;
       if (typeof s.reason !== 'string') return false;
       if (!Array.isArray(s.captured) || !s.captured.every(p => typeof p === 'string' && PIECE_SET.has(p))) return false;
+      if (!Array.isArray(s.scars) || s.scars.length > 64 ||
+        !s.scars.every(scar => scar && Number.isInteger(scar.sq) && scar.sq >= 0 && scar.sq < 64 &&
+          ['burn', 'cracked', 'crater'].includes(scar.kind))) return false;
       if (s.last !== null && !(s.last && Number.isInteger(s.last.from) && Number.isInteger(s.last.to) &&
         s.last.from >= 0 && s.last.from < 64 && s.last.to >= 0 && s.last.to < 64)) return false;
+      if (s.last && s.last.captureAt !== undefined &&
+        !(Number.isInteger(s.last.captureAt) && s.last.captureAt >= 0 && s.last.captureAt < 64)) return false;
+      if (s.last && s.last.attack !== undefined && !['beam', 'arc', 'dash'].includes(s.last.attack)) return false;
+      if (s.last && s.last.captured !== undefined &&
+        !(typeof s.last.captured === 'string' && PIECE_SET.has(s.last.captured))) return false;
       return true;
     }
 
@@ -788,6 +940,11 @@
     let promo = null;
     let resultDismissed = false;
     let fxKey = '';
+    let view = null;
+    let dying = null;
+    let animating = false;
+    let pendingState = null;
+    let attackToken = 0;
     let lobbyMax = MAX_PLAYERS;
     const MP = {
       active: false, host: false, you: null, hostId: null, room: null,
@@ -843,6 +1000,8 @@
         const option = targets.find(m => m.to === i);
         const capture = !!option && (!!piece || option.ep);
         const last = g.last;
+        const scar = g.scars ? g.scars.find(s => s.sq === i) : null;
+        const dyingHere = dying && dying.sq === i;
         const classes = ['sq', light ? 'light' : 'dark'];
         if (i === sel) classes.push('sel');
         if (last && (i === last.from || i === last.to ||
@@ -851,8 +1010,12 @@
         if (option) classes.push('target', capture ? 'capture' : 'quiet');
         const coords = (col === 0 ? `<i class="rank">${8 - row}</i>` : '') +
           (row === 7 ? `<i class="file">${FILES[col]}</i>` : '');
+        const scarHTML = scar
+          ? `<svg class="scar ${scar.kind}" viewBox="0 0 100 100" aria-hidden="true"><use href="#scar-${scar.kind}"></use></svg>`
+          : '';
         html += `<button type="button" class="${classes.join(' ')}" data-sq="${i}" aria-label="${sqLabel(g, i, option)}">` +
-          coords + (piece ? figHTML(piece, '', (i % 8) * .35 + ((i >> 3) % 3) * .21) : '') +
+          coords + scarHTML +
+          (piece ? figHTML(piece, dyingHere ? `dying ${dying.kind}` : '', (i % 8) * .35 + ((i >> 3) % 3) * .21) : '') +
           (option ? '<span class="mark"></span>' : '') + '</button>';
       }
       $('board').innerHTML = html;
@@ -898,6 +1061,7 @@
     }
 
     function statusLine(g) {
+      if (animating) return 'A spell is in flight…';
       if (MP.active && !game) {
         return MP.host
           ? 'No opponent yet — return to the lobby and start with two players.'
@@ -953,20 +1117,32 @@
       }
     }
 
+    const flippedView = () => MP.active && MP.meColor === 'b';
+    const visualIndex = i => flippedView() ? 63 - i : i;
+    const boardPoint = (i, cell) => {
+      const v = visualIndex(i);
+      return { x: (v & 7) * cell + cell / 2, y: (v >> 3) * cell + cell / 2 };
+    };
+
     function render() {
-      const g = game || START_VIEW;
-      const flipped = MP.active && MP.meColor === 'b';
+      const g = view || game || START_VIEW;
+      const flipped = flippedView();
       renderBoard(g, flipped);
       renderTrays(g);
       const badge = $('turnBadge');
       const waiting = MP.active && !game;
-      badge.textContent = waiting ? 'Awaiting the court' : `${SIDE[g.turn]} to move`;
-      badge.className = 'turn ' + (waiting ? 'wait' : g.turn);
+      if (animating) {
+        badge.textContent = 'Spellcasting…';
+        badge.className = 'turn wait';
+      } else {
+        badge.textContent = waiting ? 'Awaiting the court' : `${SIDE[g.turn]} to move`;
+        badge.className = 'turn ' + (waiting ? 'wait' : g.turn);
+      }
       $('status').textContent = statusLine(g);
       $('multi').hidden = MP.active;
-      $('new').disabled = MP.active;
+      $('new').disabled = MP.active || animating;
       $('resign').disabled = !game || game.status !== 'playing' ||
-        (MP.active && !MP.meColor) || MP.pending;
+        (MP.active && !MP.meColor) || MP.pending || animating;
       renderResult(g);
       renderPromo();
     }
@@ -985,6 +1161,8 @@
 
     function setGame(next, animate) {
       game = next;
+      view = null;
+      dying = null;
       sel = -1;
       targets = [];
       promo = null;
@@ -996,15 +1174,37 @@
 
     function newGame() {
       if (MP.active) return;
+      attackToken++;
+      animating = false;
+      view = null;
+      dying = null;
+      pendingState = null;
       game = newChess();
       sel = -1;
       targets = [];
       promo = null;
       resultDismissed = false;
       fxKey = '';
+      $('fx').innerHTML = '';
       save();
       render();
       say('A new duel begins.');
+    }
+
+    function acceptState(next) {
+      if (game && stateKey(next) === stateKey(game)) {
+        MP.pending = false;
+        if (!animating) render();
+        return;
+      }
+      if (animating) {
+        pendingState = next;
+        MP.pending = false;
+        return;
+      }
+      MP.pending = false;
+      if (game && game.status === 'playing' && next.last && next.last.captured) beginAttack(game, next);
+      else setGame(next, true);
     }
 
     function commitMove(move) {
@@ -1031,12 +1231,18 @@
         say(result.reason);
         return;
       }
-      setGame(result.state, true);
+      const prev = game;
+      if (result.last && result.last.captured) beginAttack(prev, result.state);
+      else setGame(result.state, true);
       if (MP.active) broadcastState();
       else save();
     }
 
     function onSquare(i) {
+      if (animating) {
+        say('A spell is in flight…');
+        return;
+      }
       if (!game || game.status !== 'playing' || promo) return;
       if (MP.active) {
         if (!MP.meColor) {
@@ -1093,6 +1299,10 @@
     }
 
     function resign() {
+      if (animating) {
+        say('A spell is in flight…');
+        return;
+      }
       if (!game || game.status !== 'playing') return;
       if (MP.active && !MP.meColor) return;
       if (!confirm('Resign this duel?')) return;
@@ -1122,8 +1332,9 @@
     function slide(boardEl, cell, from, to) {
       const fig = boardEl.querySelector(`[data-sq="${to}"] .fig`);
       if (!fig) return;
-      const dx = ((from & 7) - (to & 7)) * cell;
-      const dy = ((from >> 3) - (to >> 3)) * cell;
+      const a = visualIndex(from), b = visualIndex(to);
+      const dx = ((a & 7) - (b & 7)) * cell;
+      const dy = ((a >> 3) - (b >> 3)) * cell;
       fig.style.transition = 'none';
       fig.style.transform = `translate(${dx}px, ${dy}px) scale(.8)`;
       requestAnimationFrame(() => {
@@ -1132,29 +1343,9 @@
       });
     }
 
-    function spell(field, from, to) {
-      const orb = document.createElement('i');
-      orb.className = 'spell-orb';
-      orb.style.left = from.x + 'px';
-      orb.style.top = from.y + 'px';
-      orb.style.setProperty('--dx', (to.x - from.x) + 'px');
-      orb.style.setProperty('--dy', (to.y - from.y) + 'px');
-      field.append(orb);
-      setTimeout(() => orb.remove(), 500);
-
-      const trail = document.createElement('i');
-      trail.className = 'spell-trail';
-      trail.style.left = from.x + 'px';
-      trail.style.top = from.y + 'px';
-      trail.style.width = Math.hypot(to.x - from.x, to.y - from.y) + 'px';
-      trail.style.transform = `rotate(${Math.atan2(to.y - from.y, to.x - from.x)}rad)`;
-      field.append(trail);
-      setTimeout(() => trail.remove(), 500);
-    }
-
-    function impact(field, at, cell, big) {
+    function impact(field, at, cell, big, tone = 'blast') {
       const ring = document.createElement('i');
-      ring.className = 'impact-rune';
+      ring.className = 'impact-rune ' + tone;
       const size = cell * 1.25;
       ring.style.width = ring.style.height = size + 'px';
       ring.style.left = (at.x - size / 2) + 'px';
@@ -1162,10 +1353,16 @@
       field.append(ring);
       setTimeout(() => ring.remove(), 800);
 
+      const palettes = {
+        fire: ['gold', 'ember', 'pale'],
+        stone: ['pale', 'gold', 'dust'],
+        blast: ['gold', 'green', 'pale'],
+      };
+      const palette = palettes[tone] || palettes.blast;
       const count = big ? 18 : 8;
       for (let k = 0; k < count; k++) {
         const spark = document.createElement('i');
-        spark.className = 'spark ' + ['gold', 'green', 'pale'][k % 3];
+        spark.className = 'spark ' + palette[k % palette.length];
         const angle = Math.random() * Math.PI * 2;
         const distance = cell * (.4 + Math.random() * 1.1);
         spark.style.left = at.x + 'px';
@@ -1186,8 +1383,8 @@
     }
 
     function stateKey(g) {
-      return [g.board.join(''), g.turn, g.half, g.full, g.ep, g.status,
-        g.last ? JSON.stringify(g.last) : ''].join('|');
+      return [g.board.join(''), g.turn, g.half, g.full, g.ep, g.status, g.winner, g.reason,
+        JSON.stringify(g.captured), JSON.stringify(g.scars), g.last ? JSON.stringify(g.last) : ''].join('|');
     }
 
     function showFx(g) {
@@ -1203,7 +1400,7 @@
       const rect = boardEl.getBoundingClientRect();
       if (!rect.width) return;
       const cell = rect.width / 8;
-      const center = i => ({ x: (i & 7) * cell + cell / 2, y: (i >> 3) * cell + cell / 2 });
+      const center = i => boardPoint(i, cell);
       const from = center(last.from);
       const to = center(last.to);
 
@@ -1211,13 +1408,328 @@
       if (last.rook) slide(boardEl, cell, last.rook.from, last.rook.to);
 
       if (last.captured) {
-        spell(field, from, to);
-        setTimeout(() => impact(field, to, cell, true), 230);
+        setTimeout(() => {
+          const mover = g.board[last.to];
+          moveMotes(field, to, cell, mover ? colorOf(mover) : 'w');
+        }, 150);
       } else if (last.promo) {
         setTimeout(() => impact(field, to, cell, true), 250);
       } else if (last.castle) {
         setTimeout(() => impact(field, to, cell, false), 280);
+        setTimeout(() => {
+          const mover = g.board[last.to];
+          moveMotes(field, to, cell, mover ? colorOf(mover) : 'w');
+        }, 260);
+      } else {
+        setTimeout(() => {
+          const mover = g.board[last.to];
+          moveMotes(field, to, cell, mover ? colorOf(mover) : 'w');
+        }, 150);
       }
+    }
+
+    function reducedMotion() {
+      return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function applyVars(el, vars) {
+      for (const key of Object.keys(vars)) el.style.setProperty(key, vars[key]);
+    }
+
+    function castFlare(field, at, cell, color) {
+      const flare = document.createElement('i');
+      flare.className = 'cast-flare ' + (color === 'w' ? 'gold' : 'emerald');
+      const size = cell * .95;
+      flare.style.width = flare.style.height = size + 'px';
+      flare.style.left = (at.x - size / 2) + 'px';
+      flare.style.top = (at.y - size / 2) + 'px';
+      field.append(flare);
+      setTimeout(() => flare.remove(), 700);
+    }
+
+    function launchBeam(field, from, at, cell, type, vars) {
+      const dx = at.x - from.x, dy = at.y - from.y;
+      const length = Math.hypot(dx, dy);
+      const width = type === 'q' ? cell * .16 : type === 'k' ? cell * .14 : type === 'b' ? cell * .1 : cell * .07;
+      const beam = document.createElement('i');
+      beam.className = 'fx-beam ' + type;
+      beam.style.left = from.x + 'px';
+      beam.style.top = (from.y - width / 2) + 'px';
+      beam.style.width = length + 'px';
+      beam.style.height = width + 'px';
+      beam.style.setProperty('--ang', Math.atan2(dy, dx) + 'rad');
+      applyVars(beam, vars);
+      field.append(beam);
+      setTimeout(() => beam.remove(), 900);
+      if (type === 'q' || type === 'k') {
+        const halo = beam.cloneNode(true);
+        halo.style.height = (width * 2.4) + 'px';
+        halo.style.top = (from.y - width * 1.2) + 'px';
+        halo.style.opacity = '.55';
+        halo.style.animationDelay = '.05s';
+        field.append(halo);
+        setTimeout(() => halo.remove(), 950);
+      }
+      return 300;
+    }
+
+    function launchArc(field, from, at, cell, type, vars) {
+      const boulder = type === 'r';
+      const size = cell * (boulder ? .34 : .27);
+      const el = document.createElement('i');
+      el.className = 'fx-arc ' + (boulder ? 'rook' : 'bishop');
+      if (!boulder) {
+        el.innerHTML = '<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M66 8a44 44 0 1 0 0 84 50 50 0 1 1 0-84z" fill="currentColor"></path></svg>';
+        el.style.color = vars['--beam'];
+      }
+      el.style.left = (from.x - size / 2) + 'px';
+      el.style.top = (from.y - size / 2) + 'px';
+      el.style.width = el.style.height = size + 'px';
+      applyVars(el, vars);
+
+      const lift = cell * (boulder ? 1.15 : 1.7);
+      const cx = (from.x + at.x) / 2;
+      const cy = Math.min(from.y, at.y) - lift;
+      const duration = boulder ? 500 : 430;
+      const frames = [];
+      for (let k = 0; k <= 16; k++) {
+        const t = k / 16;
+        const px = (1 - t) * (1 - t) * from.x + 2 * (1 - t) * t * cx + t * t * at.x;
+        const py = (1 - t) * (1 - t) * from.y + 2 * (1 - t) * t * cy + t * t * at.y;
+        const vx = 2 * (1 - t) * (cx - from.x) + 2 * t * (at.x - cx);
+        const vy = 2 * (1 - t) * (cy - from.y) + 2 * t * (at.y - cy);
+        const spin = boulder ? ` rotate(${t * 660}deg)` : ` rotate(${Math.atan2(vy, vx)}rad)`;
+        frames.push({ transform: `translate(${px - from.x}px, ${py - from.y}px)${spin}` });
+      }
+      if (typeof el.animate === 'function') {
+        el.animate(frames, { duration, easing: 'linear' });
+      } else {
+        el.style.transition = `transform ${duration}ms linear`;
+        requestAnimationFrame(() => {
+          el.style.transform = `translate(${at.x - from.x}px, ${at.y - from.y}px)`;
+        });
+      }
+      setTimeout(() => el.remove(), duration + 80);
+      return duration;
+    }
+
+    function moveMotes(field, at, cell, color) {
+      const gold = color === 'w';
+      for (let k = 0; k < 5; k++) {
+        const mote = document.createElement('i');
+        mote.className = 'spark ' + (k % 2 ? 'gold' : (gold ? 'pale' : 'green'));
+        mote.style.left = at.x + 'px';
+        mote.style.top = at.y + 'px';
+        const angle = Math.random() * Math.PI * 2;
+        const distance = cell * (.15 + Math.random() * .35);
+        mote.style.setProperty('--dx', Math.cos(angle) * distance + 'px');
+        mote.style.setProperty('--dy', (Math.sin(angle) * distance - cell * .1) + 'px');
+        mote.style.setProperty('--t', (.35 + Math.random() * .25) + 's');
+        field.append(mote);
+        setTimeout(() => mote.remove(), 700);
+      }
+    }
+
+    function dust(field, at, cell, vars) {
+      const mote = document.createElement('i');
+      mote.className = 'fx-dust';
+      mote.style.left = at.x + 'px';
+      mote.style.top = at.y + 'px';
+      applyVars(mote, vars);
+      mote.style.setProperty('--dx', (Math.random() * 2 - 1) * cell * .4 + 'px');
+      mote.style.setProperty('--dy', (Math.random() * .6 + .2) * cell + 'px');
+      field.append(mote);
+      setTimeout(() => mote.remove(), 800);
+    }
+
+    function launchDash(field, from, at, cell, vars) {
+      const size = cell * 1.2;
+      const el = document.createElement('i');
+      el.className = 'fx-dash';
+      el.innerHTML = '<span class="horse"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#p-n"></use></svg></span>';
+      el.style.left = (from.x - size / 2) + 'px';
+      el.style.top = (from.y - size / 2) + 'px';
+      el.style.width = el.style.height = size + 'px';
+      el.style.color = vars['--beam'];
+      el.style.setProperty('--accent', vars['--glow']);
+      el.style.setProperty('--stroke', vars['--beam']);
+      const face = at.x >= from.x ? 1 : -1;
+      el.style.setProperty('--dir', String(-face));
+      applyVars(el, vars);
+      field.append(el);
+
+      const lift = cell * 2.1;
+      const cx = (from.x + at.x) / 2;
+      const cy = Math.min(from.y, at.y) - lift;
+      const duration = 520;
+      const frames = [];
+      for (let k = 0; k <= 16; k++) {
+        const t = k / 16;
+        const px = (1 - t) * (1 - t) * from.x + 2 * (1 - t) * t * cx + t * t * at.x;
+        const py = (1 - t) * (1 - t) * from.y + 2 * (1 - t) * t * cy + t * t * at.y;
+        const lean = Math.sin(t * Math.PI) * -8 * face;
+        frames.push({ transform: `translate(${px - from.x}px, ${py - from.y}px) rotate(${lean}deg)` });
+        if (k > 0 && k % 4 === 0) {
+          setTimeout(() => dust(field, { x: px, y: py }, cell, vars), t * duration * .85);
+        }
+      }
+      if (typeof el.animate === 'function') {
+        el.animate(frames, { duration, easing: 'linear' });
+      } else {
+        el.style.transition = `transform ${duration}ms linear`;
+        requestAnimationFrame(() => {
+          el.style.transform = `translate(${at.x - from.x}px, ${at.y - from.y}px)`;
+        });
+      }
+      setTimeout(() => el.remove(), duration + 80);
+      return duration;
+    }
+
+    function launchAttack(field, from, at, cell, kind, type, color) {
+      const vars = {
+        '--beam': color === 'w' ? '#fff2b0' : '#c9ffdf',
+        '--glow': color === 'w' ? '#f6d87a' : '#63c98d',
+      };
+      castFlare(field, from, cell, color);
+      if (kind === 'beam') return launchBeam(field, from, at, cell, type, vars);
+      if (kind === 'arc') return launchArc(field, from, at, cell, type, vars);
+      return launchDash(field, from, at, cell, vars);
+    }
+
+    function fireBloom(field, at, cell) {
+      const bloom = document.createElement('i');
+      bloom.className = 'fire-bloom';
+      const size = cell * 1.9;
+      bloom.style.width = bloom.style.height = size + 'px';
+      bloom.style.left = (at.x - size / 2) + 'px';
+      bloom.style.top = (at.y - size / 2) + 'px';
+      field.append(bloom);
+      setTimeout(() => bloom.remove(), 900);
+    }
+
+    function stoneShards(field, at, cell, victimColor) {
+      const tint = victimColor === 'w' ? '#e8c76f' : '#3c8a63';
+      for (let k = 0; k < 11; k++) {
+        const shard = document.createElement('i');
+        shard.className = 'shard';
+        const size = cell * (.09 + Math.random() * .12);
+        shard.style.width = size + 'px';
+        shard.style.height = size * (1.1 + Math.random()) + 'px';
+        shard.style.left = at.x + 'px';
+        shard.style.top = at.y + 'px';
+        shard.style.setProperty('--shard', k % 3 === 0 ? tint : (k % 3 === 1 ? '#d9c08a' : tint));
+        const angle = Math.random() * Math.PI * 2;
+        const distance = cell * (.5 + Math.random() * 1.1);
+        shard.style.setProperty('--dx', Math.cos(angle) * distance + 'px');
+        shard.style.setProperty('--dy', (Math.sin(angle) * distance - cell * .3) + 'px');
+        shard.style.setProperty('--spin', (Math.random() * 720 - 360) + 'deg');
+        field.append(shard);
+        setTimeout(() => shard.remove(), 900);
+      }
+    }
+
+    function settle(last) {
+      const boardEl = $('board');
+      const field = $('fx');
+      if (!boardEl || typeof boardEl.getBoundingClientRect !== 'function') return;
+      const rect = boardEl.getBoundingClientRect();
+      if (!rect.width) return;
+      const cell = rect.width / 8;
+      slide(boardEl, cell, last.from, last.to);
+      if (last.rook) slide(boardEl, cell, last.rook.from, last.rook.to);
+      const mover = game.board[last.to];
+      if (field && mover) {
+        setTimeout(() => moveMotes(field, boardPoint(last.to, cell), cell, colorOf(mover)), 160);
+      }
+      if (last.promo && field) {
+        const at = boardPoint(last.to, cell);
+        impact(field, at, cell, true, 'fire');
+      }
+    }
+
+    function finishAttack(token) {
+      if (token !== attackToken) return;
+      animating = false;
+      dying = null;
+      const queued = pendingState;
+      pendingState = null;
+      if (queued) game = queued;
+      view = null;
+      say('');
+      render();
+      if (!queued && game.last) settle(game.last);
+    }
+
+    function beginAttack(prev, next) {
+      game = next;
+      say('');
+      if (animating) {
+        pendingState = next;
+        return;
+      }
+      const last = next.last;
+      const boardEl = $('board');
+      const field = $('fx');
+      if (!last || !last.captured || prev.status !== 'playing' || reducedMotion() || !boardEl || !field ||
+        typeof boardEl.getBoundingClientRect !== 'function') {
+        view = null;
+        dying = null;
+        animating = false;
+        sel = -1;
+        targets = [];
+        promo = null;
+        render();
+        return;
+      }
+      const rect = boardEl.getBoundingClientRect();
+      const targetSq = last.captureAt ?? last.to;
+      const attacker = prev.board[last.from];
+      if (!rect.width || !attacker || prev.board[targetSq] !== last.captured) {
+        view = null;
+        dying = null;
+        animating = false;
+        sel = -1;
+        targets = [];
+        promo = null;
+        render();
+        return;
+      }
+
+      const token = ++attackToken;
+      const cell = rect.width / 8;
+      const point = i => boardPoint(i, cell);
+      const from = point(last.from);
+      const at = point(targetSq);
+      const kind = last.attack || attackOf(typeOf(attacker));
+      const deathKind = kind === 'beam' ? 'burn' : kind === 'arc' ? 'break' : 'explode';
+      const color = colorOf(attacker);
+
+      view = prev;
+      dying = null;
+      animating = true;
+      sel = -1;
+      targets = [];
+      promo = null;
+      render();
+
+      const casterSq = $('board').querySelector(`[data-sq="${last.from}"]`);
+      if (casterSq) casterSq.classList.add('casting', kind);
+      const impactAt = launchAttack(field, from, at, cell, kind, typeOf(attacker), color);
+
+      setTimeout(() => {
+        if (token !== attackToken) return;
+        impact(field, at, cell, true, kind === 'beam' ? 'fire' : kind === 'arc' ? 'stone' : 'blast');
+        if (deathKind === 'burn') fireBloom(field, at, cell);
+        if (deathKind === 'break') stoneShards(field, at, cell, colorOf(last.captured));
+        dying = { sq: targetSq, kind: deathKind };
+        const targetEl = $('board').querySelector(`[data-sq="${targetSq}"] .piece`);
+        if (targetEl) {
+          targetEl.style.setProperty('--ex', (at.x >= from.x ? 1 : -1) * cell * .65 + 'px');
+          targetEl.classList.add('dying', deathKind);
+        }
+      }, impactAt);
+
+      setTimeout(() => finishAttack(token), impactAt + 710);
     }
 
     function lobbyBase() {
@@ -1296,11 +1808,17 @@
       ];
       MP.meColor = 'w';
       fxKey = '';
+      attackToken++;
+      animating = false;
+      view = null;
+      dying = null;
+      pendingState = null;
       resultDismissed = false;
       game = newChess();
       sel = -1;
       targets = [];
       promo = null;
+      $('fx').innerHTML = '';
       render();
       broadcastState();
     }
@@ -1326,12 +1844,17 @@
           sendLobby({ v: 1, type: 'reject', to: from, reason: 'It is not your move.' });
           return;
         }
-        const result = applyMove(game, data.move);
+        const prev = game;
+        const result = applyMove(prev, data.move);
         if (!result.ok) {
           sendLobby({ v: 1, type: 'reject', to: from, reason: result.reason });
           return;
         }
-        setGame(result.state, true);
+        if (result.last && result.last.captured) beginAttack(prev, result.state);
+        else if (animating) {
+          game = result.state;
+          pendingState = result.state;
+        } else setGame(result.state, true);
         broadcastState();
         return;
       }
@@ -1343,7 +1866,7 @@
         MP.players = data.players.map(p => ({ id: p.id, name: p.name, color: p.color }));
         MP.meColor = MP.players.find(p => p.id === MP.you)?.color ?? null;
         MP.pending = false;
-        setGame(cloneState(data.state), true);
+        acceptState(cloneState(data.state));
         if (!MP.meColor) $('lobbyState').textContent = 'You are watching this duel.';
       } else if (data.type === 'reject' && data.to === MP.you) {
         MP.pending = false;
@@ -1409,7 +1932,13 @@
       targets = [];
       promo = null;
       fxKey = '';
+      attackToken++;
+      animating = false;
+      view = null;
+      dying = null;
+      pendingState = null;
       resultDismissed = false;
+      $('fx').innerHTML = '';
       $('lobbyBar').hidden = false;
       $('lobbyState').textContent = 'Connecting to the lobby…';
       render();
