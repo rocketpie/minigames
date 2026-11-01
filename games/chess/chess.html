@@ -140,7 +140,8 @@
     }
 
     #fx { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
-    #crack { position: absolute; inset: 0; z-index: 0; pointer-events: none; transform-origin: 50% 50%; will-change: transform; }
+    #crack { position: absolute; inset: 0; z-index: 0; pointer-events: none; transform-origin: 50% 50%; will-change: transform; opacity: 1; transition: opacity 2s ease; }
+    #crack.faded { opacity: .4; }
     #crack svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 4px rgba(246, 216, 122, .45)); }
     #crack.cracking svg { animation: crackOpen 1.1s ease-out; }
     @keyframes crackOpen {
@@ -1081,6 +1082,7 @@
     let attackToken = 0;
     let crackDone = false;
     let crackPose = null;
+    let crackFade = null;
     let kingFireDone = false;
     let lobbyMax = MAX_PLAYERS;
     const MP = {
@@ -1308,6 +1310,9 @@
           crackDone = false;
           crackPose = null;
           crack.style.transform = '';
+          clearTimeout(crackFade);
+          crackFade = null;
+          crack.classList.remove('faded');
         }
       }
       if (g.status === 'checkmate' && !kingFireDone) {
@@ -1355,6 +1360,8 @@
         void crack.offsetWidth;
         crack.classList.add('cracking');
         setTimeout(() => crack.classList.remove('cracking'), 1300);
+        clearTimeout(crackFade);
+        crackFade = setTimeout(() => crack.classList.add('faded'), 20000);
       }
       if (!shell || !field || !boardEl || typeof boardEl.getBoundingClientRect !== 'function') return;
       const rect = boardEl.getBoundingClientRect();

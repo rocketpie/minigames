@@ -140,7 +140,8 @@
     }
 
     #fx { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
-    #crack { position: absolute; inset: 0; z-index: 0; pointer-events: none; transform-origin: 50% 50%; will-change: transform; }
+    #crack { position: absolute; inset: 0; z-index: 0; pointer-events: none; transform-origin: 50% 50%; will-change: transform; opacity: 1; transition: opacity 2s ease; }
+    #crack.faded { opacity: .5; }
     #crack svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 4px rgba(246, 216, 122, .45)); }
     #crack.cracking svg { animation: crackOpen 1.1s ease-out; }
     @keyframes crackOpen {
@@ -707,7 +708,7 @@
         <li><b>Goal:</b> trap the rival king. Gold is the light court and always moves first; Emerald is the dark court.</li>
         <li><b>Tap:</b> tap one of your figures, then a glowing square. Tap it again to let go.</li>
         <li><b>Pawns:</b> advance one or two squares at any time, as long as the path is clear, and capture one or two squares diagonally. A two-square capture needs a clear path and a rival figure on the far square.</li>
-        <li><b>Beweg:</b> the crownless queen on a- and h-file replaces the outer pawns. It teleports to any square in one move. Landing on a rival figure explodes it and the beweg dies with it — rival kings, queens and other bewegues are untouchable, and a beweg never gives check.</li>
+        <li><b>Beweg:</b> the crownless queen on a- and h-file replaces the outer pawns. It teleports to any square in one move. Landing on a rival figure explodes it and the beweg dies with it — rival kings, queens, trebuchets and other bewegues are untouchable, and a beweg never gives check.</li>
         <li><b>Trebuchet:</b> the wooden crane on the b- and g-files replaces the second-outer pawns. It cannot march. It hurls a boulder up to four squares along a rank, file or diagonal, smashing the first figure in its path and staying where it stands; a boulder can strike any figure, the king included.</li>
         <li><b>Castling:</b> tap the king, then two squares toward a rook. The path must be clear and neither the king's square nor the crossed square may be attacked.</li>
         <li><b>En passant:</b> a pawn may take a rival pawn that has just dashed two squares past it. The chance vanishes after one move.</li>
@@ -955,7 +956,7 @@
           if (!target) { push(to); continue; }
           if (colorOf(target) === color) continue;
           const kind = typeOf(target);
-          if (kind === 'k' || kind === 'q' || kind === 't') continue;
+          if (kind === 'k' || kind === 'q' || kind === 't' || kind === 'c') continue;
           push(to, { suicide: true });
         }
       } else if (type === 'c') {
@@ -1202,6 +1203,7 @@
     let attackToken = 0;
     let crackDone = false;
     let crackPose = null;
+    let crackFade = null;
     let kingFireDone = false;
     let lobbyMax = MAX_PLAYERS;
     const MP = {
@@ -1428,6 +1430,9 @@
           crackDone = false;
           crackPose = null;
           crack.style.transform = '';
+          clearTimeout(crackFade);
+          crackFade = null;
+          crack.classList.remove('faded');
         }
       }
       if (g.status === 'checkmate' && !kingFireDone) {
@@ -1475,6 +1480,8 @@
         void crack.offsetWidth;
         crack.classList.add('cracking');
         setTimeout(() => crack.classList.remove('cracking'), 1300);
+        clearTimeout(crackFade);
+        crackFade = setTimeout(() => crack.classList.add('faded'), 20000);
       }
       if (!shell || !field || !boardEl || typeof boardEl.getBoundingClientRect !== 'function') return;
       const rect = boardEl.getBoundingClientRect();

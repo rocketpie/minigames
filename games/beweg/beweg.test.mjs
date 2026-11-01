@@ -85,7 +85,7 @@ test('initial position: 32 figures, bewegues and trebuchets on the outer files, 
   for (const square of ['b2', 'g2', 'b7', 'g7']) {
     assert.equal(run(`game.board[${at(square)}]`), square[1] === '2' ? 'C' : 'c');
   }
-  assert.equal(run('allLegalMoves(game).length'), 100);
+  assert.equal(run('allLegalMoves(game).length'), 96);
 });
 
 test('double pawn push opens en passant for exactly one move', () => {
@@ -338,16 +338,17 @@ test('a beweg teleports to any empty square without a capture', () => {
   assert.deepEqual(result.state.captured, []);
 });
 
-test('a beweg may not attack the rival king, queen or another beweg, but any other figure', () => {
+test('a beweg may not attack the rival king, queen, trebuchet or another beweg, but any other figure', () => {
   const board = empty();
   put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'a2', 'T');
-  put(board, 'd5', 'q'); put(board, 'h6', 'r'); put(board, 'f5', 't');
+  put(board, 'd5', 'q'); put(board, 'h6', 'r'); put(board, 'f5', 't'); put(board, 'c4', 'c');
   setPosition({ board });
 
   const options = js(run(`legalMoves(game, ${at('a2')})`));
   assert.ok(!options.some(m => m.to === at('d5')));
   assert.ok(!options.some(m => m.to === at('e8')));
   assert.ok(!options.some(m => m.to === at('f5')));
+  assert.ok(!options.some(m => m.to === at('c4')));
   assert.ok(options.some(m => m.to === at('h6') && m.suicide));
 });
 
@@ -533,6 +534,37 @@ test('bishops ride a luminescent cloud and trebuchets are cranes', () => {
   assert.match(run("figHTML('b')"), /class="piece b type-b/);
   assert.match(run("figHTML('C')"), /class="piece w type-c/);
   assert.match(run("figHTML('c')"), /class="piece b type-c/);
+});
+
+test('the board crack turns half transparent after twenty seconds', () => {
+  const realTimer = ctx.setTimeout;
+  const timers = [];
+  ctx.setTimeout = (fn, ms) => { timers.push({ fn, ms }); };
+  const crack = ctx.document.getElementById('crack');
+  const original = crack.classList;
+  const classes = new Set();
+  crack.classList = {
+    add: (...names) => names.forEach(n => classes.add(n)),
+    remove: (...names) => names.forEach(n => classes.delete(n)),
+    contains: name => classes.has(name),
+    toggle() {},
+  };
+  try {
+    run('MP.active = false; MP.host = false; crackDone = false; crackPose = null; game = newChess();');
+    run(`game.captured = Array(17).fill('p'); render()`);
+    assert.ok(classes.has('cracking'));
+
+    const fade = timers.find(t => t.ms === 20000);
+    assert.ok(fade);
+    assert.ok(!classes.has('faded'));
+
+    fade.fn();
+    assert.ok(classes.has('faded'));
+  } finally {
+    ctx.setTimeout = realTimer;
+    crack.classList = original;
+    run('game.captured = []; render();');
+  }
 });
 
 test('checkmate fells the king and skips the popup', () => {

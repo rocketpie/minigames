@@ -425,6 +425,37 @@ test('the board cracks after more than half the figures are defeated', () => {
   assert.equal(run(`$('crack').style.transform`), '');
 });
 
+test('the board crack turns half transparent after twenty seconds', () => {
+  const realTimer = ctx.setTimeout;
+  const timers = [];
+  ctx.setTimeout = (fn, ms) => { timers.push({ fn, ms }); };
+  const crack = ctx.document.getElementById('crack');
+  const original = crack.classList;
+  const classes = new Set();
+  crack.classList = {
+    add: (...names) => names.forEach(n => classes.add(n)),
+    remove: (...names) => names.forEach(n => classes.delete(n)),
+    contains: name => classes.has(name),
+    toggle() {},
+  };
+  try {
+    run('MP.active = false; MP.host = false; crackDone = false; crackPose = null; game = newChess();');
+    run(`game.captured = Array(17).fill('p'); render()`);
+    assert.ok(classes.has('cracking'));
+
+    const fade = timers.find(t => t.ms === 20000);
+    assert.ok(fade);
+    assert.ok(!classes.has('faded'));
+
+    fade.fn();
+    assert.ok(classes.has('faded'));
+  } finally {
+    ctx.setTimeout = realTimer;
+    crack.classList = original;
+    run('game.captured = []; render();');
+  }
+});
+
 test('arc and dash capture spells apply their own wounds', () => {
   run('MP.active = false; MP.host = false; MP.meColor = null');
 
