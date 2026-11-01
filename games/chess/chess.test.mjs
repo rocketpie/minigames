@@ -404,13 +404,25 @@ test('checkmate fells the king and skips the popup', () => {
 });
 
 test('the board cracks after more than half the figures are defeated', () => {
-  run('MP.active = false; MP.host = false; crackDone = false; game = newChess()');
+  run('MP.active = false; MP.host = false; crackDone = false; crackPose = null; game = newChess(); $("crack").style.transform = ""');
   run(`game.captured = Array(16).fill('p'); render()`);
   assert.equal(run(`$('crack').hidden`), true);
+  assert.equal(run('crackPose'), null);
+  assert.equal(run(`$('crack').style.transform`), '');
 
   run(`game.captured = Array(17).fill('p'); render()`);
   assert.equal(run(`$('crack').hidden`), false);
   assert.equal(run('crackDone'), true);
+
+  const pose = js(run('crackPose'));
+  assert.ok(pose);
+  assert.notEqual(pose.angle, 0);
+  assert.match(run(`$('crack').style.transform`), /rotate\(/);
+  assert.match(run(`$('crack').style.transform`), /translate\(/);
+
+  run('newGame()');
+  assert.equal(run('crackPose'), null);
+  assert.equal(run(`$('crack').style.transform`), '');
 });
 
 test('arc and dash capture spells apply their own wounds', () => {
