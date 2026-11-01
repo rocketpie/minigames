@@ -75,14 +75,17 @@ function setPosition({ board, turn = 'w', castle = {}, ep = null, half = 0, full
   })}; sel = -1; targets = []; promo = null;`);
 }
 
-test('initial position: 32 figures, crownless bewegues on the outer files, Gold starts', () => {
+test('initial position: 32 figures, bewegues and trebuchets on the outer files, Gold starts', () => {
   run('game = newChess()');
   assert.equal(run('game.board.filter(Boolean).length'), 32);
   assert.equal(run('game.turn'), 'w');
   for (const square of ['a2', 'h2', 'a7', 'h7']) {
     assert.equal(run(`game.board[${at(square)}]`), square[1] === '2' ? 'T' : 't');
   }
-  assert.equal(run('allLegalMoves(game).length'), 104);
+  for (const square of ['b2', 'g2', 'b7', 'g7']) {
+    assert.equal(run(`game.board[${at(square)}]`), square[1] === '2' ? 'C' : 'c');
+  }
+  assert.equal(run('allLegalMoves(game).length'), 100);
 });
 
 test('double pawn push opens en passant for exactly one move', () => {
@@ -260,20 +263,15 @@ test('promotion needs a choice and allows underpromotion', () => {
   assert.equal(beweg.state.board[at('a8')], 'T');
 });
 
-test("a beweg can block the fool's mate", () => {
-  run('game = newChess()');
-  play([
-    { from: at('f2'), to: at('f3') },
-    { from: at('e7'), to: at('e5') },
-    { from: at('g2'), to: at('g4') },
-    { from: at('d8'), to: at('h4') },
-  ]);
-  assert.equal(run('game.status'), 'playing');
+test('a beweg can block a queen check', () => {
+  const board = empty();
+  put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'a2', 'T'); put(board, 'h4', 'q');
+  setPosition({ board });
   assert.equal(run(`inCheck(game, 'w')`), true);
 
-  const options = js(run(`legalMoves(game, ${at('h2')})`));
+  const options = js(run(`legalMoves(game, ${at('a2')})`));
   assert.ok(options.some(m => m.to === at('g3')));
-  play([{ from: at('h2'), to: at('g3') }]);
+  play([{ from: at('a2'), to: at('g3') }]);
   assert.equal(run(`inCheck(game, 'w')`), false);
 });
 
@@ -396,6 +394,189 @@ test('a lone beweg cannot force mate', () => {
   assert.equal(run(`insufficientMaterial(${JSON.stringify(put(put(bare.slice(), 'a1', 'T'), 'h8', 't'))})`), true);
 });
 
+test('a trebuchet cannot march and shoots only the first rival in line', () => {
+  const board = empty();
+  put(board, 'e1', 'K'); put(board, 'e8', 'k');
+  put(board, 'd4', 'C'); put(board, 'd7', 'r'); put(board, 'f4', 'n');
+  setPosition({ board });
+
+  const options = js(run(`legalMoves(game, ${at('d4')})`));
+  assert.deepEqual(options.map(m => m.to).sort((a, b) => a - b),
+    [at('d7'), at('f4')].sort((a, b) => a - b));
+  assert.ok(options.every(m => m.shot));
+  assert.equal(apply({ from: at('d4'), to: at('d5') }).ok, false);
+});
+
+test('a trebuchet shot destroys the target and leaves the trebuchet in place', () => {
+  const board = empty();
+  put(board, 'e1', 'K'); put(board, 'e8', 'k');
+  put(board, 'a1', 'C'); put(board, 'a5', 'r');
+  setPosition({ board });
+
+  const result = apply({ from: at('a1'), to: at('a5') });
+  assert.equal(result.ok, true);
+  assert.equal(result.state.board[at('a1')], 'C');
+  assert.equal(result.state.board[at('a5')], null);
+  assert.equal(result.state.last.from, at('a1'));
+  assert.equal(result.state.last.to, at('a5'));
+  assert.equal(result.state.last.shot, true);
+  assert.equal(result.state.last.attack, 'hurl');
+  assert.deepEqual(result.state.captured, ['r']);
+  assert.deepEqual(result.state.scars, [{ sq: at('a5'), kind: 'crater' }]);
+});
+
+test('a trebuchet shot plays the boulder spell and settles', () => {
+  const realTimer = ctx.setTimeout;
+  ctx.timers = [];
+  ctx.setTimeout = (fn, ms) => { ctx.timers.push({ fn, ms }); };
+  try {
+    run('MP.active = false; MP.host = false; game = newChess(); sel = -1; targets = [];');
+    const board = empty();
+    put(board, 'e1', 'K'); put(board, 'e8', 'k');
+    put(board, 'a1', 'C'); put(board, 'a5', 'r');
+    setPosition({ board });
+
+    run(`onSquare(${at('a1')})`);
+    run(`onSquare(${at('a5')})`);
+
+    const during = run(`$('board').innerHTML`);
+    assert.match(during, new RegExp(`data-sq="${at('a1')}" aria-label="[^"]*Gold trebuchet"`));
+    assert.match(during, new RegExp(`data-sq="${at('a5')}" aria-label="[^"]*Emerald rook"`));
+    assert.equal(run('animating'), true);
+
+    run(`
+      while (timers.length) {
+        timers.sort((a, b) => a.ms - b.ms);
+        timers.shift().fn();
+      }
+    `);
+
+    const after = run(`$('board').innerHTML`);
+    assert.match(after, new RegExp(`data-sq="${at('a1')}" aria-label="[^"]*Gold trebuchet"`));
+    assert.match(after, new RegExp(`data-sq="${at('a5')}" aria-label="[^"]*empty"`));
+    assert.match(after, /class="scar crater"/);
+    assert.equal(run('animating'), false);
+    assert.equal(run('view'), null);
+  } finally {
+    ctx.setTimeout = realTimer;
+    delete ctx.timers;
+  }
+});
+
+test('a trebuchet cannot shoot past the first figure', () => {
+  const board = empty();
+  put(board, 'e1', 'K'); put(board, 'e8', 'k');
+  put(board, 'a1', 'C'); put(board, 'a3', 'p'); put(board, 'a5', 'r');
+  setPosition({ board });
+
+  const options = js(run(`legalMoves(game, ${at('a1')})`));
+  assert.ok(options.some(m => m.to === at('a3') && m.shot));
+  assert.ok(!options.some(m => m.to === at('a5')));
+});
+
+test('a trebuchet shoots up to four squares, straight or diagonal', () => {
+  const straight = empty();
+  put(straight, 'e1', 'K'); put(straight, 'e8', 'k'); put(straight, 'a1', 'C'); put(straight, 'a5', 'r');
+  setPosition({ board: straight });
+  assert.ok(js(run(`legalMoves(game, ${at('a1')})`)).some(m => m.to === at('a5') && m.shot));
+
+  const tooFar = empty();
+  put(tooFar, 'e1', 'K'); put(tooFar, 'e8', 'k'); put(tooFar, 'a1', 'C'); put(tooFar, 'a6', 'r');
+  setPosition({ board: tooFar });
+  assert.deepEqual(js(run(`legalMoves(game, ${at('a1')})`)), []);
+
+  const diagonal = empty();
+  put(diagonal, 'e1', 'K'); put(diagonal, 'e8', 'k'); put(diagonal, 'a1', 'C'); put(diagonal, 'd4', 'r');
+  setPosition({ board: diagonal });
+  assert.ok(js(run(`legalMoves(game, ${at('a1')})`)).some(m => m.to === at('d4') && m.shot));
+
+  const diagonalEdge = empty();
+  put(diagonalEdge, 'e1', 'K'); put(diagonalEdge, 'e8', 'k'); put(diagonalEdge, 'a1', 'C'); put(diagonalEdge, 'e5', 'r');
+  setPosition({ board: diagonalEdge });
+  assert.ok(js(run(`legalMoves(game, ${at('a1')})`)).some(m => m.to === at('e5') && m.shot));
+
+  const diagonalTooFar = empty();
+  put(diagonalTooFar, 'e1', 'K'); put(diagonalTooFar, 'e8', 'k'); put(diagonalTooFar, 'a1', 'C'); put(diagonalTooFar, 'f6', 'r');
+  setPosition({ board: diagonalTooFar });
+  assert.deepEqual(js(run(`legalMoves(game, ${at('a1')})`)), []);
+});
+
+test('a trebuchet gives check down a clear line', () => {
+  const board = empty();
+  put(board, 'd1', 'K'); put(board, 'h8', 'k'); put(board, 'd5', 'c');
+  setPosition({ board, turn: 'w' });
+  assert.equal(run(`inCheck(game, 'w')`), true);
+
+  const blocked = board.slice();
+  put(blocked, 'd3', 'P');
+  setPosition({ board: blocked, turn: 'w' });
+  assert.equal(run(`inCheck(game, 'w')`), false);
+
+  const tooFar = empty();
+  put(tooFar, 'd1', 'K'); put(tooFar, 'h8', 'k'); put(tooFar, 'd6', 'c');
+  setPosition({ board: tooFar, turn: 'w' });
+  assert.equal(run(`inCheck(game, 'w')`), false);
+});
+
+test('a trebuchet is mating material', () => {
+  const board = empty();
+  put(board, 'b3', 'K'); put(board, 'e1', 'C'); put(board, 'a1', 'k');
+  setPosition({ board, turn: 'b' });
+  assert.equal(run(`inCheck(game, 'b')`), true);
+  const status = js(run('evaluateStatus(game)'));
+  assert.equal(status.status, 'checkmate');
+  assert.equal(status.winner, 'w');
+});
+
+test('bishops ride a luminescent cloud and trebuchets are cranes', () => {
+  assert.match(run("figHTML('B')"), /class="piece w type-b/);
+  assert.match(run("figHTML('b')"), /class="piece b type-b/);
+  assert.match(run("figHTML('C')"), /class="piece w type-c/);
+  assert.match(run("figHTML('c')"), /class="piece b type-c/);
+});
+
+test('checkmate fells the king and skips the popup', () => {
+  const board = empty();
+  put(board, 'h1', 'K'); put(board, 'g2', 'P'); put(board, 'h2', 'P');
+  put(board, 'a1', 'r'); put(board, 'h8', 'k');
+  setPosition({ board });
+  run(`
+    game.status = 'checkmate'; game.winner = 'b'; game.reason = 'checkmate';
+    kingFireDone = false; resultDismissed = false; render();
+  `);
+
+  assert.equal(run(`$('result').hidden`), true);
+  assert.equal(run('kingFireDone'), true);
+
+  const html = run(`$('board').innerHTML`);
+  const kingSquare = html.match(new RegExp(`data-sq="${at('h1')}"[\\s\\S]*?</button>`))[0];
+  assert.match(kingSquare, /class="piece w type-k fallen/);
+  assert.match(kingSquare, /class="king-fire"/);
+  assert.match(kingSquare, /class="scar burn"/);
+});
+
+test('the board cracks after more than half the figures are defeated', () => {
+  run('MP.active = false; MP.host = false; crackDone = false; crackPose = null; game = newChess(); $("crack").style.transform = ""');
+  run(`game.captured = Array(16).fill('p'); render()`);
+  assert.equal(run(`$('crack').hidden`), true);
+  assert.equal(run('crackPose'), null);
+  assert.equal(run(`$('crack').style.transform`), '');
+
+  run(`game.captured = Array(17).fill('p'); render()`);
+  assert.equal(run(`$('crack').hidden`), false);
+  assert.equal(run('crackDone'), true);
+
+  const pose = js(run('crackPose'));
+  assert.ok(pose);
+  assert.notEqual(pose.angle, 0);
+  assert.match(run(`$('crack').style.transform`), /rotate\(/);
+  assert.match(run(`$('crack').style.transform`), /translate\(/);
+
+  run('newGame()');
+  assert.equal(run('crackPose'), null);
+  assert.equal(run(`$('crack').style.transform`), '');
+});
+
 test('attack styles map to the attacking figure', () => {
   assert.equal(run("attackOf('p')"), 'beam');
   assert.equal(run("attackOf('b')"), 'arc');
@@ -404,6 +585,7 @@ test('attack styles map to the attacking figure', () => {
   assert.equal(run("attackOf('q')"), 'beam');
   assert.equal(run("attackOf('k')"), 'beam');
   assert.equal(run("attackOf('t')"), 'warp');
+  assert.equal(run("attackOf('c')"), 'hurl');
 });
 
 test('attack coordinates follow the flipped board', () => {
@@ -490,6 +672,12 @@ test('state serialization validates tampered payloads and envelopes', () => {
   assert.equal(run(`validState(${JSON.stringify(warp)})`), true);
   warp.last.attack = 'teleport';
   assert.equal(run(`validState(${JSON.stringify(warp)})`), false);
+
+  const shot = js(run('newChess()'));
+  shot.last = { from: 0, to: 1, attack: 'hurl', shot: true, captured: 'r', captureAt: 1 };
+  assert.equal(run(`validState(${JSON.stringify(shot)})`), true);
+  shot.last.shot = 'yes';
+  assert.equal(run(`validState(${JSON.stringify(shot)})`), false);
 
   assert.equal(run(`isGameMessage({ v: 1, type: 'move', to: 'x', move: {} })`), true);
   assert.equal(run(`isGameMessage({ v: 2, type: 'move' })`), false);

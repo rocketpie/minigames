@@ -64,7 +64,7 @@
 
     .court { width: 100%; display: flex; flex-direction: column; align-items: center; gap: .3rem; }
     .spoils { display: flex; align-items: center; justify-content: center; gap: .12rem; min-height: 1.85rem; width: min(92vw, 68vh, 600px); flex-wrap: wrap; }
-    .spoils .piece { position: relative; width: 1.5rem; height: 1.5rem; opacity: .8; animation: none; }
+    .spoils .piece { position: relative; width: 1.5rem; height: 1.5rem; opacity: .8; animation: none !important; }
     .spoils .piece .fig { filter: drop-shadow(0 1px 1px #000b); }
 
     .board-shell {
@@ -95,7 +95,10 @@
     .sq:focus-visible { outline: 2px solid #f6e6ae; outline-offset: -2px; z-index: 3; }
     .sq.light { background: radial-gradient(circle at 30% 22%, #dcc58f, #bda067 68%, #a8894e 100%); }
     .sq.dark { background: radial-gradient(circle at 70% 28%, #2b6c4b, #17452f 64%, #0f3321 100%); }
-    .sq:hover { filter: brightness(1.06); }
+    .sq:hover {
+      /* no filter here: it would make the square a stacking context above the crack overlay */
+      box-shadow: inset 0 0 0 2px rgba(246, 216, 122, .38), inset 0 0 0 .5px rgba(0, 0, 0, .25);
+    }
 
     .sq .rank, .sq .file {
       position: absolute; z-index: 2; font-family: Georgia, serif; font-size: clamp(.4rem, 1.5vw, .56rem);
@@ -107,6 +110,8 @@
     .sq.dark .rank, .sq.dark .file { color: rgba(246, 216, 122, .55); }
 
     .piece { position: absolute; inset: 6%; z-index: 1; display: block; animation: bob 5.5s ease-in-out infinite alternate; }
+    .piece.type-b { animation-name: bishopFloat; animation-duration: 4.6s; }
+    @keyframes bishopFloat { from { transform: translateY(0); } to { transform: translateY(-7%); } }
     .piece .fig { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .6)); }
     .piece.w { color: #f2e0ac; --accent: #2f6b47; --stroke: #1d2a16; }
     .piece.b { color: #1d5238; --accent: #e8c76f; --stroke: #c9a84e; }
@@ -135,6 +140,30 @@
     }
 
     #fx { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+    #crack { position: absolute; inset: 0; z-index: 0; pointer-events: none; transform-origin: 50% 50%; will-change: transform; }
+    #crack svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 4px rgba(246, 216, 122, .45)); }
+    #crack.cracking svg { animation: crackOpen 1.1s ease-out; }
+    @keyframes crackOpen {
+      0% { opacity: 0; transform: scale(.96); filter: brightness(4); }
+      18% { opacity: 1; }
+      100% { opacity: 1; transform: scale(1); filter: none; }
+    }
+    .crack-flash {
+      position: absolute; inset: 0; z-index: 5; pointer-events: none;
+      background: radial-gradient(circle at 50% 45%, rgba(255, 248, 214, .8), rgba(246, 216, 122, .25) 25%, transparent 60%);
+      animation: crackFlash .8s ease-out forwards;
+    }
+    @keyframes crackFlash { from { opacity: 1; } to { opacity: 0; } }
+    .board-shell.quake { animation: quake .8s cubic-bezier(.36, .07, .19, .97); }
+    @keyframes quake {
+      0%, 100% { transform: translate(0, 0) rotate(0); }
+      10% { transform: translate(-8px, 4px) rotate(-.6deg); }
+      25% { transform: translate(9px, -5px) rotate(.6deg); }
+      40% { transform: translate(-7px, -3px) rotate(-.4deg); }
+      55% { transform: translate(7px, 4px) rotate(.5deg); }
+      70% { transform: translate(-5px, 2px) rotate(-.3deg); }
+      85% { transform: translate(4px, -2px); }
+    }
     .spark { position: absolute; width: 7px; height: 7px; border-radius: 50%; animation: spark var(--t, .6s) ease-out forwards; }
     .spark.gold { background: #f6d87a; box-shadow: 0 0 10px #f6d87a; }
     .spark.green { background: #63c98d; box-shadow: 0 0 10px #63c98d; }
@@ -188,16 +217,25 @@
       100% { opacity: 0; transform: rotate(var(--ang)) scaleX(1); }
     }
 
-    .fx-arc { position: absolute; z-index: 6; pointer-events: none; will-change: transform; }
+    .fx-arc { position: absolute; z-index: 6; pointer-events: none; will-change: transform; filter: drop-shadow(0 0 14px var(--glow, #f6d87a)); }
     .fx-arc.bishop { color: #f6e6ae; }
-    .fx-arc.bishop svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 10px var(--glow, #f6d87a)); }
+    .fx-arc.bishop svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 16px var(--glow, #f6d87a)) drop-shadow(0 0 36px var(--glow, #f6d87a)); }
     .fx-arc.rook {
       border-radius: 45% 55% 48% 52%;
-      background: radial-gradient(circle at 34% 28%, #e0cea4, #7c6440 46%, #3a2c17 82%);
-      border: 1px solid rgba(232, 199, 111, .55);
-      box-shadow: 0 0 16px rgba(232, 199, 111, .45), inset -3px -4px 7px rgba(0, 0, 0, .55);
+      background: radial-gradient(circle at 34% 28%, #f0e0b8, #8d7450 42%, #3a2c17 82%);
+      border: 2px solid rgba(232, 199, 111, .7);
+      box-shadow: 0 0 26px var(--glow, #f6d87a), 0 0 54px var(--glow, #f6d87a), inset -4px -5px 9px rgba(0, 0, 0, .55);
     }
     .fx-arc.rook::before { content: ''; position: absolute; inset: 22%; border-radius: 50%; border: 1px dashed rgba(40, 26, 10, .5); }
+    .fx-trail {
+      position: absolute; z-index: 5; border-radius: 50%; pointer-events: none;
+      background: radial-gradient(circle, #fff 0 12%, var(--beam) 35%, rgba(0, 0, 0, 0) 72%);
+      box-shadow: 0 0 14px var(--glow); animation: trailMote .55s ease-out forwards;
+    }
+    @keyframes trailMote {
+      from { transform: translate(-50%, -50%) scale(1); opacity: .9; }
+      to { transform: translate(-50%, -50%) scale(.2); opacity: 0; }
+    }
 
     .fx-dash { position: absolute; z-index: 6; pointer-events: none; will-change: transform; }
     .fx-dash .horse {
@@ -279,6 +317,68 @@
       100% { transform: translate(var(--ex, 0), -72%) scale(.05) rotate(170deg); opacity: 0; filter: brightness(3); }
     }
     @keyframes explodeGlow { 0%, 20% { filter: none; } 45% { filter: brightness(2.2) saturate(1.6); } 100% { filter: brightness(4); } }
+
+    .piece.fallen {
+      z-index: 2; transform-origin: 50% 92%;
+      animation: kingFall .9s cubic-bezier(.3, .9, .4, 1) forwards !important;
+      animation-delay: 0s !important;
+    }
+    .piece.fallen .fig {
+      filter: brightness(.22) sepia(.8) saturate(.6) drop-shadow(0 0 8px rgba(255, 120, 50, .55));
+    }
+    .sq:hover .piece.fallen .fig {
+      filter: brightness(.22) sepia(.8) saturate(.6) drop-shadow(0 0 8px rgba(255, 120, 50, .55));
+    }
+    @keyframes kingFall {
+      0% { transform: rotate(0) translate(0, 0); }
+      52% { transform: rotate(76deg) translate(4%, 2%); }
+      70% { transform: rotate(96deg) translate(7%, 4%); }
+      100% { transform: rotate(90deg) translate(6%, 5%); opacity: .92; }
+    }
+
+    .king-fire {
+      position: absolute; left: 50%; bottom: 8%; width: 58%; height: 70%; z-index: 3;
+      transform: translateX(-50%); pointer-events: none; border-radius: 50% 50% 40% 40%;
+      background: radial-gradient(ellipse at 50% 82%, #fff6d0 0 6%, #ffb45e 20%, #ff6a3c 42%, rgba(180, 40, 10, 0) 72%);
+      filter: blur(1px); opacity: 0;
+      animation: fireIn .4s .4s ease-out forwards, fireFlicker .5s .8s steps(2) infinite alternate;
+    }
+    @keyframes fireIn { to { opacity: .9; } }
+    @keyframes fireFlicker {
+      from { transform: translateX(-50%) scale(.92) skewX(-2deg); opacity: .7; }
+      to { transform: translateX(-50%) scale(1.06) skewX(2deg); opacity: .95; }
+    }
+
+    .king-flame, .board-flame {
+      position: absolute; z-index: 6; pointer-events: none; border-radius: 50% 50% 45% 45% / 68% 68% 32% 32%;
+      background: radial-gradient(ellipse at 50% 80%, #fff6d0 0 6%, #ffd36a 20%, #ff7a3c 46%, rgba(170, 30, 5, 0) 75%);
+      filter: blur(.5px) drop-shadow(0 0 10px rgba(255, 120, 50, .6));
+      transform-origin: 50% 90%;
+    }
+    .king-flame {
+      animation: flameSpread var(--dur, 1.5s) ease-out var(--delay, 0s) forwards;
+    }
+    @keyframes flameSpread {
+      0% { transform: translate(-50%, -50%) translate(0, 0) scale(.35); opacity: 0; }
+      15% { opacity: 1; }
+      100% { transform: translate(-50%, -50%) translate(var(--fx), var(--fy)) scale(1.1); opacity: 0; }
+    }
+    .board-flame {
+      animation: boardFlame var(--dur, 2.2s) ease-in-out var(--delay, 0s) forwards;
+    }
+    @keyframes boardFlame {
+      0% { transform: translate(-50%, -50%) scale(.5) rotate(-3deg); opacity: 0; }
+      18% { opacity: .95; }
+      45% { transform: translate(-50%, -50%) scale(1.05) rotate(3deg); opacity: .8; }
+      75% { transform: translate(-50%, -50%) scale(.9) rotate(-2deg); opacity: .65; }
+      100% { transform: translate(-50%, -50%) scale(.35) rotate(2deg); opacity: 0; }
+    }
+    .fire-veil {
+      position: absolute; inset: 0; z-index: 4; pointer-events: none;
+      background: radial-gradient(circle at 50% 50%, rgba(255, 145, 65, .38), rgba(150, 30, 0, .2) 55%, transparent 82%);
+      animation: fireVeil 2.8s ease-out forwards;
+    }
+    @keyframes fireVeil { 0% { opacity: 0; } 20% { opacity: 1; } 100% { opacity: 0; } }
     @keyframes vanishDie {
       0% { transform: scale(1); opacity: 1; }
       32% { transform: scale(1.12); filter: brightness(2.4) drop-shadow(0 0 16px #c9ffe4); }
@@ -383,9 +483,12 @@
       .piece, .mark, .sq.check, #embers i, .piece.dying, .sq.casting .fig,
       .sq .piece.warp-in .fig { animation: none !important; }
       .piece .fig { transition: none !important; }
-      .spark, .impact-rune,
-      .cast-flare, .fx-beam, .fx-arc, .fx-dash, .fx-dust, .fire-bloom, .shard, .fx-warp { display: none !important; }
-      .board-shell.shake { animation: none !important; }
+      .spark, .impact-rune, .fx-trail,
+      .cast-flare, .fx-beam, .fx-arc, .fx-dash, .fx-dust, .fire-bloom, .shard, .fx-warp,
+      .crack-flash, .king-fire, .king-flame, .board-flame, .fire-veil { display: none !important; }
+      .board-shell.shake, .board-shell.quake { animation: none !important; }
+      #crack.cracking svg { animation: none !important; }
+      .piece.fallen { transform: rotate(90deg) translate(6%, 5%); }
     }
   </style>
 </head>
@@ -393,6 +496,11 @@
 <body>
   <svg width="0" height="0" aria-hidden="true" style="position:absolute;overflow:hidden">
     <defs>
+      <filter id="cloudGlow" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="2.4" result="blur" />
+        <feMerge><feMergeNode in="blur" /><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+
       <symbol id="p-p" viewBox="0 0 100 100">
         <ellipse cx="50" cy="95" rx="22" ry="3" fill="rgba(0,0,0,.38)" />
         <g stroke="var(--stroke)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
@@ -436,6 +544,16 @@
 
       <symbol id="p-b" viewBox="0 0 100 100">
         <ellipse cx="50" cy="95" rx="24" ry="3" fill="rgba(0,0,0,.38)" />
+        <g filter="url(#cloudGlow)">
+          <ellipse cx="26" cy="91" rx="18" ry="6" fill="var(--accent)" opacity=".32" />
+          <ellipse cx="50" cy="95" rx="24" ry="5" fill="var(--accent)" opacity=".3" />
+          <ellipse cx="74" cy="91" rx="18" ry="6" fill="var(--accent)" opacity=".32" />
+          <ellipse cx="50" cy="93" rx="14" ry="4" fill="#ffffff" opacity=".4" />
+          <circle cx="26" cy="85" r="8" fill="#f2fff8" opacity=".55" />
+          <circle cx="43" cy="83" r="10" fill="#f2fff8" opacity=".5" />
+          <circle cx="61" cy="84" r="9" fill="#f2fff8" opacity=".52" />
+          <circle cx="75" cy="87" r="7" fill="#f2fff8" opacity=".5" />
+        </g>
         <g stroke="var(--stroke)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
           <path d="M75 94V30" fill="none" stroke="var(--accent)" stroke-width="3.2" />
           <path d="M75 29a9 9 0 1 1-8-14 10 10 0 1 0 8 14z" fill="var(--accent)" />
@@ -491,6 +609,25 @@
         </g>
       </symbol>
 
+      <symbol id="p-c" viewBox="0 0 100 100">
+        <ellipse cx="50" cy="95" rx="31" ry="3" fill="rgba(0,0,0,.38)" />
+        <g stroke="var(--stroke)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+          <path d="M15 90h70l-6-8H21z" fill="currentColor" />
+          <path d="M24 82l26-44 26 44" fill="none" stroke="currentColor" stroke-width="8" />
+          <path d="M50 42v40M35 82h30M38 68h24" fill="none" stroke="var(--accent)" stroke-width="2" opacity=".55" />
+          <path d="M16 26L78 54" fill="none" stroke="currentColor" stroke-width="7" />
+          <path d="M16 26L78 54" fill="none" stroke="var(--accent)" stroke-width="1.6" opacity=".65" />
+          <circle cx="50" cy="42" r="4.5" fill="var(--accent)" />
+          <path d="M74 52v6" fill="none" stroke="var(--accent)" stroke-width="2" />
+          <rect x="64" y="56" width="20" height="16" rx="2" fill="currentColor" />
+          <path d="M67 60h14M67 64h14M67 68h14" fill="none" stroke="var(--accent)" stroke-width="1.2" opacity=".8" />
+          <path d="M16 26L8 16M16 26l-1-7" fill="none" stroke="var(--accent)" stroke-width="1.6" />
+          <circle cx="6" cy="11" r="6" fill="currentColor" />
+          <path d="M3 10l2 2 4-4" fill="none" stroke="var(--accent)" stroke-width="1.2" />
+          <path d="M21 87h58" fill="none" stroke="var(--accent)" stroke-width="1.6" opacity=".6" />
+        </g>
+      </symbol>
+
       <symbol id="scar-burn" viewBox="0 0 100 100">
         <path d="M50 16c15 1 27 10 30 24 3 15-7 29-21 35-14 5-30 0-36-12-7-13 0-29 11-37 5-4 10-7 16-10z" fill="#080b07" opacity=".82" />
         <path d="M49 26c10 0 19 6 21 16 2 11-5 21-15 25-9 4-20 1-25-7-5-9 1-21 9-27 3-2 6-5 10-7z" fill="#1c2417" opacity=".8" />
@@ -513,6 +650,18 @@
         <circle cx="31" cy="64" r="1.6" fill="#c9a84e" opacity=".7" />
         <circle cx="69" cy="43" r="1.4" fill="#c9a84e" opacity=".6" />
       </symbol>
+
+      <symbol id="board-crack" viewBox="0 0 100 100">
+        <path d="M49 0l-6 12 7 8-10 10 8 9-7 11 9 10-6 12 8 12-5 16" fill="none" stroke="#050805" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" />
+        <path d="M49 0l-6 12 7 8-10 10 8 9-7 11 9 10-6 12 8 12-5 16" fill="none" stroke="#f6d87a" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity=".55" />
+        <path d="M43 20l-15 7 4 9-13 7M54 39l14-7-5-9 15-6M45 61l-17 8 4 9-13 8M54 73l15 8-4 10 12 9" fill="none" stroke="#050805" stroke-width="3.2" stroke-linecap="round" />
+        <path d="M43 20l-15 7 4 9-13 7M54 39l14-7-5-9 15-6M45 61l-17 8 4 9-13 8M54 73l15 8-4 10 12 9" fill="none" stroke="#d9b65c" stroke-width=".9" stroke-linecap="round" opacity=".5" />
+        <path d="M31 30l-6 4 5 2zM68 42l7-2-3 6zM28 69l-7 4 4 5zM69 81l6 5-2 4z" fill="#2b1a08" opacity=".8" />
+        <circle cx="43" cy="20" r="1.6" fill="#ffb45e" />
+        <circle cx="54" cy="39" r="1.3" fill="#f6d87a" />
+        <circle cx="45" cy="61" r="1.5" fill="#ffb45e" />
+        <circle cx="54" cy="73" r="1.2" fill="#f6d87a" />
+      </symbol>
     </defs>
   </svg>
 
@@ -534,6 +683,9 @@
       <div class="board-shell" id="shell">
         <div class="board-field" id="field">
           <div id="board" role="group" aria-label="Beweg board"></div>
+          <div id="crack" hidden aria-hidden="true">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#board-crack"></use></svg>
+          </div>
           <div id="fx" aria-hidden="true"></div>
         </div>
       </div>
@@ -556,11 +708,13 @@
         <li><b>Tap:</b> tap one of your figures, then a glowing square. Tap it again to let go.</li>
         <li><b>Pawns:</b> advance one or two squares at any time, as long as the path is clear, and capture one or two squares diagonally. A two-square capture needs a clear path and a rival figure on the far square.</li>
         <li><b>Beweg:</b> the crownless queen on a- and h-file replaces the outer pawns. It teleports to any square in one move. Landing on a rival figure explodes it and the beweg dies with it — rival kings, queens and other bewegues are untouchable, and a beweg never gives check.</li>
+        <li><b>Trebuchet:</b> the wooden crane on the b- and g-files replaces the second-outer pawns. It cannot march. It hurls a boulder up to four squares along a rank, file or diagonal, smashing the first figure in its path and staying where it stands; a boulder can strike any figure, the king included.</li>
         <li><b>Castling:</b> tap the king, then two squares toward a rook. The path must be clear and neither the king's square nor the crossed square may be attacked.</li>
         <li><b>En passant:</b> a pawn may take a rival pawn that has just dashed two squares past it. The chance vanishes after one move.</li>
         <li><b>Promotion:</b> a pawn reaching the far rank becomes a queen, rook, bishop, knight or a beweg — choose the guise.</li>
         <li><b>Draws:</b> stalemate, fifty moves without a capture or pawn move, or too little material to force mate.</li>
-        <li><b>Spells:</b> pawns and royalty cast beams, bishops and rooks hurl arcing magic, knights charge as spectral horses, and a beweg winks across the board. A capture burns, breaks or explodes the rival figure and leaves a scar on the square for the rest of the duel.</li>
+        <li><b>Spells:</b> pawns and royalty cast beams, bishops and rooks hurl arcing magic, knights charge as spectral horses, a beweg winks across the board, and a trebuchet looses a boulder the size of a figure. A capture burns, breaks or explodes the rival figure and leaves a scar on the square for the rest of the duel.</li>
+        <li><b>Endgame:</b> when seventeen figures have fallen, the board splits with a great crack. A checkmated king topples and bursts into flame — no panel, just the ruin.</li>
         <li><b>Local duel:</b> two players share this screen. <b>Multiplayer:</b> open the lobby with a friend; the host is Gold, the guest Emerald, and the board turns for Emerald.</li>
       </ul>
     </details>
@@ -593,22 +747,22 @@
     const FILES = 'abcdefgh';
     const START_BOARD = [
       'r', 'n', 'b', 'q', 'k', 'b', 'n', 'r',
-      't', 'p', 'p', 'p', 'p', 'p', 'p', 't',
+      't', 'c', 'p', 'p', 'p', 'p', 'c', 't',
       null, null, null, null, null, null, null, null,
       null, null, null, null, null, null, null, null,
       null, null, null, null, null, null, null, null,
       null, null, null, null, null, null, null, null,
-      'T', 'P', 'P', 'P', 'P', 'P', 'P', 'T',
+      'T', 'C', 'P', 'P', 'P', 'P', 'C', 'T',
       'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R',
     ];
     const KNIGHT_STEPS = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]];
     const KING_STEPS = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
     const ROOK_DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
     const BISHOP_DIRS = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
-    const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king', t: 'beweg' };
+    const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king', t: 'beweg', c: 'trebuchet' };
     const SIDE = { w: 'Gold', b: 'Emerald' };
-    const VALUE = { q: 9, r: 5, b: 3, n: 3, t: 2, p: 1, k: 0 };
-    const PIECE_SET = new Set('PNBRQKTpnbrqkt');
+    const VALUE = { q: 9, r: 5, c: 5, b: 3, n: 3, t: 2, p: 1, k: 0 };
+    const PIECE_SET = new Set('PNBRQKTCpnbrqktc');
     const GAME_TYPES = new Set(['state', 'move', 'reject']);
 
     const $ = id => document.getElementById(id);
@@ -618,8 +772,8 @@
     const onBoard = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
     const sqIndex = (r, c) => r * 8 + c;
     const sqName = i => FILES[i & 7] + (8 - (i >> 3));
-    const attackOf = type => type === 't' ? 'warp' : type === 'n' ? 'dash' : (type === 'b' || type === 'r') ? 'arc' : 'beam';
-    const SCAR_KIND = { beam: 'burn', arc: 'cracked', dash: 'crater', warp: 'crater' };
+    const attackOf = type => type === 't' ? 'warp' : type === 'c' ? 'hurl' : type === 'n' ? 'dash' : (type === 'b' || type === 'r') ? 'arc' : 'beam';
+    const SCAR_KIND = { beam: 'burn', arc: 'cracked', dash: 'crater', warp: 'crater', hurl: 'crater' };
     const isLocal = () => location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const isProd = () => location.hostname === 'co3d.eu' || location.hostname === 'www.co3d.eu';
     const gameUrl = () => location.origin + location.pathname;
@@ -716,6 +870,18 @@
           r += dr; c += dc;
         }
       }
+      const trebuchet = by === 'w' ? 'C' : 'c';
+      for (const [dr, dc] of ROOK_DIRS.concat(BISHOP_DIRS)) {
+        for (let step = 1; step <= 4; step++) {
+          const r = row + dr * step, c = col + dc * step;
+          if (!onBoard(r, c)) break;
+          const p = board[sqIndex(r, c)];
+          if (p) {
+            if (p === trebuchet) return true;
+            break;
+          }
+        }
+      }
       return false;
     }
 
@@ -792,6 +958,19 @@
           if (kind === 'k' || kind === 'q' || kind === 't') continue;
           push(to, { suicide: true });
         }
+      } else if (type === 'c') {
+        for (const [dr, dc] of ROOK_DIRS.concat(BISHOP_DIRS)) {
+          for (let step = 1; step <= 4; step++) {
+            const r = row + dr * step, c = col + dc * step;
+            if (!onBoard(r, c)) break;
+            const to = sqIndex(r, c);
+            const target = board[to];
+            if (target) {
+              if (colorOf(target) !== color) push(to, { shot: true });
+              break;
+            }
+          }
+        }
       } else {
         const dirs = type === 'r' ? ROOK_DIRS : type === 'b' ? BISHOP_DIRS : ROOK_DIRS.concat(BISHOP_DIRS);
         for (const [dr, dc] of dirs) {
@@ -815,6 +994,10 @@
       const piece = board[move.from];
       if (!piece) return board;
       const color = colorOf(piece);
+      if (move.shot) {
+        board[move.to] = null;
+        return board;
+      }
       if (move.ep) board[move.to + (color === 'w' ? 8 : -8)] = null;
       board[move.to] = move.suicide ? null : move.promo
         ? (color === 'w' ? move.promo.toUpperCase() : move.promo.toLowerCase()) : piece;
@@ -861,7 +1044,7 @@
         const piece = board[i];
         if (!piece) continue;
         const type = typeOf(piece);
-        if (type === 'p' || type === 'r' || type === 'q') return false;
+        if (type === 'p' || type === 'r' || type === 'q' || type === 'c') return false;
         if (type === 't') continue;
         if (type !== 'k') minors.push({ type, square: i });
       }
@@ -940,6 +1123,7 @@
       next.last = { from: found.from, to: found.to };
       if (attackerType === 't') next.last.warp = true;
       if (found.suicide) next.last.suicide = true;
+      if (found.shot) next.last.shot = true;
       if (promo) next.last.promo = promo;
       if (captured) {
         next.last.captured = captured;
@@ -989,9 +1173,10 @@
         s.last.from >= 0 && s.last.from < 64 && s.last.to >= 0 && s.last.to < 64)) return false;
       if (s.last && s.last.captureAt !== undefined &&
         !(Number.isInteger(s.last.captureAt) && s.last.captureAt >= 0 && s.last.captureAt < 64)) return false;
-      if (s.last && s.last.attack !== undefined && !['beam', 'arc', 'dash', 'warp'].includes(s.last.attack)) return false;
+      if (s.last && s.last.attack !== undefined && !['beam', 'arc', 'dash', 'warp', 'hurl'].includes(s.last.attack)) return false;
       if (s.last && s.last.suicide !== undefined && typeof s.last.suicide !== 'boolean') return false;
       if (s.last && s.last.warp !== undefined && typeof s.last.warp !== 'boolean') return false;
+      if (s.last && s.last.shot !== undefined && typeof s.last.shot !== 'boolean') return false;
       if (s.last && s.last.captured !== undefined &&
         !(typeof s.last.captured === 'string' && PIECE_SET.has(s.last.captured))) return false;
       return true;
@@ -1015,6 +1200,9 @@
     let animating = false;
     let pendingState = null;
     let attackToken = 0;
+    let crackDone = false;
+    let crackPose = null;
+    let kingFireDone = false;
     let lobbyMax = MAX_PLAYERS;
     const MP = {
       active: false, host: false, you: null, hostId: null, room: null,
@@ -1025,7 +1213,7 @@
     function figHTML(piece, extra = '', delay = null) {
       const color = colorOf(piece) === 'w' ? 'w' : 'b';
       const style = delay === null ? '' : ` style="animation-delay:-${delay.toFixed(2)}s"`;
-      return `<span class="piece ${color} ${extra}"${style}><svg class="fig" viewBox="0 0 100 100" aria-hidden="true"><use href="#p-${typeOf(piece)}"></use></svg></span>`;
+      return `<span class="piece ${color} type-${typeOf(piece)} ${extra}"${style}><svg class="fig" viewBox="0 0 100 100" aria-hidden="true"><use href="#p-${typeOf(piece)}"></use></svg></span>`;
     }
 
     function spoils(g, color) {
@@ -1060,8 +1248,9 @@
       const activeSq = document.activeElement?.dataset?.sq;
       const order = Array.from({ length: 64 }, (_, i) => i);
       if (flipped) order.reverse();
-      const checkSq = (g.status === 'playing' || g.status === 'checkmate') && inCheck(g, g.turn)
-        ? findKing(g.board, g.turn) : -1;
+      const checkSq = g.status === 'playing' && inCheck(g, g.turn) ? findKing(g.board, g.turn) : -1;
+      const deadKingSq = g.status === 'checkmate'
+        ? findKing(g.board, g.winner === 'w' ? 'b' : 'w') : -1;
       let html = '';
       for (const i of order) {
         const row = i >> 3, col = i & 7;
@@ -1070,8 +1259,9 @@
         const option = targets.find(m => m.to === i);
         const capture = !!option && (!!piece || option.ep);
         const last = g.last;
-        const scar = g.scars ? g.scars.find(s => s.sq === i) : null;
-        const dyingHere = dying && dying.find(d => d.sq === i);
+        const deadKing = i === deadKingSq;
+        const scar = deadKing ? { kind: 'burn' } : (g.scars ? g.scars.find(s => s.sq === i) : null);
+        const dyingHere = dying && dying.find(d => d.sq === i) && !deadKing;
         const classes = ['sq', light ? 'light' : 'dark'];
         if (i === sel) classes.push('sel');
         if (last && (i === last.from || i === last.to ||
@@ -1085,7 +1275,8 @@
           : '';
         html += `<button type="button" class="${classes.join(' ')}" data-sq="${i}" aria-label="${sqLabel(g, i, option)}">` +
           coords + scarHTML +
-          (piece ? figHTML(piece, dyingHere ? `dying ${dyingHere.kind}` : '', (i % 8) * .35 + ((i >> 3) % 3) * .21) : '') +
+          (piece ? figHTML(piece, deadKing ? 'fallen' : dyingHere ? `dying ${dyingHere.kind}` : '', (i % 8) * .35 + ((i >> 3) % 3) * .21) : '') +
+          (deadKing ? '<span class="king-fire" aria-hidden="true"></span>' : '') +
           (option ? '<span class="mark"></span>' : '') + '</button>';
       }
       $('board').innerHTML = html;
@@ -1149,7 +1340,7 @@
     function renderResult(g) {
       const info = resultInfo(g);
       const modal = $('result');
-      if (!info || resultDismissed) {
+      if (!info || resultDismissed || g.status === 'checkmate') {
         modal.hidden = true;
         return;
       }
@@ -1205,8 +1396,9 @@
         badge.textContent = 'Spellcasting…';
         badge.className = 'turn wait';
       } else {
-        badge.textContent = waiting ? 'Awaiting the court' : `${SIDE[g.turn]} to move`;
-        badge.className = 'turn ' + (waiting ? 'wait' : g.turn);
+        const ended = g.status !== 'playing';
+        badge.textContent = waiting ? 'Awaiting the court' : ended ? 'Duel ended' : `${SIDE[g.turn]} to move`;
+        badge.className = 'turn ' + (waiting || ended ? 'wait' : g.turn);
       }
       $('status').textContent = statusLine(g);
       $('multi').hidden = MP.active;
@@ -1215,6 +1407,168 @@
         (MP.active && !MP.meColor) || MP.pending || animating;
       renderResult(g);
       renderPromo();
+      syncBattleDamage(g);
+    }
+
+    function syncBattleDamage(g) {
+      const crack = $('crack');
+      const broken = (g.captured ? g.captured.length : 0) > 16;
+      if (crack) {
+        crack.hidden = !broken;
+        if (broken) {
+          if (!crackPose) {
+            crackPose = newCrackPose();
+            crack.style.transform = crackTransform();
+          }
+          if (!crackDone) {
+            crackDone = true;
+            triggerCrackBreak();
+          }
+        } else {
+          crackDone = false;
+          crackPose = null;
+          crack.style.transform = '';
+        }
+      }
+      if (g.status === 'checkmate' && !kingFireDone) {
+        kingFireDone = true;
+        triggerKingDeath(g);
+      }
+    }
+
+    function newCrackPose() {
+      return {
+        angle: (Math.random() < .5 ? -1 : 1) * (12 + Math.random() * 48),
+        x: (Math.random() * 2 - 1) * 10,
+        y: (Math.random() * 2 - 1) * 8,
+        scale: .85 + Math.random() * .3,
+      };
+    }
+
+    function crackTransform() {
+      if (!crackPose) return '';
+      return `translate(${crackPose.x.toFixed(2)}%, ${crackPose.y.toFixed(2)}%) rotate(${crackPose.angle.toFixed(2)}deg) scale(${crackPose.scale.toFixed(3)})`;
+    }
+
+    function crackPoint(t, width, height) {
+      const pose = crackPose || { angle: 0, x: 0, y: 0, scale: 1 };
+      const cx = width / 2, cy = height / 2;
+      const baseX = width * .48 + (Math.random() - .5) * width * .05;
+      const baseY = t * height;
+      const sx = cx + (baseX - cx) * pose.scale;
+      const sy = cy + (baseY - cy) * pose.scale;
+      const rad = pose.angle * Math.PI / 180;
+      const dx = sx - cx, dy = sy - cy;
+      return {
+        x: cx + dx * Math.cos(rad) - dy * Math.sin(rad) + width * pose.x / 100,
+        y: cy + dx * Math.sin(rad) + dy * Math.cos(rad) + height * pose.y / 100,
+      };
+    }
+
+    function triggerCrackBreak() {
+      const crack = $('crack');
+      const shell = $('shell');
+      const field = $('fx');
+      const boardEl = $('board');
+      if (crack) {
+        crack.classList.remove('cracking');
+        void crack.offsetWidth;
+        crack.classList.add('cracking');
+        setTimeout(() => crack.classList.remove('cracking'), 1300);
+      }
+      if (!shell || !field || !boardEl || typeof boardEl.getBoundingClientRect !== 'function') return;
+      const rect = boardEl.getBoundingClientRect();
+      if (!rect.width) return;
+
+      shell.classList.add('quake');
+      setTimeout(() => shell.classList.remove('quake'), 850);
+      const flash = document.createElement('i');
+      flash.className = 'crack-flash';
+      field.append(flash);
+      setTimeout(() => flash.remove(), 900);
+
+      for (let k = 0; k < 26; k++) {
+        const shard = document.createElement('i');
+        shard.className = 'shard';
+        const size = rect.width * (.012 + Math.random() * .02);
+        shard.style.width = size + 'px';
+        shard.style.height = size * (1 + Math.random()) + 'px';
+        const point = crackPoint(Math.random(), rect.width, rect.height);
+        const jitter = rect.width * .04;
+        shard.style.left = point.x + (Math.random() * 2 - 1) * jitter + 'px';
+        shard.style.top = point.y + (Math.random() * 2 - 1) * jitter + 'px';
+        shard.style.setProperty('--shard', ['#f0d58f', '#8a6b3a', '#5b3a17', '#c9a84e'][k % 4]);
+        shard.style.setProperty('--dx', (Math.random() - .5) * rect.width * .35 + 'px');
+        shard.style.setProperty('--dy', (Math.random() - .5) * rect.height * .35 + 'px');
+        shard.style.setProperty('--spin', Math.random() * 900 - 450 + 'deg');
+        field.append(shard);
+        setTimeout(() => shard.remove(), 1300);
+      }
+    }
+
+    function triggerKingDeath(g) {
+      const loser = g.winner === 'w' ? 'b' : 'w';
+      const sq = findKing(g.board, loser);
+      const boardEl = $('board');
+      const field = $('fx');
+      if (sq < 0 || !boardEl || !field || typeof boardEl.getBoundingClientRect !== 'function') return;
+      const rect = boardEl.getBoundingClientRect();
+      if (!rect.width) return;
+      const cell = rect.width / 8;
+      const at = boardPoint(sq, cell);
+      setTimeout(() => {
+        impact(field, at, cell, true, 'fire');
+        fireBloom(field, at, cell);
+
+        const veil = document.createElement('i');
+        veil.className = 'fire-veil';
+        field.append(veil);
+        setTimeout(() => veil.remove(), 3200);
+
+        for (let k = 0; k < 30; k++) {
+          const flame = document.createElement('i');
+          flame.className = 'king-flame';
+          const size = cell * (.35 + Math.random() * .65);
+          flame.style.width = size + 'px';
+          flame.style.height = size * 1.5 + 'px';
+          flame.style.left = at.x + 'px';
+          flame.style.top = at.y + 'px';
+          const angle = Math.random() * Math.PI * 2;
+          const distance = cell * (.8 + Math.random() * 6.2);
+          flame.style.setProperty('--fx', Math.cos(angle) * distance + 'px');
+          flame.style.setProperty('--fy', Math.sin(angle) * distance + 'px');
+          flame.style.setProperty('--delay', Math.random() * .45 + 's');
+          flame.style.setProperty('--dur', 1.1 + Math.random() * .9 + 's');
+          field.append(flame);
+          setTimeout(() => flame.remove(), 2900);
+        }
+
+        for (let k = 0; k < 18; k++) {
+          const flame = document.createElement('i');
+          flame.className = 'board-flame';
+          const size = cell * (.25 + Math.random() * .6);
+          flame.style.width = size + 'px';
+          flame.style.height = size * 1.5 + 'px';
+          flame.style.left = Math.random() * rect.width + 'px';
+          flame.style.top = Math.random() * rect.height + 'px';
+          flame.style.setProperty('--delay', .15 + Math.random() * .9 + 's');
+          flame.style.setProperty('--dur', 1.6 + Math.random() * 1.5 + 's');
+          field.append(flame);
+          setTimeout(() => flame.remove(), 4300);
+        }
+
+        for (let k = 0; k < 12; k++) {
+          const ember = document.createElement('i');
+          ember.className = 'spark ember';
+          ember.style.left = at.x + 'px';
+          ember.style.top = at.y + 'px';
+          ember.style.setProperty('--dx', (Math.random() * 2 - 1) * cell * .7 + 'px');
+          ember.style.setProperty('--dy', -cell * (.4 + Math.random() * .9) + 'px');
+          ember.style.setProperty('--t', (.6 + Math.random() * .5) + 's');
+          field.append(ember);
+          setTimeout(() => ember.remove(), 1300);
+        }
+      }, 480);
     }
 
     function say(message) {
@@ -1249,12 +1603,16 @@
       view = null;
       dying = null;
       pendingState = null;
+      crackDone = false;
+      crackPose = null;
+      kingFireDone = false;
       game = newChess();
       sel = -1;
       targets = [];
       promo = null;
       resultDismissed = false;
       fxKey = '';
+      $('crack').style.transform = '';
       $('fx').innerHTML = '';
       save();
       render();
@@ -1487,7 +1845,7 @@
             if (mover) moveMotes(field, to, cell, colorOf(mover));
           }, 130);
         }
-      } else {
+      } else if (!last.shot) {
         slide(boardEl, cell, last.from, last.to);
         if (last.rook) slide(boardEl, cell, last.rook.from, last.rook.to);
       }
@@ -1575,8 +1933,9 @@
     }
 
     function launchArc(field, from, at, cell, type, vars) {
-      const boulder = type === 'r';
-      const size = cell * (boulder ? .34 : .27);
+      const boulder = type === 'r' || type === 'c';
+      const giant = type === 'c';
+      const size = cell * (giant ? .98 : boulder ? .82 : .62);
       const el = document.createElement('i');
       el.className = 'fx-arc ' + (boulder ? 'rook' : 'bishop');
       if (!boulder) {
@@ -1588,10 +1947,10 @@
       el.style.width = el.style.height = size + 'px';
       applyVars(el, vars);
 
-      const lift = cell * (boulder ? 1.15 : 1.7);
+      const lift = cell * (giant ? 1.5 : boulder ? 1.15 : 1.7);
       const cx = (from.x + at.x) / 2;
       const cy = Math.min(from.y, at.y) - lift;
-      const duration = boulder ? 500 : 430;
+      const duration = giant ? 620 : boulder ? 500 : 430;
       const frames = [];
       for (let k = 0; k <= 16; k++) {
         const t = k / 16;
@@ -1601,6 +1960,9 @@
         const vy = 2 * (1 - t) * (cy - from.y) + 2 * t * (at.y - cy);
         const spin = boulder ? ` rotate(${t * 660}deg)` : ` rotate(${Math.atan2(vy, vx)}rad)`;
         frames.push({ transform: `translate(${px - from.x}px, ${py - from.y}px)${spin}` });
+        if (k > 0 && k % 2 === 0) {
+          setTimeout(() => trailMote(field, { x: px, y: py }, cell, vars), t * duration * .8);
+        }
       }
       if (typeof el.animate === 'function') {
         el.animate(frames, { duration, easing: 'linear' });
@@ -1612,6 +1974,18 @@
       }
       setTimeout(() => el.remove(), duration + 80);
       return duration;
+    }
+
+    function trailMote(field, at, cell, vars) {
+      const mote = document.createElement('i');
+      mote.className = 'fx-trail';
+      const size = cell * .24;
+      mote.style.width = mote.style.height = size + 'px';
+      mote.style.left = at.x + 'px';
+      mote.style.top = at.y + 'px';
+      applyVars(mote, vars);
+      field.append(mote);
+      setTimeout(() => mote.remove(), 800);
     }
 
     function moveMotes(field, at, cell, color) {
@@ -1702,6 +2076,7 @@
       };
       castFlare(field, from, cell, color);
       if (kind === 'warp') return launchWarp(field, from, at, cell, color);
+      if (kind === 'hurl') return launchArc(field, from, at, cell, 'c', vars);
       if (kind === 'beam') return launchBeam(field, from, at, cell, type, vars);
       if (kind === 'arc') return launchArc(field, from, at, cell, type, vars);
       return launchDash(field, from, at, cell, vars);
@@ -1746,7 +2121,7 @@
       const rect = boardEl.getBoundingClientRect();
       if (!rect.width) return;
       const cell = rect.width / 8;
-      if (last.warp) return;
+      if (last.warp || last.shot) return;
       slide(boardEl, cell, last.from, last.to);
       if (last.rook) slide(boardEl, cell, last.rook.from, last.rook.to);
       const mover = game.board[last.to];
@@ -1813,7 +2188,7 @@
       const from = point(last.from);
       const at = point(targetSq);
       const kind = last.attack || attackOf(typeOf(attacker));
-      const deathKind = kind === 'beam' ? 'burn' : kind === 'arc' ? 'break' : 'explode';
+      const deathKind = kind === 'beam' ? 'burn' : kind === 'arc' || kind === 'hurl' ? 'break' : 'explode';
       const color = colorOf(attacker);
 
       view = prev;
@@ -1830,7 +2205,7 @@
 
       setTimeout(() => {
         if (token !== attackToken) return;
-        impact(field, at, cell, true, kind === 'beam' ? 'fire' : kind === 'arc' ? 'stone' : 'blast');
+        impact(field, at, cell, true, kind === 'beam' ? 'fire' : kind === 'arc' || kind === 'hurl' ? 'stone' : 'blast');
         if (deathKind === 'burn') fireBloom(field, at, cell);
         if (deathKind === 'break') stoneShards(field, at, cell, colorOf(last.captured));
         dying = [{ sq: targetSq, kind: deathKind }];
@@ -1931,11 +2306,15 @@
       view = null;
       dying = null;
       pendingState = null;
+      crackDone = false;
+      crackPose = null;
+      kingFireDone = false;
       resultDismissed = false;
       game = newChess();
       sel = -1;
       targets = [];
       promo = null;
+      $('crack').style.transform = '';
       $('fx').innerHTML = '';
       render();
       broadcastState();
@@ -2055,7 +2434,11 @@
       view = null;
       dying = null;
       pendingState = null;
+      crackDone = false;
+      crackPose = null;
+      kingFireDone = false;
       resultDismissed = false;
+      $('crack').style.transform = '';
       $('fx').innerHTML = '';
       $('lobbyBar').hidden = false;
       $('lobbyState').textContent = 'Connecting to the lobby…';
