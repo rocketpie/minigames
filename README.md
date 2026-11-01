@@ -43,6 +43,7 @@ And that's pretty cool!
 | [freecell](games/freecell/freecell.html) | tap a card to pick it up, tap a column, free cell or foundation to place it. Includes a [strategy guide](games/freecell/freecell-guide.html). |
 | [dreiziehn](games/dreiziehn/dreiziehn.html) | card solitaire: play a hand card, your stack top or a cache top onto a middle pile or a cache; end your turn to refill from the shared draw stack. Empty your stack and caches to win. The Multiplayer button opens the lobby; when the host starts, everyone returns to the game with the room id. |
 | [chess](games/chess/chess.html) | tap a figure, then a glowing square. Classic rules: castling, en passant, promotion, stalemate and material/fifty-move draws. Every capture is a piece-specific spell — beams, arcing missiles or a spectral horse — and leaves a burn, crack or crater on the board for the rest of the duel. Two players can share one screen, or join through the lobby (host is Gold, guest Emerald). |
+| [beweg](games/beweg/beweg.html) | chess with a seventh figure: a crownless queen replacing the outer pawns. It teleports to any square in one move; landing on a rival figure explodes it, but the beweg dies with it and the rival king and queen are untouchable. Standard chess otherwise, including castling, promotion and lobby play. |
 
 
 Deploy: `./deploy.ps1` builds and ships two images – `homelab/website` (this page, nginx,
