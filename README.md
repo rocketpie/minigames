@@ -42,6 +42,7 @@ And that's pretty cool!
 | [lights, please!](games/lights-please/lights-please.html) | tap a room to flip its circuit; make the whole house all lit or all dark. Keys 1–9, U (undo), R (reset). |
 | [freecell](games/freecell/freecell.html) | tap a card to pick it up, tap a column, free cell or foundation to place it. Includes a [strategy guide](games/freecell/freecell-guide.html). |
 | [dreiziehn](games/dreiziehn/dreiziehn.html) | card solitaire: play a hand card, your stack top or a cache top onto a middle pile or a cache; end your turn to refill from the shared draw stack. Empty your stack and caches to win. The Multiplayer button opens the lobby; when the host starts, everyone returns to the game with the room id. |
+| [chess](games/chess/chess.html) | tap a figure, then a glowing square. Classic rules: castling, en passant, promotion, stalemate and material/fifty-move draws. Two players can share one screen, or join through the lobby (host is Gold, guest Emerald). |
 
 
 Deploy: `./deploy.ps1` builds and ships two images – `homelab/website` (this page, nginx,
