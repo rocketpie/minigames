@@ -45,7 +45,13 @@ function renderPeers(peers) {
   $('peers').replaceChildren(
     ...peers.map((p) => {
       const li = document.createElement('li');
-      li.textContent = p.name + (p.host ? ' (Host)' : '') + (p.online ? '' : ' – offline');
+      li.textContent = p.name + (p.host ? ' (Host)' : '') + (p.online ? ' – online' : ' – offline');
+      if (host && !p.host) {
+        const remove = document.createElement('button');
+        remove.textContent = 'Entfernen';
+        remove.addEventListener('click', () => send({ t: 'kick', id: p.id }));
+        li.append(remove);
+      }
       return li;
     }),
   );
@@ -108,6 +114,7 @@ const errorText = {
   'not-joined': 'Nicht im Raum.',
   'room-timeout': 'Raum abgelaufen (maximale Laufzeit erreicht).',
   'idle-timeout': 'Raum wegen Inaktivität geschlossen.',
+  removed: 'Der Host hat dich aus dem Raum entfernt.',
 };
 
 function onError(msg) {
@@ -119,11 +126,14 @@ function onError(msg) {
     $('lobby').hidden = true;
     $('game').hidden = true;
     $('home').hidden = false;
+    $('create').hidden = false;
+    $('join').hidden = !roomParam;
   }
 }
 
 function onClosed(reason) {
   onError({ code: reason });
+  if (roomId) sessionStorage.removeItem(tokenStore(roomId));
   roomId = null;
   $('lobby').hidden = true;
   $('game').hidden = true;
@@ -194,16 +204,27 @@ $('say').addEventListener('submit', (event) => {
 });
 
 const roomParam = new URLSearchParams(location.search).get('room');
-if (roomParam) {
+
+function joinRoom(room) {
   $('home').hidden = true;
   $('lobby').hidden = false;
   $('lobbyStatus').textContent = 'Verbinde …';
   connect(() =>
     send({
       t: 'join',
-      room: roomParam,
-      token: sessionStorage.getItem(tokenStore(roomParam)),
+      room,
+      token: sessionStorage.getItem(tokenStore(room)),
       name: nameInput.value,
     }),
   );
+}
+
+$('join').addEventListener('click', () => joinRoom(roomParam));
+
+if (roomParam && sessionStorage.getItem(tokenStore(roomParam))) {
+  joinRoom(roomParam);
+} else if (roomParam) {
+  $('create').hidden = true;
+  $('join').hidden = false;
+  $('status').textContent = `Raum: ${roomParam}`;
 }

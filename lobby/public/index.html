@@ -122,6 +122,12 @@
       overflow-y: auto;
       font-size: .9rem;
     }
+
+    #peers button {
+      margin-left: .5rem;
+      padding: .15rem .45rem;
+      font-size: .8rem;
+    }
   </style>
 </head>
 
@@ -134,6 +140,7 @@
         <input id="name" maxlength="24" placeholder="Player" autocomplete="nickname">
       </label>
       <button id="create">Raum erstellen</button>
+      <button id="join" hidden>Raum beitreten</button>
       <p class="status" id="status"></p>
       <p><a href="/guide.html">Integration guide</a></p>
     </section>

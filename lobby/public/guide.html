@@ -63,8 +63,8 @@
     <li>The game opens the lobby with a return URL and its player limit:
       <code>/?return=&lt;game-url&gt;&amp;maxPlayers=4</code>.</li>
     <li>The host creates a room. The return URL and player limit are stored on the room.</li>
-    <li>Guests open the join link (<code>?room=&lt;id&gt;</code>); the server sends the stored
-      return URL and limit in <code>joined</code>.</li>
+    <li>Guests open the join link (<code>?room=&lt;id&gt;</code>), enter a name, and the server
+      sends the stored return URL and limit in <code>joined</code>.</li>
     <li>The host sends <code>{"t":"start"}</code>. Every lobby client then opens the return URL
       with the room id and its credentials:
       <pre><code>&lt;returnUrl&gt;?room=&lt;id&gt;#token=&lt;token&gt;&amp;name=&lt;name&gt;&amp;lobby=&lt;ws-url&gt;</code></pre>
@@ -100,10 +100,13 @@
   <pre><code>{ "t": "create", "proof": "&lt;challenge&gt;:&lt;n&gt;", "name": "Ada",
   "returnUrl": "https://co3d.eu/dreiziehn/dreiziehn.html", "maxPlayers": 4 }
 
-{ "t": "join", "room": "&lt;uuid&gt;", "token": "&lt;token or null&gt;", "name": "Bob" }
+{ "t": "join", "room": "&lt;room-id&gt;", "token": "&lt;token or null&gt;", "name": "Bob" }
 { "t": "start" }
+{ "t": "kick", "id": "&lt;peer id&gt;" }
 { "t": "msg", "data": { … } }</code></pre>
-  <p><code>create</code> is hashcash-gated. <code>start</code> is host-only.
+  <p><code>create</code> is hashcash-gated. <code>start</code> and <code>kick</code> are
+    host-only; a kicked player gets <code>{"t":"closed","reason":"removed"}</code> and its
+    socket is closed.
     <code>msg</code> is forwarded verbatim to the other room members; the server never inspects
     <code>data</code>.</p>
 
@@ -118,7 +121,7 @@
 { "t": "error", "code": "full", "message": "…" }
 { "t": "closed", "reason": "idle-timeout" }</code></pre>
   <p><code>joined</code> is sent to the joining socket. <code>peers</code> is broadcast on
-    join/leave/start. <code>msg</code> goes to everyone <em>except</em> the sender, so a client
+    join/leave/kick/start. <code>msg</code> goes to everyone <em>except</em> the sender, so a client
     must apply its own action locally.</p>
 
   <h2>Return URL and player limit</h2>

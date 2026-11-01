@@ -97,6 +97,11 @@ test('static files, challenge, QR and the full room flow', async (t) => {
   const rejoined = await back.next('joined');
   assert.equal(rejoined.host, false);
   assert.equal(rejoined.peers.length, 2);
+
+  host.send({ t: 'kick', id: rejoined.you });
+  assert.equal((await back.next('closed')).reason, 'removed');
+  const afterKick = await host.next((m) => m.t === 'peers' && m.peers.length === 1);
+  assert.equal(afterKick.peers[0].name, 'Ada');
 });
 
 test('room creation without work is rejected', async (t) => {

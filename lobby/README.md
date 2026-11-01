@@ -45,10 +45,12 @@ The integration guide is served at `/guide.html`.
 
 1. `GET /challenge` → `{challenge, bits}`. Browser solves `sha256("<challenge>:<n>")` with
    `bits` leading zero bits, then sends `{t:"create", proof, name, returnUrl, maxPlayers}`.
-   Server verifies the proof, marks the challenge used and generates a UUID room id.
-   Room state 0 → 1.
-2. State 1 (`open`): participants join via `?room=<id>` (token in `sessionStorage` for
-   reloads). Everyone sees the peer list; only the host can send `{t:"start"}`.
+   Server verifies the proof, marks the challenge used and generates a four-word room id
+   from the EFF short wordlist (e.g. `acid-acorn-acre-acts`). Room state 0 → 1.
+2. State 1 (`open`): participants join via `?room=<id>` (name prompt, token in
+   `sessionStorage` for reloads). Everyone sees the peer list with online/offline state; an
+   inactive tab keeps its WebSocket, only a closed tab marks the player offline. Only the host
+   can send `{t:"start"}` or `{t:"kick", id}` to remove a player.
 3. State 2 (`active`): no new participants, existing tokens may rejoin. `{t:"msg", data}`
    is forwarded to the room's other members. The server never inspects `data`.
 4. A `?return=<game-url>` and `?maxPlayers=<n>` passed to the lobby are stored on the room at

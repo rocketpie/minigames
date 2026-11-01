@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { Relay, Bucket, leadingZeroBits } from './relay.mjs';
+import { WORDS } from './words.mjs';
 import { sha256Hex, solve } from './public/hashcash.js';
 
 const BITS = 8;
@@ -64,6 +65,30 @@ test('a room limit cannot exceed the server cap', async () => {
   const relay = new Relay({ hashcashBits: BITS, maxPlayers: 3 });
   const { room } = await createRoom(relay, 'Host', '', 99);
   assert.equal(room.maxPlayers, 3);
+});
+
+test('room ids are four EFF short words', async () => {
+  const relay = new Relay({ hashcashBits: BITS });
+  const { room } = await createRoom(relay);
+  assert.ok(WORDS.every((word) => /^[a-z]+$/.test(word)), 'words must not contain the id separator');
+  const words = room.id.split('-');
+  assert.equal(words.length, 4);
+  for (const word of words) assert.ok(WORDS.includes(word), word);
+  assert.equal(relay.join(room.id.toUpperCase(), null, 'Bob').room, room);
+});
+
+test('only the host can remove players, and not themselves', async () => {
+  const relay = new Relay({ hashcashBits: BITS });
+  const { room, member: host } = await createRoom(relay, 'Ada');
+  const { member: guest } = relay.join(room.id, null, 'Bob');
+
+  assert.throws(() => relay.kick(room.id, guest.token, host.id), /only the host/);
+  assert.throws(() => relay.kick(room.id, host.token, host.id), /themselves/);
+  assert.throws(() => relay.kick(room.id, host.token, 'nope'), /not in this room/);
+
+  const kicked = relay.kick(room.id, host.token, guest.id);
+  assert.equal(kicked.member, guest);
+  assert.deepEqual(relay.peers(room).map((p) => p.name), ['Ada']);
 });
 
 test('lobby join, host-only start, relay only after start', async () => {

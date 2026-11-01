@@ -165,6 +165,12 @@ export async function startServer(options = {}) {
           const room = relay.start(me.room.id, me.member.token);
           for (const m of room.members.values()) send(m.ws, { t: 'started' });
           broadcastPeers(room);
+        } else if (msg.t === 'kick') {
+          if (!me) throw Object.assign(new Error('join or create first'), { code: 'not-joined' });
+          const { room, member } = relay.kick(me.room.id, me.member.token, msg.id);
+          send(member.ws, { t: 'closed', reason: 'removed' });
+          member.ws?.close(4002, 'removed');
+          broadcastPeers(room);
         } else if (msg.t === 'msg') {
           if (!me) throw Object.assign(new Error('join or create first'), { code: 'not-joined' });
           const { member, recipients, limited } = relay.say(me.room.id, me.member.token, msg.data, raw.length);

@@ -1,6 +1,7 @@
 // Room relay: hashcash-gated room creation, lobby/active states, byte rate cap.
 // No game logic lives here; game messages are forwarded verbatim (see server.mjs for sockets).
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { WORDS } from './words.mjs';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const MAX_NAME = 24;
@@ -99,7 +100,7 @@ export class Relay {
     this.verifyProof(proof);
     const limit = Number.isInteger(maxPlayers) ? maxPlayers : this.maxPlayers;
     const room = {
-      id: randomUUID(),
+      id: this.#roomId(),
       createdAt: now,
       idleAt: now,
       started: false,
@@ -116,7 +117,7 @@ export class Relay {
   }
 
   join(roomId, token, name) {
-    const room = this.rooms.get(String(roomId ?? ''));
+    const room = this.rooms.get(String(roomId ?? '').trim().toLowerCase());
     if (!room) throw fail('no-room', 'room does not exist (yet) or expired');
     const existing = token && room.members.get(token);
     if (existing) {
@@ -138,6 +139,18 @@ export class Relay {
     room.started = true;
     room.idleAt = this.now();
     return room;
+  }
+
+  kick(roomId, token, memberId) {
+    const room = this.rooms.get(roomId);
+    if (!room) throw fail('no-room', 'room does not exist');
+    if (room.host !== token) throw fail('forbidden', 'only the host can remove players');
+    const member = [...room.members.values()].find((m) => m.id === String(memberId ?? ''));
+    if (!member) throw fail('no-member', 'player is not in this room');
+    if (member.token === room.host) throw fail('forbidden', 'the host cannot remove themselves');
+    // shortcut: a kicked player can rejoin with the room link; add a ban list if rooms go public
+    room.members.delete(member.token);
+    return { room, member };
   }
 
   say(roomId, token, data, bytes) {
@@ -177,6 +190,14 @@ export class Relay {
       host: m.token === room.host,
       online: !!m.ws,
     }));
+  }
+
+  #roomId() {
+    let id;
+    do {
+      id = Array.from({ length: 4 }, () => WORDS[randomInt(WORDS.length)]).join('-');
+    } while (this.rooms.has(id));
+    return id;
   }
 
   #member(name, room, now) {
