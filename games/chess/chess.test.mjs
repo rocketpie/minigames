@@ -379,6 +379,40 @@ test('the host applies guest moves and guests accept host state', () => {
   assert.equal(run(`game.board[${at('e5')}]`), 'p');
 });
 
+test('bishops ride a luminescent cloud', () => {
+  assert.match(run("figHTML('B')"), /class="piece w type-b/);
+  assert.match(run("figHTML('b')"), /class="piece b type-b/);
+});
+
+test('checkmate fells the king and skips the popup', () => {
+  run('MP.active = false; MP.host = false; kingFireDone = false; game = newChess()');
+  play([
+    { from: at('f2'), to: at('f3') },
+    { from: at('e7'), to: at('e5') },
+    { from: at('g2'), to: at('g4') },
+    { from: at('d8'), to: at('h4') },
+  ]);
+  run('render()');
+  assert.equal(run(`$('result').hidden`), true);
+  assert.equal(run('kingFireDone'), true);
+
+  const html = run(`$('board').innerHTML`);
+  const kingSquare = html.match(new RegExp(`data-sq="${at('e1')}"[\\s\\S]*?</button>`))[0];
+  assert.match(kingSquare, /class="piece w type-k fallen/);
+  assert.match(kingSquare, /class="king-fire"/);
+  assert.match(kingSquare, /class="scar burn"/);
+});
+
+test('the board cracks after more than half the figures are defeated', () => {
+  run('MP.active = false; MP.host = false; crackDone = false; game = newChess()');
+  run(`game.captured = Array(16).fill('p'); render()`);
+  assert.equal(run(`$('crack').hidden`), true);
+
+  run(`game.captured = Array(17).fill('p'); render()`);
+  assert.equal(run(`$('crack').hidden`), false);
+  assert.equal(run('crackDone'), true);
+});
+
 test('arc and dash capture spells apply their own wounds', () => {
   run('MP.active = false; MP.host = false; MP.meColor = null');
 

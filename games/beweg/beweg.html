@@ -331,7 +331,7 @@
     .panel p { margin: .3rem 0; color: #c3d6c4; font-size: .82rem; line-height: 1.5; }
     .panel .actions { margin-top: 1rem; display: flex; justify-content: center; gap: .5rem; flex-wrap: wrap; }
 
-    .promo-choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; margin-top: .7rem; }
+    .promo-choices { display: grid; grid-template-columns: repeat(5, 1fr); gap: .4rem; margin-top: .7rem; }
     .promo-choice {
       display: flex; flex-direction: column; align-items: center; gap: .15rem; padding: .4rem .2rem .3rem;
       border-radius: 7px; border: 1px solid rgba(232, 199, 111, .28); cursor: pointer;
@@ -554,10 +554,11 @@
       <ul>
         <li><b>Goal:</b> trap the rival king. Gold is the light court and always moves first; Emerald is the dark court.</li>
         <li><b>Tap:</b> tap one of your figures, then a glowing square. Tap it again to let go.</li>
-        <li><b>Beweg:</b> the crownless queen on a- and h-file replaces the outer pawns. It teleports to any square in one move. Landing on a rival figure explodes it and the beweg dies with it — rival kings and queens are untouchable, and a beweg never gives check.</li>
+        <li><b>Pawns:</b> advance one or two squares at any time, as long as the path is clear, and capture one or two squares diagonally. A two-square capture needs a clear path and a rival figure on the far square.</li>
+        <li><b>Beweg:</b> the crownless queen on a- and h-file replaces the outer pawns. It teleports to any square in one move. Landing on a rival figure explodes it and the beweg dies with it — rival kings, queens and other bewegues are untouchable, and a beweg never gives check.</li>
         <li><b>Castling:</b> tap the king, then two squares toward a rook. The path must be clear and neither the king's square nor the crossed square may be attacked.</li>
         <li><b>En passant:</b> a pawn may take a rival pawn that has just dashed two squares past it. The chance vanishes after one move.</li>
-        <li><b>Promotion:</b> a pawn reaching the far rank becomes a queen, rook, bishop or knight — choose the guise.</li>
+        <li><b>Promotion:</b> a pawn reaching the far rank becomes a queen, rook, bishop, knight or a beweg — choose the guise.</li>
         <li><b>Draws:</b> stalemate, fifty moves without a capture or pawn move, or too little material to force mate.</li>
         <li><b>Spells:</b> pawns and royalty cast beams, bishops and rooks hurl arcing magic, knights charge as spectral horses, and a beweg winks across the board. A capture burns, breaks or explodes the rival figure and leaves a scar on the square for the rest of the duel.</li>
         <li><b>Local duel:</b> two players share this screen. <b>Multiplayer:</b> open the lobby with a friend; the host is Gold, the guest Emerald, and the board turns for Emerald.</li>
@@ -669,8 +670,16 @@
       const pawn = by === 'w' ? 'P' : 'p';
       const pawnRow = by === 'w' ? row + 1 : row - 1;
       if (pawnRow >= 0 && pawnRow < 8) {
-        if (col > 0 && board[sqIndex(pawnRow, col - 1)] === pawn) return true;
-        if (col < 7 && board[sqIndex(pawnRow, col + 1)] === pawn) return true;
+        for (const dc of [-1, 1]) {
+          if (col + dc < 0 || col + dc > 7) continue;
+          const near = board[sqIndex(pawnRow, col + dc)];
+          if (near === pawn) return true;
+          if (near) continue;
+          const farRow = by === 'w' ? row + 2 : row - 2;
+          const farCol = col + dc * 2;
+          if (farRow >= 0 && farRow < 8 && farCol >= 0 && farCol < 8 &&
+            board[sqIndex(farRow, farCol)] === pawn) return true;
+        }
       }
       const knight = by === 'w' ? 'N' : 'n';
       for (const [dr, dc] of KNIGHT_STEPS) {
@@ -722,17 +731,16 @@
       const pawnMove = (to, extra) => {
         const promoRow = color === 'w' ? 0 : 7;
         if ((to >> 3) === promoRow) {
-          for (const promo of ['Q', 'R', 'B', 'N']) moves.push({ from, to, promo, ...extra });
+          for (const promo of ['Q', 'R', 'B', 'N', 'T']) moves.push({ from, to, promo, ...extra });
         } else push(to, extra);
       };
 
       if (type === 'p') {
         const dir = color === 'w' ? -1 : 1;
-        const startRow = color === 'w' ? 6 : 1;
         if (onBoard(row + dir, col) && !board[sqIndex(row + dir, col)]) {
           pawnMove(sqIndex(row + dir, col));
-          if (row === startRow && !board[sqIndex(row + dir * 2, col)]) {
-            push(sqIndex(row + dir * 2, col), { double: true });
+          if (onBoard(row + dir * 2, col) && !board[sqIndex(row + dir * 2, col)]) {
+            pawnMove(sqIndex(row + dir * 2, col), { double: true });
           }
         }
         for (const dc of [-1, 1]) {
@@ -741,6 +749,11 @@
           const to = sqIndex(r, c);
           if (board[to] && colorOf(board[to]) !== color) pawnMove(to);
           else if (to === g.ep) push(to, { ep: true });
+
+          const farR = row + dir * 2, farC = col + dc * 2;
+          if (!onBoard(farR, farC) || board[sqIndex(r, c)]) continue;
+          const far = sqIndex(farR, farC);
+          if (board[far] && colorOf(board[far]) !== color) pawnMove(far);
         }
       } else if (type === 'n' || type === 'k') {
         const steps = type === 'n' ? KNIGHT_STEPS : KING_STEPS;
@@ -776,7 +789,7 @@
           if (!target) { push(to); continue; }
           if (colorOf(target) === color) continue;
           const kind = typeOf(target);
-          if (kind === 'k' || kind === 'q') continue;
+          if (kind === 'k' || kind === 'q' || kind === 't') continue;
           push(to, { suicide: true });
         }
       } else {
@@ -1163,7 +1176,7 @@
       }
       const wasHidden = modal.hidden;
       modal.hidden = false;
-      $('promoChoices').innerHTML = ['Q', 'R', 'B', 'N'].map(promoType => {
+      $('promoChoices').innerHTML = ['Q', 'R', 'B', 'N', 'T'].map(promoType => {
         const piece = colorOf(mover) === 'w' ? promoType : promoType.toLowerCase();
         return `<button type="button" class="promo-choice" data-promo="${promoType}" aria-label="Promote to ${PIECE_NAMES[typeOf(piece)]}">` +
           figHTML(piece) + `<span>${PIECE_NAMES[typeOf(piece)]}</span></button>`;
@@ -1401,14 +1414,17 @@
     }
 
     function impact(field, at, cell, big, tone = 'blast') {
-      const ring = document.createElement('i');
-      ring.className = 'impact-rune ' + tone;
-      const size = cell * 1.25;
-      ring.style.width = ring.style.height = size + 'px';
-      ring.style.left = (at.x - size / 2) + 'px';
-      ring.style.top = (at.y - size / 2) + 'px';
-      field.append(ring);
-      setTimeout(() => ring.remove(), 800);
+      for (const [size, delay] of [[cell * 1.25, 0], [cell * 1.35, 30], [cell * 1.75, 60]]) {
+        const ring = document.createElement('i');
+        ring.className = 'impact-rune ' + tone;
+        ring.style.width = ring.style.height = size + 'px';
+        ring.style.left = (at.x - size / 2) + 'px';
+        ring.style.top = (at.y - size / 2) + 'px';
+        ring.style.opacity = '0';
+        ring.style.animationDelay = delay + 'ms';
+        field.append(ring);
+        setTimeout(() => ring.remove(), 800 + delay);
+      }
 
       const palettes = {
         fire: ['gold', 'ember', 'pale'],

@@ -82,7 +82,7 @@ test('initial position: 32 figures, crownless bewegues on the outer files, Gold 
   for (const square of ['a2', 'h2', 'a7', 'h7']) {
     assert.equal(run(`game.board[${at(square)}]`), square[1] === '2' ? 'T' : 't');
   }
-  assert.equal(run('allLegalMoves(game).length'), 108);
+  assert.equal(run('allLegalMoves(game).length'), 104);
 });
 
 test('double pawn push opens en passant for exactly one move', () => {
@@ -105,6 +105,75 @@ test('double pawn push opens en passant for exactly one move', () => {
   assert.equal(result.state.last.captureAt, at('d5'));
   assert.equal(result.state.last.attack, 'beam');
   assert.deepEqual(result.state.scars, [{ sq: at('d5'), kind: 'burn' }]);
+});
+
+test('a pawn may advance one or two squares from any rank', () => {
+  const board = empty();
+  put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'e3', 'P');
+  setPosition({ board });
+
+  const options = js(run(`legalMoves(game, ${at('e3')})`));
+  assert.ok(options.some(m => m.to === at('e4')));
+  assert.ok(options.some(m => m.to === at('e5')));
+});
+
+test('a pawn may not run two squares through a blocking figure', () => {
+  const board = empty();
+  put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'e3', 'P'); put(board, 'e4', 'n');
+  setPosition({ board });
+
+  assert.deepEqual(js(run(`legalMoves(game, ${at('e3')}).map(m => m.to)`)), []);
+});
+
+test('a pawn captures two squares diagonally when the path is clear', () => {
+  const board = empty();
+  put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'e3', 'P'); put(board, 'g5', 'r');
+  setPosition({ board });
+
+  const options = js(run(`legalMoves(game, ${at('e3')})`));
+  assert.ok(options.some(m => m.to === at('g5')));
+
+  const result = apply({ from: at('e3'), to: at('g5') });
+  assert.equal(result.ok, true);
+  assert.equal(result.state.board[at('g5')], 'P');
+  assert.equal(result.state.board[at('e3')], null);
+  assert.equal(result.state.last.attack, 'beam');
+  assert.deepEqual(result.state.scars, [{ sq: at('g5'), kind: 'burn' }]);
+});
+
+test('a pawn may not capture two squares diagonally through a figure', () => {
+  const board = empty();
+  put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'e3', 'P');
+  put(board, 'f4', 'P'); put(board, 'g5', 'r');
+  setPosition({ board });
+
+  assert.ok(!js(run(`legalMoves(game, ${at('e3')})`)).some(m => m.to === at('g5')));
+});
+
+test('a two-square pawn capture gives check', () => {
+  const board = empty();
+  put(board, 'c1', 'K'); put(board, 'e8', 'k'); put(board, 'e3', 'p');
+  setPosition({ board, turn: 'w' });
+  assert.equal(run(`inCheck(game, 'w')`), true);
+
+  const blocked = board.slice();
+  put(blocked, 'd2', 'B');
+  setPosition({ board: blocked, turn: 'w' });
+  assert.equal(run(`inCheck(game, 'w')`), false);
+});
+
+test('a pawn may promote with a two-square advance', () => {
+  const board = empty();
+  put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'a6', 'P');
+  setPosition({ board });
+
+  const promos = js(run(`legalMoves(game, ${at('a6')})`)).filter(m => m.promo);
+  assert.equal(promos.length, 5);
+  assert.ok(promos.every(m => m.to === at('a8')));
+
+  const result = apply({ from: at('a6'), to: at('a8'), promo: 'T' });
+  assert.equal(result.ok, true);
+  assert.equal(result.state.board[at('a8')], 'T');
 });
 
 test('castling moves king and rook, and rights disappear', () => {
@@ -171,7 +240,7 @@ test('promotion needs a choice and allows underpromotion', () => {
   setPosition({ board });
 
   const options = js(run(`legalMoves(game, ${at('a7')})`));
-  assert.equal(options.filter(m => m.promo).length, 4);
+  assert.equal(options.filter(m => m.promo).length, 5);
   assert.equal(apply({ from: at('a7'), to: at('a8') }).ok, false);
 
   const queen = apply({ from: at('a7'), to: at('a8'), promo: 'Q' });
@@ -184,6 +253,11 @@ test('promotion needs a choice and allows underpromotion', () => {
   const knight = apply({ from: at('a7'), to: at('a8'), promo: 'N' });
   assert.equal(knight.ok, true);
   assert.equal(knight.state.board[at('a8')], 'N');
+
+  setPosition({ board });
+  const beweg = apply({ from: at('a7'), to: at('a8'), promo: 'T' });
+  assert.equal(beweg.ok, true);
+  assert.equal(beweg.state.board[at('a8')], 'T');
 });
 
 test("a beweg can block the fool's mate", () => {
@@ -266,15 +340,16 @@ test('a beweg teleports to any empty square without a capture', () => {
   assert.deepEqual(result.state.captured, []);
 });
 
-test('a beweg may not attack the rival king or queen, but any other figure', () => {
+test('a beweg may not attack the rival king, queen or another beweg, but any other figure', () => {
   const board = empty();
   put(board, 'e1', 'K'); put(board, 'e8', 'k'); put(board, 'a2', 'T');
-  put(board, 'd5', 'q'); put(board, 'h6', 'r');
+  put(board, 'd5', 'q'); put(board, 'h6', 'r'); put(board, 'f5', 't');
   setPosition({ board });
 
   const options = js(run(`legalMoves(game, ${at('a2')})`));
   assert.ok(!options.some(m => m.to === at('d5')));
   assert.ok(!options.some(m => m.to === at('e8')));
+  assert.ok(!options.some(m => m.to === at('f5')));
   assert.ok(options.some(m => m.to === at('h6') && m.suicide));
 });
 
