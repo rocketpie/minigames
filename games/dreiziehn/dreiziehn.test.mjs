@@ -504,6 +504,26 @@ test('lobby messages update the room bar', () => {
   run('MP.active=false; MP.state=null; MP.host=false; MP.meIndex=-1;');
 });
 
+test('multiplayer state survives a reload', () => {
+  run(`
+    MP.active=true; MP.host=true; MP.you='h1'; MP.hostId='h1'; MP.room='reload-room';
+    MP.peers=[{id:'h1',name:'Host',host:true,online:true},{id:'g1',name:'Guest',host:false,online:true}];
+    mpHostStart(MP.peers);
+  `);
+  assert.equal(run('MP.state.players.length'), 2);
+  run('MP.state = null; MP.meIndex = -1;');
+  assert.equal(run(`loadMp('other-room')`), null);
+  run(`
+    MP.state = loadMp('reload-room');
+    MP.meIndex = MP.state.players.findIndex(p => p.id === MP.you);
+  `);
+  assert.equal(run('MP.state.players.length'), 2);
+  assert.equal(run('MP.meIndex'), 0);
+
+  store.delete('dreiziehn-mp');
+  run('MP.active=false; MP.host=false; MP.room=null; MP.state=null; MP.meIndex=-1;');
+});
+
 test('game data needs a known version and type', () => {
   assert.equal(run('isGameMessage({v:2,type:"state"})'), true);
   assert.equal(run('isGameMessage({v:2,type:"move"})'), true);

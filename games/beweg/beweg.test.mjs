@@ -839,6 +839,31 @@ test('a capture keeps the victim on the board until the spell resolves', () => {
   }
 });
 
+test('multiplayer state survives a reload', () => {
+  run(`
+    MP.active = true; MP.host = true; MP.room = 'reload-room'; MP.you = 'host';
+    game = newChess();
+    MP.players = [{ id: 'host', name: 'H', color: 'w' }, { id: 'guest', name: 'G', color: 'b' }];
+    saveMp();
+    game = null; MP.players = null;
+  `);
+  assert.equal(run(`loadMp('other-room')`), null);
+
+  ctx.WebSocket = class { addEventListener() {} };
+  try {
+    run(`connectLobby('reload-room', 't', 'H', 'ws://localhost:8080/ws')`);
+    assert.equal(run('game.board.filter(Boolean).length'), 32);
+    assert.equal(run('MP.players.length'), 2);
+  } finally {
+    delete ctx.WebSocket;
+    store.delete('beweg-mp');
+    run(`
+      MP.active = false; MP.host = false; MP.room = null; MP.players = null;
+      MP.meColor = null; MP.socket = null; game = newChess();
+    `);
+  }
+});
+
 test('a guest plays the incoming capture spell and applies its scar', () => {
   const board = empty();
   put(board, 'e1', 'K'); put(board, 'e8', 'k');

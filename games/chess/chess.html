@@ -379,6 +379,26 @@
     #lobbyBar b { color: #f4e4bd; }
     #lobbyPeers { color: #9fc0a1; text-align: right; margin-left: auto; }
 
+    .lobby-overlay {
+      position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: .8rem; padding: 1.5rem;
+      background: rgba(18, 22, 20, .72); opacity: 0; pointer-events: none; visibility: hidden;
+      transition: opacity .5s ease, visibility 0s linear .5s; text-align: center;
+    }
+    .lobby-overlay.show {
+      opacity: 1; pointer-events: auto; visibility: visible;
+      transition: opacity .5s ease;
+    }
+    .lobby-overlay p {
+      max-width: 24rem; margin: 0; padding: .8rem 1rem; border-radius: .5rem;
+      background: rgba(0, 0, 0, .35); color: #f2efe6;
+      font: 600 clamp(.9rem, 3vw, 1.1rem)/1.5 system-ui, sans-serif;
+    }
+    .lobby-overlay button {
+      padding: .45rem .8rem; border: 1px solid rgba(232, 199, 111, .4); border-radius: .35rem;
+      background: rgba(3, 23, 14, .7); color: #f4e4bd; font: inherit; cursor: pointer;
+    }
+
     #rules { width: min(92vw, 600px); font-size: .74rem; color: #b9cfb9; }
     #rules summary { cursor: pointer; color: #e8c76f; letter-spacing: .05em; }
     #rules ul { margin: .45rem 0 0; padding-left: 1.1rem; line-height: 1.5; }
@@ -643,6 +663,11 @@
       <span id="lobbyState">Connecting…</span>
       <span id="lobbyPeers"></span>
       <button id="lobbyExit" class="tool" type="button">Lobby</button>
+    </div>
+
+    <div id="lobbyOverlay" class="lobby-overlay" role="status" aria-live="polite">
+      <p id="lobbyOverlayText"></p>
+      <button id="lobbyOverlayExit" type="button">Back to lobby</button>
     </div>
 
     <details id="rules">
@@ -1089,6 +1114,7 @@
     const MP = {
       active: false, host: false, you: null, hostId: null, room: null,
       peers: [], players: null, meColor: null, pending: false, socket: null,
+      token: null, name: null, lobbyUrl: null, retries: 0, reconnectTimer: null, closed: false,
     };
     const START_VIEW = newChess();
 
@@ -1291,6 +1317,7 @@
       renderResult(g);
       renderPromo();
       syncBattleDamage(g);
+      saveMp();
     }
 
     function syncBattleDamage(g) {
@@ -1469,6 +1496,28 @@
       try {
         localStorage.setItem(KEY, JSON.stringify(game));
       } catch { /* storage may be unavailable */ }
+    }
+
+    function saveMp() {
+      if (!MP.active || !MP.room || !game || !MP.players) return;
+      try {
+        localStorage.setItem(`${KEY}-mp`,
+          JSON.stringify({ room: MP.room, state: game, players: MP.players }));
+      } catch { /* storage may be unavailable */ }
+    }
+
+    function loadMp(room) {
+      try {
+        const saved = JSON.parse(localStorage.getItem(`${KEY}-mp`) || 'null');
+        if (!saved || saved.room !== room ||
+          !validState(saved.state) || !validPlayers(saved.players)) return null;
+        return {
+          state: cloneState(saved.state),
+          players: saved.players.map(p => ({ ...p })),
+        };
+      } catch {
+        return null;
+      }
     }
 
     function setGame(next, animate) {
@@ -2220,6 +2269,10 @@
         MP.room = msg.room;
         MP.peers = Array.isArray(msg.peers) ? msg.peers : [];
         MP.hostId = MP.peers.find(p => p.host)?.id ?? null;
+        MP.closed = false;
+        MP.retries = 0;
+        stopLobbyReconnect();
+        lobbyOverlay('');
         if (MP.players) MP.meColor = MP.players.find(p => p.id === MP.you)?.color ?? MP.meColor;
         lobbyMax = msg.maxPlayers ?? MAX_PLAYERS;
         $('lobbyBar').hidden = false;
@@ -2253,17 +2306,91 @@
         if (isGameMessage(msg.data)) handleGameMessage(msg.from, msg.data);
       } else if (msg.t === 'error') {
         $('lobbyState').textContent = `Lobby error: ${msg.code}`;
+        if (['no-room', 'closed', 'full', 'removed'].includes(msg.code)) {
+          MP.closed = true;
+          stopLobbyReconnect();
+          lobbyOverlay(`Lobby: ${msg.code}`);
+        }
       } else if (msg.t === 'closed') {
+        MP.closed = true;
+        stopLobbyReconnect();
         $('lobbyState').textContent = msg.reason === 'removed'
           ? 'You were removed from the room.'
           : `Room closed: ${msg.reason}`;
+        lobbyOverlay(msg.reason === 'removed'
+          ? 'You were removed from the room.'
+          : 'The room was closed.');
       }
+    }
+
+    function lobbyOverlay(text) {
+      $('lobbyOverlayText').textContent = text;
+      $('lobbyOverlay').classList.toggle('show', !!text);
+    }
+
+    function stopLobbyReconnect() {
+      clearTimeout(MP.reconnectTimer);
+      MP.reconnectTimer = null;
+    }
+
+    function scheduleLobbyReconnect() {
+      if (MP.closed || MP.reconnectTimer) return;
+      const delay = Math.min(2000 * 2 ** MP.retries, 10000);
+      MP.retries += 1;
+      MP.reconnectTimer = setTimeout(() => {
+        MP.reconnectTimer = null;
+        openLobbySocket();
+      }, delay);
+    }
+
+    function openLobbySocket() {
+      if (!MP.active || MP.closed) return;
+      let socket;
+      try {
+        socket = new WebSocket(MP.lobbyUrl);
+      } catch {
+        $('lobbyState').textContent = 'Lobby unavailable.';
+        lobbyOverlay('Lobby unavailable – retrying…');
+        scheduleLobbyReconnect();
+        return;
+      }
+      MP.socket = socket;
+
+      socket.addEventListener('open', () => {
+        socket.send(JSON.stringify({
+          t: 'join', room: MP.room, token: MP.token, name: MP.name,
+        }));
+      });
+      socket.addEventListener('message', event => {
+        try { handleLobby(JSON.parse(event.data)); } catch { /* ignore malformed lobby messages */ }
+      });
+      socket.addEventListener('error', () => {
+        $('lobbyState').textContent = 'Lobby connection failed.';
+      });
+      socket.addEventListener('close', () => {
+        MP.socket = null;
+        MP.pending = false;
+        if (MP.closed) return;
+        $('lobbyState').textContent = 'Lobby disconnected.';
+        lobbyOverlay('Lobby disconnected – reconnecting…');
+        render();
+        scheduleLobbyReconnect();
+      });
     }
 
     function connectLobby(room, token, name, url) {
       MP.active = true;
       MP.room = room;
-      game = null;
+      MP.token = token;
+      MP.name = name;
+      MP.lobbyUrl = url;
+      MP.closed = false;
+      MP.retries = 0;
+      stopLobbyReconnect();
+      const saved = loadMp(room);
+      game = saved ? saved.state : null;
+      MP.players = saved ? saved.players : null;
+      MP.meColor = null;
       sel = -1;
       targets = [];
       promo = null;
@@ -2282,31 +2409,7 @@
       $('lobbyBar').hidden = false;
       $('lobbyState').textContent = 'Connecting to the lobby…';
       render();
-
-      let socket;
-      try {
-        socket = new WebSocket(url);
-      } catch {
-        $('lobbyState').textContent = 'Lobby unavailable.';
-        return;
-      }
-      MP.socket = socket;
-
-      socket.addEventListener('open', () => {
-        socket.send(JSON.stringify({ t: 'join', room, token, name }));
-      });
-      socket.addEventListener('message', event => {
-        try { handleLobby(JSON.parse(event.data)); } catch { /* ignore malformed lobby messages */ }
-      });
-      socket.addEventListener('error', () => {
-        $('lobbyState').textContent = 'Lobby connection failed.';
-      });
-      socket.addEventListener('close', () => {
-        MP.socket = null;
-        MP.pending = false;
-        $('lobbyState').textContent = 'Lobby disconnected.';
-        render();
-      });
+      openLobbySocket();
     }
 
     $('board').addEventListener('click', event => {
@@ -2331,6 +2434,9 @@
     $('resign').addEventListener('click', resign);
     $('lobbyExit').addEventListener('click', () => {
       if (game && game.status === 'playing' && !confirm('Leave this duel?')) return;
+      location.href = lobbyUrl(gameUrl());
+    });
+    $('lobbyOverlayExit').addEventListener('click', () => {
       location.href = lobbyUrl(gameUrl());
     });
     addEventListener('keydown', event => {
