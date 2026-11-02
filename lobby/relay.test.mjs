@@ -67,14 +67,14 @@ test('a room limit cannot exceed the server cap', async () => {
   assert.equal(room.maxPlayers, 3);
 });
 
-test('room ids are four EFF short words', async () => {
+test('room ids are three EFF short words', async () => {
   const relay = new Relay({ hashcashBits: BITS });
   const { room } = await createRoom(relay);
   assert.ok(WORDS.every((word) => /^[a-z]+$/.test(word)), 'words must not contain the id separator');
   const words = room.id.split('-');
-  assert.equal(words.length, 4);
+  assert.equal(words.length, 3);
   for (const word of words) assert.ok(WORDS.includes(word), word);
-  assert.equal(relay.join(room.id.toUpperCase(), null, 'Bob').room, room);
+  assert.equal(relay.join(room.id.toUpperCase().replace(/-/g, ' '), null, 'Bob').room, room);
 });
 
 test('only the host can remove players, and not themselves', async () => {

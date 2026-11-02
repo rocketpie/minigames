@@ -444,7 +444,7 @@ test('the multiplayer button opens the lobby with the game as return url', () =>
   assert.equal(run('gameUrl()'), 'http://localhost:8000/dreiziehn/dreiziehn.html');
   assert.equal(
     run('lobbyUrl(gameUrl())'),
-    'http://localhost:8080/?return=http%3A%2F%2Flocalhost%3A8000%2Fdreiziehn%2Fdreiziehn.html&maxPlayers=4',
+    'http://localhost:8080/?return=http%3A%2F%2Flocalhost%3A8000%2Fdreiziehn%2Fdreiziehn.html&maxPlayers=4&game=Dreiziehn',
   );
   assert.equal(run('defaultLobbyWs()'), 'ws://localhost:8080/ws');
   assert.equal(run('safeLobby("wss://lobby.co3d.eu/ws")'), 'wss://lobby.co3d.eu/ws');
@@ -468,7 +468,7 @@ test('a tunneled game uses the lobby on the same origin', () => {
     assert.equal(
       run('lobbyUrl(gameUrl())'),
       'https://abc.trycloudflare.com/lobby/?return=https%3A%2F%2Fabc.trycloudflare.com' +
-        '%2Fgames%2Fdreiziehn%2Fdreiziehn.html&maxPlayers=4',
+        '%2Fgames%2Fdreiziehn%2Fdreiziehn.html&maxPlayers=4&game=Dreiziehn',
     );
     assert.equal(run('defaultLobbyWs()'), 'wss://abc.trycloudflare.com/lobby/ws');
     assert.equal(

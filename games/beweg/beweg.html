@@ -2243,6 +2243,7 @@
       const url = new URL(lobbyBase());
       url.searchParams.set('return', returnUrl);
       url.searchParams.set('maxPlayers', String(MAX_PLAYERS));
+      url.searchParams.set('game', 'Beweg');
       return url.toString();
     }
 

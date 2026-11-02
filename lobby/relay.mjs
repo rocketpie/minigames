@@ -117,7 +117,7 @@ export class Relay {
   }
 
   join(roomId, token, name) {
-    const room = this.rooms.get(String(roomId ?? '').trim().toLowerCase());
+    const room = this.rooms.get(String(roomId ?? '').trim().toLowerCase().replace(/\s+/g, '-'));
     if (!room) throw fail('no-room', 'room does not exist (yet) or expired');
     const existing = token && room.members.get(token);
     if (existing) {
@@ -195,7 +195,7 @@ export class Relay {
   #roomId() {
     let id;
     do {
-      id = Array.from({ length: 4 }, () => WORDS[randomInt(WORDS.length)]).join('-');
+      id = Array.from({ length: 3 }, () => WORDS[randomInt(WORDS.length)]).join('-');
     } while (this.rooms.has(id));
     return id;
   }

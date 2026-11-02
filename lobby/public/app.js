@@ -5,7 +5,35 @@ const $ = (id) => document.getElementById(id);
 const nameInput = $('name');
 const roomInput = $('room');
 nameInput.value = localStorage.getItem('lobby-name') ?? '';
-nameInput.addEventListener('change', () => localStorage.setItem('lobby-name', nameInput.value));
+nameInput.addEventListener('input', () => localStorage.setItem('lobby-name', nameInput.value));
+
+const params = new URLSearchParams(location.search);
+const roomParam = params.get('room');
+const invitedBy = (params.get('by') ?? '').trim().slice(0, 24);
+const gameName = (params.get('game') ?? '').trim().slice(0, 40);
+const de = (navigator.language ?? '').toLowerCase().startsWith('de');
+const ui = de ? {
+  name: 'Dein Name',
+  room: 'Raumname',
+  roomPlaceholder: 'z. B. acid-acorn-acre',
+  join: 'Spiel Beitreten',
+  create: 'Neue Spieleinladung',
+  roomRequired: 'Bitte einen Raumnamen eingeben.',
+} : {
+  name: 'Your name',
+  room: 'Room name',
+  roomPlaceholder: 'e.g. acid-acorn-acre',
+  join: 'Join Game',
+  create: 'New lobby',
+  roomRequired: 'Enter a room name.',
+};
+
+$('nameLabel').textContent = ui.name;
+$('roomLabel').textContent = ui.room;
+roomInput.placeholder = ui.roomPlaceholder;
+$('joinButton').textContent = ui.join;
+$('create').textContent = ui.create;
+document.documentElement.lang = de ? 'de' : 'en';
 
 let ws = null;
 let roomId = null;
@@ -14,9 +42,9 @@ let host = false;
 let started = false;
 let playerName = '';
 
-let returnUrl = safeReturn(new URLSearchParams(location.search).get('return'), location.origin);
+let returnUrl = safeReturn(params.get('return'), location.origin);
 let maxPlayers = Math.max(1, Math.min(12, Number.parseInt(
-  new URLSearchParams(location.search).get('maxPlayers'), 10) || 12));
+  params.get('maxPlayers'), 10) || 12));
 
 const basePath = location.pathname.replace(/[^/]*$/, '');
 const endpoint = (path) => new URL(path, location.origin + basePath).href;
@@ -27,7 +55,13 @@ const wsUrl = () => {
 };
 
 const tokenStore = (id) => `lobby-token:${id}`;
-const joinUrl = (id) => `${location.origin}${basePath}?room=${id}`;
+const joinUrl = (id) => {
+  const url = new URL(`${location.origin}${basePath}`);
+  url.searchParams.set('room', id);
+  if (playerName) url.searchParams.set('by', playerName);
+  if (gameName) url.searchParams.set('game', gameName);
+  return url.href;
+};
 const send = (msg) => ws.send(JSON.stringify(msg));
 
 const log = (text) => {
@@ -73,10 +107,13 @@ function onJoined(msg) {
   host = msg.host;
   started = msg.started;
   playerName = msg.name;
+  localStorage.setItem('lobby-name', playerName);
   returnUrl = safeReturn(msg.returnUrl, location.origin) || returnUrl;
   maxPlayers = msg.maxPlayers ?? maxPlayers;
   sessionStorage.setItem(tokenStore(roomId), token);
-  history.replaceState(null, '', `?room=${roomId}`);
+  const next = new URLSearchParams({ room: roomId });
+  if (gameName) next.set('game', gameName);
+  history.replaceState(null, '', `?${next}`);
 
   $('home').hidden = true;
   $('lobby').hidden = false;
@@ -210,7 +247,6 @@ $('say').addEventListener('submit', (event) => {
   $('sayText').value = '';
 });
 
-const roomParam = new URLSearchParams(location.search).get('room');
 
 function joinRoom(room) {
   $('home').hidden = true;
@@ -229,13 +265,25 @@ function joinRoom(room) {
 $('joinForm').addEventListener('submit', (event) => {
   event.preventDefault();
   const room = roomInput.value.trim().toLowerCase().replace(/\s+/g, '-');
-  if (!room) return ($('status').textContent = 'Bitte einen Raumname eingeben.');
+  if (!room) return ($('status').textContent = ui.roomRequired);
   joinRoom(room);
 });
 
+if (roomParam) {
+  roomInput.value = roomParam;
+  const invited = invitedBy && gameName
+    ? (de ? `${invitedBy} hat dich zu „${gameName}“ eingeladen.` : `${invitedBy} invited you to play “${gameName}”.`)
+    : invitedBy
+      ? (de ? `${invitedBy} hat dich zu einem Spiel eingeladen.` : `${invitedBy} invited you to a game.`)
+      : gameName
+        ? (de ? `Du wurdest zu „${gameName}“ eingeladen.` : `You were invited to play “${gameName}”.`)
+        : '';
+  if (invited) {
+    $('invite').textContent = invited;
+    $('invite').hidden = false;
+  }
+}
+
 if (roomParam && sessionStorage.getItem(tokenStore(roomParam))) {
   joinRoom(roomParam);
-} else if (roomParam) {
-  roomInput.value = roomParam;
-  $('status').textContent = `Raum: ${roomParam}`;
 }
