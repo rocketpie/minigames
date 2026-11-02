@@ -83,21 +83,114 @@ function connect(onOpen) {
   });
 }
 
+const STICK = '<svg class="stick" viewBox="0 0 24 32" aria-hidden="true">' +
+  '<circle cx="12" cy="6" r="3.4"/>' +
+  '<path d="M12 9.5V20M12 12.5l-5.5 4M12 12.5l5.5 4M12 20l-4.5 8M12 20l4.5 8"/>' +
+  '</svg>';
+
+function seatElement(player) {
+  const seat = document.createElement('div');
+  seat.className = 'seat' + (player ? '' : ' empty') + (player?.online === false ? ' offline' : '');
+  const figure = document.createElement('span');
+  figure.className = 'seat-figure';
+  figure.innerHTML = STICK;
+  const name = document.createElement('span');
+  name.className = 'seat-name';
+
+  if (!player) {
+    name.textContent = de ? 'frei' : 'free';
+    seat.setAttribute('aria-label', de ? 'Freier Platz' : 'Empty seat');
+    seat.append(figure, name);
+    return seat;
+  }
+
+  name.textContent = player.name;
+  seat.title = player.name + (player.host ? ' (Host)' : '') + (player.online ? '' : ' – offline');
+  seat.setAttribute('aria-label', seat.title);
+  seat.append(figure, name);
+
+  if (player.host) {
+    const mark = document.createElement('span');
+    mark.className = 'seat-host';
+    mark.textContent = '★';
+    mark.title = 'Host';
+    mark.setAttribute('aria-hidden', 'true');
+    seat.append(mark);
+  }
+  if (!player.online) {
+    const away = document.createElement('span');
+    away.className = 'seat-away';
+    away.textContent = 'offline';
+    seat.append(away);
+  }
+  if (host && !player.host) {
+    const remove = document.createElement('button');
+    remove.className = 'seat-kick';
+    remove.textContent = '×';
+    remove.title = `${de ? 'Entfernen' : 'Remove'}: ${player.name}`;
+    remove.setAttribute('aria-label', remove.title);
+    remove.addEventListener('click', () => send({ t: 'kick', id: player.id }));
+    seat.append(remove);
+  }
+  return seat;
+}
+
+function furnitureElement(kind, seats) {
+  const piece = document.createElement('div');
+  piece.className = `furniture ${kind}`;
+  piece.setAttribute('role', 'list');
+  for (const player of seats) {
+    const seat = seatElement(player);
+    seat.setAttribute('role', 'listitem');
+    piece.append(seat);
+  }
+  return piece;
+}
+
+function buildFurniture(seats) {
+  if (!seats.length) return [];
+  const add = (kind, group) =>
+    ({ el: furnitureElement(kind, group), seats: group.length });
+  // One chair is always present; sofas appear only once a full group of four is left.
+  const pieces = [add('chair', [seats[0]])];
+  const rest = seats.slice(1);
+  let i = 0;
+  for (; rest.length - i >= 4; i += 4) pieces.push(add('sofa', rest.slice(i, i + 4)));
+  for (; i < rest.length; i += 1) pieces.push(add('chair', [rest[i]]));
+  return pieces;
+}
+
 function renderPeers(peers) {
   $('peerCount').textContent = `Teilnehmer: ${peers.length} / ${maxPlayers}`;
-  $('peers').replaceChildren(
-    ...peers.map((p) => {
-      const li = document.createElement('li');
-      li.textContent = p.name + (p.host ? ' (Host)' : '') + (p.online ? ' – online' : ' – offline');
-      if (host && !p.host) {
-        const remove = document.createElement('button');
-        remove.textContent = 'Entfernen';
-        remove.addEventListener('click', () => send({ t: 'kick', id: p.id }));
-        li.append(remove);
-      }
-      return li;
-    }),
+  const seats = Array.from(
+    { length: Math.max(maxPlayers, peers.length) },
+    (_, i) => peers[i] ?? null,
   );
+  const top = [];
+  const bottom = [];
+  let topSeats = 0;
+  let bottomSeats = 0;
+  for (const piece of buildFurniture(seats)) {
+    if (topSeats <= bottomSeats) {
+      top.push(piece.el);
+      topSeats += piece.seats;
+    } else {
+      bottom.push(piece.el);
+      bottomSeats += piece.seats;
+    }
+  }
+  $('seatTop').replaceChildren(...top);
+  $('seatBottom').replaceChildren(...bottom);
+
+  const hostPeer = peers.find((p) => p.host);
+  const waiting = !host && !started && hostPeer
+    ? (de
+      ? `Warte auf „${hostPeer.name}“, um das Spiel zu starten.`
+      : `Waiting for ${hostPeer.name} to start the game.`)
+    : '';
+  $('waiting').textContent = waiting;
+  $('waiting').hidden = !waiting;
+
   $('start').hidden = !(host && !started);
 }
 

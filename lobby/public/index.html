@@ -123,10 +123,205 @@
       font-size: .9rem;
     }
 
-    #peers button {
-      margin-left: .5rem;
-      padding: .15rem .45rem;
-      font-size: .8rem;
+    .waiting {
+      margin: 0;
+      padding: .55rem .7rem;
+      border-radius: .4rem;
+      background: #eee4da;
+      font-weight: 600;
+    }
+
+    .seat-map {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      padding: .4rem 0 0;
+    }
+
+    .seat-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 1rem;
+    }
+
+    .furniture {
+      display: flex;
+      gap: .3rem;
+      padding: .5rem .55rem .65rem;
+      border-radius: 1.1rem 1.1rem .7rem .7rem;
+      background: linear-gradient(#cdb9a2, #b09981);
+      box-shadow: 0 .35rem 0 #8f7a66, inset 0 .2rem 0 rgba(255, 255, 255, .28);
+    }
+
+    .chair {
+      border-radius: 1.1rem;
+    }
+
+    .seat {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: .15rem;
+      width: clamp(2.7rem, 16vw, 4.3rem);
+      min-height: 3.2rem;
+      padding: .3rem;
+      border-radius: .65rem;
+      background: #e8dccd;
+      color: #776e65;
+      font-size: .72rem;
+      text-align: center;
+    }
+
+    .seat.empty {
+      background: transparent;
+      border: 2px dashed #c7b4a0;
+      color: #a99a8c;
+    }
+
+    .seat.offline {
+      opacity: .55;
+    }
+
+    .seat-figure {
+      display: flex;
+    }
+
+    .stick {
+      width: 1.25rem;
+      height: 1.75rem;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .seat.empty .stick {
+      opacity: .45;
+    }
+
+    .seat-name {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+
+    .seat-away {
+      font-size: .6rem;
+      color: #a0563e;
+    }
+
+    .seat-host {
+      position: absolute;
+      top: .1rem;
+      right: .25rem;
+      color: #c28a2b;
+      font-size: .65rem;
+    }
+
+    .seat-kick {
+      position: absolute;
+      top: .05rem;
+      left: .15rem;
+      padding: 0 .12rem;
+      border: 0;
+      background: transparent;
+      color: #a0563e;
+      font-size: .85rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .lobby-table {
+      position: relative;
+      width: min(13rem, 70%);
+      height: 3.6rem;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at 50% 30%, #c9a17a, #8f6b4c);
+      box-shadow: 0 .35rem 0 #6d523b, inset 0 .2rem 0 rgba(255, 255, 255, .22);
+    }
+
+    .board {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 5rem;
+      height: 2.7rem;
+      transform: translate(-50%, -50%) rotate(-6deg);
+      border-radius: .25rem;
+      background: #efe0b4;
+      box-shadow: 0 .12rem .18rem rgba(0, 0, 0, .35);
+    }
+
+    .board::before {
+      content: '';
+      position: absolute;
+      inset: .22rem;
+      border-radius: .12rem;
+      background-image:
+        linear-gradient(to right, rgba(119, 110, 101, .35) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(119, 110, 101, .35) 1px, transparent 1px);
+      background-size: 25% 50%;
+    }
+
+    .figure {
+      position: absolute;
+      width: .42rem;
+      height: .62rem;
+      border-radius: 50% 50% 30% 30%;
+      background: #a0563e;
+      box-shadow: inset 0 .08rem 0 rgba(255, 255, 255, .35), 0 .05rem .1rem rgba(0, 0, 0, .25);
+    }
+
+    .figure::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      bottom: -.06rem;
+      width: .5rem;
+      height: .14rem;
+      transform: translateX(-50%);
+      border-radius: 50%;
+      background: rgba(0, 0, 0, .18);
+    }
+
+    .figure.f1 { left: .55rem; top: .75rem; background: #a0563e; }
+    .figure.f2 { left: 1.55rem; top: 1.35rem; background: #4f7a5a; }
+    .figure.f3 { left: 2.5rem; top: .85rem; background: #c28a2b; }
+
+    .die {
+      position: absolute;
+      width: .58rem;
+      height: .58rem;
+      border-radius: .12rem;
+      background-color: #f9f6f2;
+      background-repeat: no-repeat;
+      box-shadow: 0 .06rem .1rem rgba(0, 0, 0, .3);
+    }
+
+    .die.d1 {
+      right: .55rem;
+      bottom: .5rem;
+      transform: rotate(18deg);
+      background-image:
+        radial-gradient(circle at 30% 30%, #776e65 0 12%, transparent 13%),
+        radial-gradient(circle at 70% 70%, #776e65 0 12%, transparent 13%),
+        radial-gradient(circle at 30% 70%, #776e65 0 12%, transparent 13%);
+    }
+
+    .die.d2 {
+      right: 1.3rem;
+      top: .4rem;
+      transform: rotate(-12deg);
+      background-image:
+        radial-gradient(circle at 30% 30%, #776e65 0 12%, transparent 13%),
+        radial-gradient(circle at 70% 70%, #776e65 0 12%, transparent 13%);
     }
 
     .invite {
@@ -166,8 +361,21 @@
         <button id="showQr">QR-Code</button>
       </div>
       <div id="qrBox" hidden><img id="qr" alt="QR-Code zum Beitreten"></div>
+      <p id="waiting" class="waiting" hidden></p>
       <p id="peerCount">Teilnehmer:</p>
-      <ul id="peers"></ul>
+      <div id="seatMap" class="seat-map">
+        <div id="seatTop" class="seat-row"></div>
+        <div class="lobby-table" aria-hidden="true">
+          <div class="board">
+            <span class="figure f1"></span>
+            <span class="figure f2"></span>
+            <span class="figure f3"></span>
+            <span class="die d1"></span>
+            <span class="die d2"></span>
+          </div>
+        </div>
+        <div id="seatBottom" class="seat-row"></div>
+      </div>
       <button id="start" hidden>Start Game</button>
       <p class="status" id="lobbyStatus"></p>
     </section>

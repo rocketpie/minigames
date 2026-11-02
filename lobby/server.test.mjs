@@ -44,6 +44,8 @@ test('static files, challenge, QR and the full room flow', async (t) => {
   assert.match(homeHtml, /Lobby/);
   assert.match(homeHtml, /id="joinForm"/);
   assert.match(homeHtml, /id="room"/);
+  assert.match(homeHtml, /id="seatMap"/);
+  assert.match(homeHtml, /id="waiting"/);
   assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(home.headers.get('referrer-policy'), 'no-referrer');
   assert.match(home.headers.get('content-security-policy'), /frame-ancestors 'none'/);
