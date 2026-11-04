@@ -44,6 +44,8 @@ const setup = ({ cols = [], free = [null, null, null, null], found = empty() }) 
     free = ${JSON.stringify(free)};
     found = ${JSON.stringify(found)};
     sel = null; moves = 0; won = false; undoStack = []; dealing = false; pinned = new Set();
+    MP.active = false; MP.host = false; MP.players = null; MP.turn = 0; MP.pending = false;
+    MP.socket = null; MP.hostId = null; MP.you = null;
     draw();
   `);
 };
@@ -408,6 +410,50 @@ test('a moved card makes a sound, and the game stays silent without audio', () =
 
   delete ctx.window;
   assert.doesNotThrow(() => run('moveSound()'), 'no AudioContext, no crash');
+});
+
+test('multiplayer state round-trips with the turn and rejects a bad turn', () => {
+  run('newGame()');
+  run('MP.active = true; MP.host = true; MP.you = "a"; MP.turn = 1;' +
+    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }]');
+  const saved = run('JSON.stringify(mpState())');
+  assert.equal(JSON.parse(saved).turn, 1);
+
+  run('MP.turn = 0; cols = [[],[],[],[],[],[],[],[]]; free = [null,null,null,null]; found = [[],[],[],[]];');
+  assert.equal(run(`mpRestore(${saved})`), true);
+  assert.equal(run('MP.turn'), 1);
+  assert.equal(run('MP.players[0].name'), 'Alice');
+  assert.equal(JSON.parse(run('JSON.stringify(cols.flat())')).length, 52);
+
+  const bad = JSON.parse(saved);
+  bad.turn = 9;
+  assert.equal(run(`mpRestore(${JSON.stringify(bad)})`), false, 'turn outside the table');
+});
+
+test('the host applies a move, then hands the turn on', () => {
+  setup({ cols: [[c(10, 0)], [c(9, 1)]] });
+  run('MP.active = true; MP.host = true; MP.you = "a"; MP.turn = 0;' +
+    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }]');
+  assert.equal(run('submitMove({ kind: "col", i: 1, j: 0 }, { kind: "col", i: 0 })'), true);
+  assert.deepEqual(Array.from(run('cols[0].map(c => c.r)')), [10, 9]);
+  assert.equal(run('MP.turn'), 1);
+});
+
+test('a guest sends its move to the host and waits for the new board', () => {
+  setup({ cols: [[c(10, 0)], [c(9, 1)]] });
+  run('var sent = null; MP.active = true; MP.host = false; MP.you = "b"; MP.hostId = "a"; MP.turn = 1;' +
+    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }];' +
+    'MP.socket = { readyState: 1, send(s) { sent = s; } }');
+  assert.equal(run('submitMove({ kind: "col", i: 1, j: 0 }, { kind: "col", i: 0 })'), true);
+
+  const msg = JSON.parse(run('sent'));
+  assert.equal(msg.t, 'msg');
+  assert.equal(msg.data.type, 'move');
+  assert.equal(msg.data.to, 'a');
+  assert.deepEqual(JSON.parse(JSON.stringify(msg.data.move)),
+    { from: { kind: 'col', i: 1, j: 0 }, to: { kind: 'col', i: 0 } });
+  assert.deepEqual(Array.from(run('cols[1].map(c => c.r)')), [9], 'the guest waits for the host');
+  assert.equal(run('MP.pending'), true);
 });
 
 test('sending every king home wins the game', () => {
