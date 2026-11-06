@@ -95,7 +95,7 @@ function addScore(name, points) {
 }
 
 const askName = () => {
-  const name = (prompt(`Game over — score ${score}. Name for the high score list?`) || '').trim().slice(0, 20) || 'anon';
+  const name = (prompt(`Score ${score}. Name for the high score list?`) || '').trim().slice(0, 20) || 'anon';
   addScore(name, score);
 };
 
@@ -214,7 +214,7 @@ function turn(dir) {
     addTile();
     drawScore();
     busy = false;
-    if (!won && board.some(t => t && t.v >= 2048)) { won = true; show('You win!'); }
+    if (!won && board.some(t => t && t.v >= 2048)) { won = true; show('You win!'); askName(); }
     else if (!canMove()) { over = true; show('Game over'); askName(); }
     save();
   }, 250);

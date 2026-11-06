@@ -109,3 +109,20 @@ test('a game over records the score once, restoring does not', () => {
   assert.equal(vm.runInContext('over', ctx), true);
   assert.deepEqual(Array.from(vm.runInContext('scores.map(e => e.name)', ctx)), ['ana']);
 });
+
+test('a win records the score once, restoring does not', () => {
+  vm.runInContext('Math.random = () => 0.5; scores = []; init(null)', ctx);
+  vm.runInContext(`
+    tiles = [];
+    board = [1024,1024,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0].map((v, i) =>
+      v ? { v, r: (i / 4) | 0, c: i % 4, el: document.createElement() } : null);
+  `, ctx);
+  vm.runInContext('turn("left")', ctx);
+  assert.equal(vm.runInContext('won', ctx), true);
+  assert.deepEqual(Array.from(vm.runInContext('scores.map(e => e.name)', ctx)), ['ana']);
+
+  // Reloading the won game must not prompt again.
+  vm.runInContext('init(load())', ctx);
+  assert.equal(vm.runInContext('won', ctx), true);
+  assert.deepEqual(Array.from(vm.runInContext('scores.map(e => e.name)', ctx)), ['ana']);
+});
