@@ -162,3 +162,65 @@ test('sweep drops rooms after the global timeout even when active', async () => 
   now = 1001;
   assert.deepEqual(relay.sweep().map((g) => g.reason), ['room-timeout']);
 });
+
+async function createPostbox(relay, name = 'Host', maxPlayers = 2) {
+  const { challenge, bits } = relay.issueChallenge('postbox');
+  const proof = await solve(challenge, bits);
+  return relay.create(proof, name, '', maxPlayers, 'postbox');
+}
+
+test('postbox rooms need a postbox challenge and get four-word ids', async () => {
+  const relay = new Relay({ hashcashBits: BITS, postboxHashcashBits: BITS });
+  const live = relay.issueChallenge();
+  const liveProof = await solve(live.challenge, live.bits);
+  assert.throws(() => relay.create(liveProof, 'Host', '', 2, 'postbox'), /another room type/);
+
+  const { room } = await createPostbox(relay);
+  assert.equal(room.id.split('-').length, 4);
+  assert.equal(room.mode, 'postbox');
+});
+
+test('postbox start needs two players and stays open until the first write', async () => {
+  const relay = new Relay({ hashcashBits: BITS, postboxHashcashBits: BITS });
+  const { room, member: host } = await createPostbox(relay, 'Host', 3);
+  assert.throws(() => relay.start(room.id, host.token), /second player/);
+
+  relay.join(room.id, null, 'Bob');
+  relay.start(room.id, host.token);
+  relay.join(room.id, null, 'Cara'); // still rev 0, so the door stays open
+  assert.equal(relay.peers(room).length, 3);
+
+  assert.equal(relay.writeState(room.id, host.token, 0, { n: 1 }).rev, 1);
+  assert.throws(() => relay.join(room.id, null, 'Dee'), /already started/);
+});
+
+test('the host opens the postbox and every write needs the current rev', async () => {
+  const relay = new Relay({ hashcashBits: BITS, postboxHashcashBits: BITS });
+  const { room, member: host } = await createPostbox(relay);
+  const { member: guest } = relay.join(room.id, null, 'Bob');
+  relay.start(room.id, host.token);
+
+  assert.throws(() => relay.writeState(room.id, guest.token, 0, { n: 1 }), /host opens/);
+  assert.equal(relay.writeState(room.id, host.token, 0, { n: 1 }).rev, 1);
+  assert.throws(() => relay.writeState(room.id, host.token, 0, { n: 2 }), /moved on/);
+  assert.throws(() => relay.writeState(room.id, guest.token, 0, { n: 2 }), /moved on/);
+  assert.equal(relay.writeState(room.id, guest.token, 1, { n: 2 }).rev, 2);
+  assert.deepEqual(relay.readState(room.id, guest.token).room.state, { n: 2 });
+});
+
+test('postbox rooms ignore the idle timeout and expire on their own ttl', async () => {
+  let now = 0;
+  const relay = new Relay({
+    now: () => now,
+    hashcashBits: BITS,
+    postboxHashcashBits: BITS,
+    idleTtlMs: 100,
+    postboxTtlMs: 10_000,
+  });
+  const { room } = await createPostbox(relay);
+  now = 1000;
+  assert.deepEqual(relay.sweep(), []);
+  now = 10_000;
+  assert.deepEqual(relay.sweep().map((g) => [g.room.id, g.reason]),
+    [[room.id, 'room-timeout']]);
+});

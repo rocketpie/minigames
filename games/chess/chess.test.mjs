@@ -547,8 +547,36 @@ test('multiplayer state survives a reload', () => {
   }
 });
 
-test('a guest plays the incoming capture spell and applies its scar', () => {
-  const board = empty();
+test('postbox mode applies the current move locally and posts the full state', async () => {
+  run(`
+    MP.active = true; MP.postbox = true; MP.host = true; MP.room = 'long'; MP.token = 't';
+    MP.rev = 3; MP.you = 'host'; MP.hostId = 'host'; MP.meColor = 'w'; MP.pending = false;
+    MP.peers = [{ id: 'host', name: 'H', host: true }, { id: 'guest', name: 'G', host: false }];
+    MP.players = playersFromPeers(MP.peers);
+    game = newChess(); sel = -1; targets = [];
+  `);
+  let sent = null;
+  ctx.fetch = async (url, options) => {
+    sent = { url, body: JSON.parse(options.body) };
+    return { ok: true, status: 200, json: async () => ({ rev: 4 }) };
+  };
+  try {
+    run(`commitMove({ from: ${at('e2')}, to: ${at('e4')} })`);
+    assert.equal(run(`game.board[${at('e4')}]`), 'P');
+    assert.equal(run('game.turn'), 'b');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(sent.body.rev, 3);
+    assert.equal(sent.body.state.turn, 'b');
+    assert.equal(run('MP.rev'), 4);
+    assert.equal(run('MP.pending'), false);
+  } finally {
+    delete ctx.fetch;
+    store.delete('chess-mp');
+    run("MP.active = false; MP.postbox = false; MP.host = false; MP.room = null; MP.players = null; MP.meColor = null; game = newChess();");
+  }
+});
+
+test('a guest plays the incoming capture spell and applies its scar', () => {  const board = empty();
   put(board, 'e1', 'K'); put(board, 'e8', 'k');
   put(board, 'e4', 'P'); put(board, 'd5', 'p');
   setPosition({ board });

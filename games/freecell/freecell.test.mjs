@@ -24,6 +24,7 @@ const ctx = {
   },
   addEventListener() {}, requestAnimationFrame: fn => fn(), setTimeout: fn => fn(), clearTimeout() {},
   innerWidth: 900, innerHeight: 900, console,
+  URL,
   localStorage: {
     getItem: k => store.get(k) ?? null,
     setItem: (k, v) => store.set(k, String(v)),
@@ -454,6 +455,41 @@ test('a guest sends its move to the host and waits for the new board', () => {
     { from: { kind: 'col', i: 1, j: 0 }, to: { kind: 'col', i: 0 } });
   assert.deepEqual(Array.from(run('cols[1].map(c => c.r)')), [9], 'the guest waits for the host');
   assert.equal(run('MP.pending'), true);
+});
+
+test('postbox mode applies the move locally and posts the next state', async () => {
+  setup({ cols: [[c(10, 0)], [c(9, 1)]] });
+  run(`
+    MP.active = true; MP.postbox = true; MP.host = true; MP.room = 'long'; MP.token = 't';
+    MP.rev = 0; MP.you = 'a'; MP.hostId = 'a'; MP.turn = 0; MP.pending = false;
+    MP.peers = [{ id: 'a', name: 'Alice', host: true }, { id: 'b', name: 'Bob', host: false }];
+    MP.players = playersFromPeers(MP.peers);
+  `);
+  let sent = null;
+  ctx.location = {
+    hostname: 'localhost', origin: 'http://localhost:8000',
+    pathname: '/freecell/freecell.html', search: '', hash: '',
+  };
+  ctx.fetch = async (url, options) => {
+    sent = { url, body: JSON.parse(options.body) };
+    return { ok: true, status: 200, json: async () => ({ rev: 1 }) };
+  };
+  try {
+    assert.equal(run('submitMove({ kind: "col", i: 1, j: 0 }, { kind: "col", i: 0 })'), true);
+    assert.deepEqual(Array.from(run('cols[0].map(c => c.r)')), [10, 9]);
+    assert.equal(run('MP.turn'), 1);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(sent.body.rev, 0);
+    assert.equal(sent.body.state.turn, 1);
+    assert.equal(sent.body.state.players.length, 2);
+    assert.equal(run('MP.rev'), 1);
+    assert.equal(run('MP.pending'), false);
+  } finally {
+    delete ctx.fetch;
+    delete ctx.location;
+    store.delete('freecell-mp');
+    run("MP.active = false; MP.postbox = false; MP.host = false; MP.room = null; MP.players = null; MP.pending = false;");
+  }
 });
 
 test('sending every king home wins the game', () => {

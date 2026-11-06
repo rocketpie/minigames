@@ -150,3 +150,76 @@ test('websocket origins are checked when the browser sends one', async (t) => {
   });
   assert.equal(outcome, 'error');
 });
+
+test('postbox rooms exchange state over HTTP with CORS and revision checks', async (t) => {
+  const server = await startServer({
+    port: 0, host: '127.0.0.1', hashcashBits: 8, postboxHashcashBits: 8, sweepMs: 60_000,
+  });
+  t.after(() => server.close());
+  const wsUrl = `${server.url.replace('http', 'ws')}/ws`;
+
+  const { challenge, bits } = await (await fetch(`${server.url}/challenge?mode=postbox`)).json();
+  const host = connect(wsUrl);
+  await host.open;
+  host.send({
+    t: 'create', proof: await solve(challenge, bits), name: 'Ada', mode: 'postbox', maxPlayers: 2,
+  });
+  const h = await host.next('joined');
+  assert.equal(h.mode, 'postbox');
+  assert.equal(h.room.split('-').length, 4);
+
+  host.send({ t: 'start' });
+  assert.equal((await host.next('error')).code, 'waiting');
+
+  const guest = connect(wsUrl);
+  await guest.open;
+  guest.send({ t: 'join', room: h.room, name: 'Bob' });
+  const g = await guest.next('joined');
+  await host.next((m) => m.t === 'peers' && m.peers.length === 2);
+  host.send({ t: 'start' });
+  await guest.next('started');
+
+  const headers = (token) => ({ authorization: `Bearer ${token}` });
+  const get = async (token) => {
+    const res = await fetch(`${server.url}/rooms/${h.room}`, { headers: headers(token) });
+    return { status: res.status, body: await res.json() };
+  };
+  const post = async (token, rev, state) => {
+    const res = await fetch(`${server.url}/rooms/${h.room}/state`, {
+      method: 'POST',
+      headers: { ...headers(token), 'content-type': 'application/json' },
+      body: JSON.stringify({ rev, state }),
+    });
+    return { status: res.status, body: await res.json() };
+  };
+
+  let snap = await get(h.token);
+  assert.equal(snap.status, 200);
+  assert.equal(snap.body.rev, 0);
+  assert.equal(snap.body.state, null);
+  assert.equal(snap.body.peers.length, 2);
+
+  assert.equal((await post(g.token, 0, { turn: 'w' })).status, 403);
+  assert.equal((await post(h.token, 0, { turn: 'b' })).status, 200);
+  assert.equal((await post(g.token, 0, { turn: 'w' })).status, 409);
+
+  snap = await get(g.token);
+  assert.equal(snap.body.rev, 1);
+  assert.deepEqual(snap.body.state, { turn: 'b' });
+
+  assert.equal((await fetch(`${server.url}/rooms/${h.room}`, {
+    headers: headers('nope'),
+  })).status, 403);
+
+  const preflight = await fetch(`${server.url}/rooms/${h.room}/state`, {
+    method: 'OPTIONS',
+    headers: {
+      origin: 'https://co3d.eu',
+      'access-control-request-method': 'POST',
+      'access-control-request-headers': 'authorization, content-type',
+    },
+  });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://co3d.eu');
+  assert.match(preflight.headers.get('access-control-allow-headers'), /authorization/);
+});

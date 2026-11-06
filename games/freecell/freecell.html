@@ -313,7 +313,13 @@ function lobbyUrl() {
 function lobbyParams(search, hash) {
   const room = new URLSearchParams(search).get('room');
   const p = new URLSearchParams(String(hash).replace(/^#/, ''));
-  return { room, token: p.get('token'), name: p.get('name'), lobby: p.get('lobby') };
+  return {
+    room,
+    token: p.get('token'),
+    name: p.get('name'),
+    lobby: p.get('lobby'),
+    mode: p.get('mode'),
+  };
 }
 
 function defaultLobbyWs() {
@@ -387,6 +393,7 @@ const MP = {
   active: false, host: false, you: null, hostId: null, room: null, peers: [],
   players: null, turn: 0, pending: false, timer: null, socket: null,
   token: null, name: null, lobbyUrl: null, retries: 0, reconnectTimer: null, closed: false,
+  postbox: false, rev: 0, syncing: false, pollTimer: null, synced: false,
 };
 
 const id = c => c.s * 13 + c.r;
@@ -464,6 +471,34 @@ function save() {
   } catch { /* storage unavailable: keep playing in memory */ }
 }
 
+function saveMp() {
+  if (!MP.active || !MP.room || !MP.players || !isMpState(mpState())) return;
+  try {
+    localStorage.setItem(`${KEY}-mp`, JSON.stringify({
+      room: MP.room,
+      token: MP.token,
+      rev: MP.rev,
+      mode: MP.postbox ? 'postbox' : 'live',
+      state: mpState(),
+    }));
+  } catch { /* storage unavailable */ }
+}
+
+function loadMp(room) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(`${KEY}-mp`) || 'null');
+    if (!saved || saved.room !== room || !isMpState(saved.state)) return null;
+    return {
+      state: saved.state,
+      token: typeof saved.token === 'string' ? saved.token : null,
+      rev: Number.isInteger(saved.rev) ? saved.rev : 0,
+      mode: saved.mode === 'postbox' ? 'postbox' : 'live',
+    };
+  } catch {
+    return null;
+  }
+}
+
 function load() {
   let saved;
   try { saved = JSON.parse(localStorage.getItem(KEY)); } catch { return false; }
@@ -506,23 +541,32 @@ function submitMove(from, to) {
     say(mpWaitText());
     return false;
   }
-  if (MP.host) {
-    if (!applyMove(from, to)) {
-      draw();
-      return false;
-    }
-    mpNextTurn();
-    draw();
-    mpBroadcast(true);
-    return true;
-  }
-  if (!sendLobby({ v: DATA_VERSION, type: 'move', to: MP.hostId, move: { from, to } })) {
-    say('The lobby is not connected.');
+  if (MP.postbox && (!MP.players || MP.peers.length < 2)) {
+    say('Waiting for an opponent…');
     return false;
   }
-  MP.pending = true;
-  sel = null;
+  if (!MP.postbox && !MP.host) {
+    if (!sendLobby({ v: DATA_VERSION, type: 'move', to: MP.hostId, move: { from, to } })) {
+      say('The lobby is not connected.');
+      return false;
+    }
+    MP.pending = true;
+    sel = null;
+    draw();
+    return true;
+  }
+  if (!applyMove(from, to)) {
+    draw();
+    return false;
+  }
+  if (MP.postbox) {
+    clearTimeout(autoTimer);
+    while (autoStep()) { /* fold autoplay into the same posted state */ }
+  }
+  mpNextTurn();
   draw();
+  if (MP.postbox) mpPost();
+  else mpBroadcast(true);
   return true;
 }
 
@@ -562,7 +606,7 @@ function settle(moved = []) {
   autoTimer = setTimeout(() => {
     const c = autoStep();
     if (c) {
-      if (MP.host) mpBroadcast(false);
+      if (MP.host && !MP.postbox) mpBroadcast(false);
       settle([c]);
     }
   }, slow(STEP_MS));
@@ -850,8 +894,11 @@ function draw(moved = []) {
     : MP.pending ? 'sending…' : mpIsMyTurn() ? 'your turn' : `${mpName(MP.turn)}'s turn`;
   $('overlay').classList.toggle('show', won);
   $('winMoves').textContent = moves;
+  saveMp();
 
-  if (MP.active && MP.players) {
+  if (MP.active && MP.postbox && !MP.players) {
+    say('Waiting for the host to deal…');
+  } else if (MP.active && MP.players) {
     if (MP.pending) say('Waiting for the host…');
     else if (!mpIsMyTurn()) say(mpWaitText());
     else if (held.length) {
@@ -1016,7 +1063,9 @@ function sendLobby(data) {
 }
 
 function mpBroadcast(now = false) {
-  if (!MP.host || !MP.players) return;
+  if (!MP.players) return;
+  if (MP.postbox) return mpPost();
+  if (!MP.host) return;
   clearTimeout(MP.timer);
   const send = () => {
     MP.timer = null;
@@ -1024,6 +1073,137 @@ function mpBroadcast(now = false) {
   };
   if (now) send();
   else MP.timer = setTimeout(send, 250);
+}
+
+function postboxUrl(room) {
+  return new URL(`rooms/${encodeURIComponent(room)}`, lobbyBase()).href;
+}
+
+function playersFromPeers(peers) {
+  const hostPeer = peers.find(p => p.host);
+  if (!hostPeer) return null;
+  return [hostPeer, ...peers.filter(p => !p.host)]
+    .map(p => ({ id: p.id, name: p.name }));
+}
+
+function handlePostboxError(code) {
+  $('lobbyState').textContent = `Lobby error: ${code}`;
+  if (['no-room', 'forbidden', 'live-room', 'closed', 'removed'].includes(code)) {
+    MP.closed = true;
+    stopPostboxPoll();
+    lobbyOverlay(`Lobby: ${code}`);
+  }
+}
+
+function applyPostboxSnapshot(snap) {
+  if (!snap || typeof snap !== 'object') return;
+  MP.rev = Number.isInteger(snap.rev) ? snap.rev : MP.rev;
+  MP.host = !!snap.host;
+  MP.you = snap.you ?? MP.you;
+  MP.peers = Array.isArray(snap.peers) ? snap.peers : MP.peers;
+  MP.hostId = MP.peers.find(p => p.host)?.id ?? MP.hostId;
+  $('lobbyBar').hidden = false;
+  $('lobbyState').textContent =
+    `Room ${String(MP.room).slice(0, 8)} · ${MP.host ? 'host' : 'player'} · long game`;
+  renderLobbyPeers(MP.peers);
+  if (snap.state) {
+    if (isMpState(snap.state)) mpRestore(snap.state);
+  } else if (!MP.pending) {
+    if (MP.host && snap.started && MP.peers.length >= 2) {
+      if (!MP.synced || !MP.players) {
+        MP.players = playersFromPeers(MP.peers);
+        MP.turn = 0;
+        newGame();
+      }
+    } else {
+      MP.players = null;
+      if (!MP.synced) {
+        cols = Array.from({ length: 8 }, () => []);
+        free = [null, null, null, null];
+        found = [[], [], [], []];
+        moves = 0;
+        won = false;
+        sel = null;
+      }
+      draw();
+    }
+  }
+  MP.synced = true;
+  saveMp();
+}
+
+async function syncPostbox() {
+  if (!MP.active || !MP.postbox || MP.closed || MP.syncing || MP.pending) return;
+  if (!MP.token || typeof fetch !== 'function') return;
+  MP.syncing = true;
+  try {
+    const res = await fetch(postboxUrl(MP.room), {
+      headers: { authorization: `Bearer ${MP.token}` },
+      cache: 'no-store',
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return handlePostboxError(body.code ?? String(res.status));
+    applyPostboxSnapshot(body);
+  } catch {
+    $('lobbyState').textContent = 'Lobby unavailable.';
+  } finally {
+    MP.syncing = false;
+  }
+}
+
+async function mpPost() {
+  if (!MP.active || !MP.postbox || !MP.token) return;
+  MP.pending = true;
+  draw();
+  try {
+    const res = await fetch(`${postboxUrl(MP.room)}/state`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${MP.token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ rev: MP.rev, state: mpState() }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 409) {
+      MP.pending = false;
+      await syncPostbox();
+      say('The table moved on — reloaded the latest position.');
+      return;
+    }
+    if (!res.ok) {
+      MP.pending = false;
+      handlePostboxError(body.code ?? String(res.status));
+      draw();
+      return;
+    }
+    MP.rev = body.rev ?? MP.rev + 1;
+    MP.pending = false;
+    draw();
+  } catch {
+    MP.pending = false;
+    say('Could not send the move — it is saved locally.');
+    draw();
+  }
+}
+
+function startPostboxPoll() {
+  if (typeof setInterval !== 'function') return;
+  clearInterval(MP.pollTimer);
+  MP.pollTimer = setInterval(() => {
+    if (!document.hidden) syncPostbox();
+  }, 20000);
+  if (typeof addEventListener === 'function') addEventListener('focus', syncPostbox);
+  if (typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) syncPostbox();
+    });
+  }
+}
+
+function stopPostboxPoll() {
+  if (typeof clearInterval === 'function') clearInterval(MP.pollTimer);
+  MP.pollTimer = null;
 }
 
 function isGameMessage(data) {
@@ -1177,22 +1357,40 @@ function openLobbySocket() {
   });
 }
 
-function connectLobby(room, token, name, url) {
+function connectLobby(room, token, name, url, mode) {
+  const saved = loadMp(room);
   MP.active = true;
   MP.room = room;
-  MP.token = token;
+  MP.postbox = mode === 'postbox' || (!mode && saved?.mode === 'postbox');
+  MP.token = token || saved?.token || null;
   MP.name = name;
   MP.lobbyUrl = url;
+  MP.rev = saved?.rev ?? 0;
   MP.closed = false;
   MP.retries = 0;
+  MP.syncing = false;
+  MP.synced = false;
   stopLobbyReconnect();
-  MP.players = null;
-  MP.turn = 0;
+  stopPostboxPoll();
+  const useSaved = saved && (MP.postbox || saved.mode === 'postbox');
+  MP.players = useSaved ? saved.state.players : null;
+  MP.turn = useSaved ? saved.state.turn : 0;
   MP.pending = false;
+  if (useSaved) mpRestore(saved.state);
   $('lobbyBar').hidden = false;
-  $('lobbyState').textContent = 'Connecting to the lobby…';
+  $('lobbyState').textContent = MP.postbox ? 'Loading long game…' : 'Connecting to the lobby…';
   draw();
-  openLobbySocket();
+  if (MP.postbox) {
+    if (!MP.token) {
+      MP.closed = true;
+      lobbyOverlay('Missing room token.');
+      return;
+    }
+    syncPostbox();
+    startPostboxPoll();
+  } else {
+    openLobbySocket();
+  }
 }
 
 $('table').addEventListener('click', e => {
@@ -1224,8 +1422,9 @@ if (!load()) newGame();
 if (typeof location !== 'undefined' && typeof URLSearchParams !== 'undefined') {
   const lobbyLink = lobbyParams(location.search, location.hash);
   if (lobbyLink.room) {
-    connectLobby(lobbyLink.room, lobbyLink.token, lobbyLink.name,
-      safeLobby(lobbyLink.lobby) || defaultLobbyWs());
+    const saved = loadMp(lobbyLink.room);
+    connectLobby(lobbyLink.room, lobbyLink.token || saved?.token, lobbyLink.name,
+      safeLobby(lobbyLink.lobby) || defaultLobbyWs(), lobbyLink.mode || saved?.mode);
   }
 }
 </script>

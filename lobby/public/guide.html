@@ -67,14 +67,15 @@
       sends the stored return URL and limit in <code>joined</code>.</li>
     <li>The host sends <code>{"t":"start"}</code>. Every lobby client then opens the return URL
       with the room id and its credentials:
-      <pre><code>&lt;returnUrl&gt;?room=&lt;id&gt;#token=&lt;token&gt;&amp;name=&lt;name&gt;&amp;lobby=&lt;ws-url&gt;</code></pre>
+      <pre><code>&lt;returnUrl&gt;?room=&lt;id&gt;#token=&lt;token&gt;&amp;name=&lt;name&gt;&amp;lobby=&lt;ws-url&gt;&amp;mode=&lt;live|postbox&gt;</code></pre>
     </li>
-    <li>The game connects to <code>&lt;ws-url&gt;</code> and joins the same room with
-      <code>{"t":"join","room":"…","token":"…","name":"…"}</code>.</li>
+    <li>A live game connects to <code>&lt;ws-url&gt;</code> and joins the same room with
+      <code>{"t":"join","room":"…","token":"…","name":"…"}</code>. A postbox game reads and
+      writes <code>/rooms/&lt;id&gt;</code> over HTTP instead; see below.</li>
   </ol>
 
   <div class="warn">
-    The lobby page and the game are usually different origins. <code>sessionStorage</code> is not
+    The lobby page and the game are usually different origins. <code>localStorage</code> is not
     shared, so the token is passed in the URL fragment. Fragments are not sent to the server or in
     the <code>Referer</code>, but they do appear in browser history. Do not paste game URLs with
     tokens into public places.
@@ -89,10 +90,12 @@
     <tr><th>endpoint</th><th>purpose</th></tr>
     <tr><td><code>GET /</code></td><td>Lobby UI.</td></tr>
     <tr><td><code>GET /guide.html</code></td><td>This page.</td></tr>
-    <tr><td><code>GET /challenge</code></td><td><code>{challenge, bits}</code> for room-creation hashcash.</td></tr>
+    <tr><td><code>GET /challenge?mode=live|postbox</code></td><td><code>{challenge, bits}</code> for room-creation hashcash.</td></tr>
     <tr><td><code>GET /qr?text=…</code></td><td>SVG QR code, text max. 512 chars.</td></tr>
     <tr><td><code>GET /healthz</code></td><td><code>ok</code>.</td></tr>
-    <tr><td><code>WS /ws</code></td><td>Room protocol below.</td></tr>
+    <tr><td><code>WS /ws</code></td><td>Live room protocol below.</td></tr>
+    <tr><td><code>GET /rooms/&lt;id&gt;</code></td><td>Postbox snapshot. Needs <code>Authorization: Bearer &lt;token&gt;</code>.</td></tr>
+    <tr><td><code>POST /rooms/&lt;id&gt;/state</code></td><td>Replace the postbox state. Body <code>{rev, state}</code>; stale <code>rev</code> → <code>409</code>.</td></tr>
   </table>
   <p class="muted">Under the preview gateway the lobby is mounted at <code>/lobby/</code>;
     prefix the HTTP and WebSocket paths above with <code>/lobby</code> there.</p>
@@ -100,7 +103,8 @@
   <h2>WebSocket messages</h2>
   <h3>Client → server</h3>
   <pre><code>{ "t": "create", "proof": "&lt;challenge&gt;:&lt;n&gt;", "name": "Ada",
-  "returnUrl": "https://co3d.eu/dreiziehn/dreiziehn.html", "maxPlayers": 4 }
+  "returnUrl": "https://co3d.eu/dreiziehn/dreiziehn.html", "maxPlayers": 4,
+  "mode": "live" }
 
 { "t": "join", "room": "&lt;room-id&gt;", "token": "&lt;token or null&gt;", "name": "Bob" }
 { "t": "start" }
@@ -137,6 +141,32 @@
       there.</li>
   </ul>
 
+  <h2>Postbox rooms</h2>
+  <p>Pass <code>mode: "postbox"</code> to <code>create</code> after solving a
+    <code>?mode=postbox</code> challenge. The room id has four words and the room lives for
+    <code>POSTBOX_TTL_MIN</code> (default seven days), with no idle timeout. Start still works the
+    usual way, but the host must wait for a second member; after start, new members may join until
+    the host writes the opening state.</p>
+  <p>After the lobby redirect, the game talks HTTP instead of WebSocket:</p>
+  <pre><code>GET /rooms/&lt;id&gt;
+Authorization: Bearer &lt;token&gt;
+→ { room, mode, started, rev, state, you, host, peers, … }
+
+POST /rooms/&lt;id&gt;/state
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+{ "rev": 7, "state": { … } }
+→ 200 { "rev": 8 }        // or 409 { rev: 8 } when somebody wrote first</code></pre>
+  <ul>
+    <li>The first write must come from the host. After that either member may replace the state.</li>
+    <li>Always send the <code>rev</code> from the last GET; a mismatch is a lost update, so GET
+      again and apply the server state.</li>
+    <li>Poll on page load, on focus/visibility, and every 20–30 s while the tab is visible. No
+      WebSocket is needed after start.</li>
+    <li>New members are allowed while <code>rev === 0</code>; after the opening state only
+      existing tokens can rejoin.</li>
+  </ul>
+
   <h2>Game data: validate it</h2>
   <p>The relay is a dumb pipe. Any participant can send any <code>data</code>. Games must validate
     the envelope and the payload before using it. Include a data version and a type allowlist:</p>
@@ -170,7 +200,8 @@
       the room. Host-authoritative play is fine for friends; do not use this for ranked or public
       competitive games without server-side validation.</li>
     <li>Rooms live in process memory only. They disappear on restart and expire after
-      <code>ROOM_TTL_MIN</code> / <code>IDLE_TTL_MIN</code>.</li>
+      <code>ROOM_TTL_MIN</code> / <code>IDLE_TTL_MIN</code>, or <code>POSTBOX_TTL_MIN</code>
+      for postbox rooms.</li>
     <li>One server instance only. No shared state, no sticky sessions, no persistence.</li>
   </ul>
 

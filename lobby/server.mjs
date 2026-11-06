@@ -57,8 +57,10 @@ const sameOrigin = (origin, host) => {
 export async function startServer(options = {}) {
   const relay = new Relay({
     hashcashBits: options.hashcashBits ?? envNum('HASHCASH_BITS', 19),
+    postboxHashcashBits: options.postboxHashcashBits ?? envNum('POSTBOX_HASHCASH_BITS', 22),
     roomTtlMs: options.roomTtlMs ?? envNum('ROOM_TTL_MIN', 120) * 60e3,
     idleTtlMs: options.idleTtlMs ?? envNum('IDLE_TTL_MIN', 10) * 60e3,
+    postboxTtlMs: options.postboxTtlMs ?? envNum('POSTBOX_TTL_MIN', 7 * 24 * 60) * 60e3,
     rateBps: options.rateBps ?? envNum('RATE_KBPS', 5) * 1024,
   });
   const allowedOrigins = new Set(Array.isArray(options.allowedOrigins)
@@ -67,15 +69,108 @@ export async function startServer(options = {}) {
       'https://lobby.co3d.eu,https://co3d.eu,' +
       'http://localhost:8080,http://localhost:8000,http://127.0.0.1:8080,http://127.0.0.1:8000'));
 
+  const originAllowed = (origin, host) =>
+    !origin || allowedOrigins.has(origin) || sameOrigin(origin, host);
+  const corsHeaders = (req) => {
+    const origin = req.headers.origin;
+    if (!origin || !originAllowed(origin, req.headers.host)) return {};
+    return {
+      'access-control-allow-origin': origin,
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+      'access-control-allow-headers': 'authorization, content-type',
+      'access-control-max-age': '600',
+      vary: 'origin',
+    };
+  };
+
+  const readJson = (req, limit) => new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > limit) {
+        reject(Object.assign(new Error('body too large'), { code: 'too-large' }));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null'));
+      } catch {
+        reject(Object.assign(new Error('bad json'), { code: 'bad-json' }));
+      }
+    });
+    req.on('error', reject);
+  });
+
+  const sendJson = (res, status, headers, body) => res.writeHead(status, {
+    ...headers,
+    'content-type': 'application/json',
+    'cache-control': 'no-store',
+  }).end(JSON.stringify(body));
+
+  const errorStatus = (code) => ({
+    stale: 409,
+    forbidden: 403,
+    'no-room': 404,
+    'live-room': 404,
+    waiting: 409,
+    lobby: 409,
+    'bad-state': 400,
+    'bad-json': 400,
+    'too-large': 413,
+  }[code] ?? 500);
+
+  const sendError = (res, err, headers) => sendJson(res, errorStatus(err.code), headers, {
+    code: err.code ?? 'error',
+    message: err.message,
+    ...(err.rev === undefined ? {} : { rev: err.rev }),
+  });
+
   const httpServer = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    const secure = (headers) => withSecurity(headers, hostHeader(req));
+    const secure = (headers) => withSecurity({ ...corsHeaders(req), ...headers }, hostHeader(req));
     try {
+      if (req.method === 'OPTIONS') {
+        return res.writeHead(204, secure()).end();
+      }
+      const roomRoute = url.pathname.match(/^\/rooms\/([^/]+)(\/state)?$/);
+      if (roomRoute) {
+        const roomId = decodeURIComponent(roomRoute[1]);
+        const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+        try {
+          if (req.method === 'GET' && !roomRoute[2]) {
+            const { room, member } = relay.readState(roomId, token);
+            return sendJson(res, 200, secure(), {
+              room: room.id,
+              mode: room.mode,
+              started: room.started,
+              rev: room.rev,
+              state: room.state,
+              you: member.id,
+              host: token === room.host,
+              returnUrl: room.returnUrl,
+              maxPlayers: room.maxPlayers,
+              peers: relay.peers(room),
+            });
+          }
+          if (req.method === 'POST' && roomRoute[2]) {
+            const body = await readJson(req, 32 * 1024);
+            const out = relay.writeState(roomId, token, body?.rev, body?.state);
+            return sendJson(res, 200, secure(), out);
+          }
+          return res.writeHead(405, secure()).end('method not allowed');
+        } catch (err) {
+          return sendError(res, err, secure());
+        }
+      }
       if (url.pathname === '/healthz') {
         return res.writeHead(200, secure({ 'content-type': 'text/plain' })).end('ok');
       }
       if (url.pathname === '/challenge') {
-        const body = JSON.stringify(relay.issueChallenge());
+        const body = JSON.stringify(relay.issueChallenge(url.searchParams.get('mode')));
         return res.writeHead(200, secure({
           'content-type': 'application/json',
           'cache-control': 'no-store',
@@ -123,6 +218,7 @@ export async function startServer(options = {}) {
   const joined = (room, member) => ({
     t: 'joined',
     room: room.id,
+    mode: room.mode,
     token: member.token,
     you: member.id,
     name: member.name,
@@ -163,7 +259,7 @@ export async function startServer(options = {}) {
 
       try {
         if (msg.t === 'create') {
-          const { room, member } = relay.create(msg.proof, msg.name, msg.returnUrl, msg.maxPlayers);
+          const { room, member } = relay.create(msg.proof, msg.name, msg.returnUrl, msg.maxPlayers, msg.mode);
           me = { room, member };
           member.ws = ws;
           send(ws, joined(room, member));

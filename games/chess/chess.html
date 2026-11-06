@@ -1115,6 +1115,7 @@
       active: false, host: false, you: null, hostId: null, room: null,
       peers: [], players: null, meColor: null, pending: false, socket: null,
       token: null, name: null, lobbyUrl: null, retries: 0, reconnectTimer: null, closed: false,
+      postbox: false, rev: 0, syncing: false, pollTimer: null, synced: false,
     };
     const START_VIEW = newChess();
 
@@ -1233,6 +1234,11 @@
     function statusLine(g) {
       if (animating) return 'A spell is in flight…';
       if (MP.active && !game) {
+        if (MP.postbox) {
+          return MP.host
+            ? 'Waiting for a second player — share the room link.'
+            : 'Waiting for the host to open the game…';
+        }
         return MP.host
           ? 'No opponent yet — return to the lobby and start with two players.'
           : 'Waiting for the host to conjure the board…';
@@ -1502,7 +1508,14 @@
       if (!MP.active || !MP.room || !game || !MP.players) return;
       try {
         localStorage.setItem(`${KEY}-mp`,
-          JSON.stringify({ room: MP.room, state: game, players: MP.players }));
+          JSON.stringify({
+            room: MP.room,
+            token: MP.token,
+            rev: MP.rev,
+            mode: MP.postbox ? 'postbox' : 'live',
+            state: game,
+            players: MP.players,
+          }));
       } catch { /* storage may be unavailable */ }
     }
 
@@ -1514,6 +1527,9 @@
         return {
           state: cloneState(saved.state),
           players: saved.players.map(p => ({ ...p })),
+          token: typeof saved.token === 'string' ? saved.token : null,
+          rev: Number.isInteger(saved.rev) ? saved.rev : 0,
+          mode: saved.mode === 'postbox' ? 'postbox' : 'live',
         };
       } catch {
         return null;
@@ -1574,7 +1590,14 @@
 
     function commitMove(move) {
       if (!game || game.status !== 'playing') return;
-      if (MP.active && !MP.host) {
+      if (MP.active && MP.postbox) {
+        if (!MP.meColor || MP.meColor !== game.turn || MP.pending) return;
+        if (!MP.players || MP.peers.length < 2) {
+          say('Waiting for an opponent…');
+          return;
+        }
+      }
+      if (MP.active && !MP.postbox && !MP.host) {
         if (!MP.meColor || MP.meColor !== game.turn || MP.pending) return;
         if (!MP.hostId) {
           say('Host not found.');
@@ -1612,6 +1635,10 @@
       if (MP.active) {
         if (!MP.meColor) {
           say('Waiting for the host to conjure the board…');
+          return;
+        }
+        if (MP.postbox && (!MP.players || MP.peers.length < 2)) {
+          say('Waiting for an opponent…');
           return;
         }
         if (MP.pending) {
@@ -1672,7 +1699,7 @@
       if (MP.active && !MP.meColor) return;
       if (!confirm('Resign this duel?')) return;
       const loser = MP.active ? MP.meColor : game.turn;
-      if (MP.active && !MP.host) {
+      if (MP.active && !MP.postbox && !MP.host) {
         if (!MP.hostId) {
           say('Host not found.');
           return;
@@ -2129,7 +2156,13 @@
     function lobbyParams(search, hash) {
       const room = new URLSearchParams(search).get('room');
       const params = new URLSearchParams(String(hash).replace(/^#/, ''));
-      return { room, token: params.get('token'), name: params.get('name'), lobby: params.get('lobby') };
+      return {
+        room,
+        token: params.get('token'),
+        name: params.get('name'),
+        lobby: params.get('lobby'),
+        mode: params.get('mode'),
+      };
     }
 
     function defaultLobbyWs() {
@@ -2169,8 +2202,149 @@
     }
 
     function broadcastState() {
-      if (!MP.host || !game) return;
+      if (!game) return;
+      if (MP.postbox) return postState(game);
+      if (!MP.host) return;
       sendLobby({ v: 1, type: 'state', state: game, players: MP.players });
+    }
+
+    function postboxUrl(room) {
+      return new URL(`rooms/${encodeURIComponent(room)}`, lobbyBase()).href;
+    }
+
+    function playersFromPeers(peers) {
+      const hostPeer = peers.find(p => p.host);
+      const guest = peers.find(p => !p.host);
+      if (!hostPeer || !guest) return null;
+      return [
+        { id: hostPeer.id, name: hostPeer.name, color: 'w' },
+        { id: guest.id, name: guest.name, color: 'b' },
+      ];
+    }
+
+    function handlePostboxError(code) {
+      $('lobbyState').textContent = `Lobby error: ${code}`;
+      if (['no-room', 'forbidden', 'live-room', 'closed', 'removed'].includes(code)) {
+        MP.closed = true;
+        stopPostboxPoll();
+        lobbyOverlay(`Lobby: ${code}`);
+      }
+    }
+
+    function applyPostboxSnapshot(snap) {
+      if (!snap || typeof snap !== 'object') return;
+      MP.rev = Number.isInteger(snap.rev) ? snap.rev : MP.rev;
+      MP.host = !!snap.host;
+      MP.you = snap.you ?? MP.you;
+      MP.peers = Array.isArray(snap.peers) ? snap.peers : MP.peers;
+      MP.hostId = MP.peers.find(p => p.host)?.id ?? MP.hostId;
+      MP.players = playersFromPeers(MP.peers);
+      MP.meColor = MP.players?.find(p => p.id === MP.you)?.color ?? null;
+      $('lobbyBar').hidden = false;
+      $('lobbyState').textContent =
+        `Room ${String(MP.room).slice(0, 8)} · ${MP.host ? 'host' : 'player'} · long game`;
+      renderPeers();
+      if (snap.state) {
+        if (!validState(snap.state)) return;
+        acceptState(cloneState(snap.state));
+      } else if (!MP.pending) {
+        if (MP.host && snap.started && MP.players) {
+          if (!MP.synced || !game) {
+            attackToken++;
+            animating = false;
+            view = null;
+            dying = null;
+            pendingState = null;
+            resultDismissed = false;
+            game = newChess();
+            sel = -1;
+            targets = [];
+            promo = null;
+            $('fx').innerHTML = '';
+          }
+        } else {
+          game = null;
+        }
+        render();
+      }
+      MP.synced = true;
+      saveMp();
+    }
+
+    async function syncPostbox() {
+      if (!MP.active || !MP.postbox || MP.closed || MP.syncing || MP.pending) return;
+      if (!MP.token || typeof fetch !== 'function') return;
+      MP.syncing = true;
+      try {
+        const res = await fetch(postboxUrl(MP.room), {
+          headers: { authorization: `Bearer ${MP.token}` },
+          cache: 'no-store',
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) return handlePostboxError(body.code ?? String(res.status));
+        applyPostboxSnapshot(body);
+      } catch {
+        $('lobbyState').textContent = 'Lobby unavailable.';
+      } finally {
+        MP.syncing = false;
+      }
+    }
+
+    async function postState(state) {
+      if (!MP.active || !MP.postbox || !MP.token) return;
+      MP.pending = true;
+      render();
+      try {
+        const res = await fetch(`${postboxUrl(MP.room)}/state`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${MP.token}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ rev: MP.rev, state }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          MP.pending = false;
+          await syncPostbox();
+          say('The board moved on — reloaded the latest position.');
+          return;
+        }
+        if (!res.ok) {
+          MP.pending = false;
+          handlePostboxError(body.code ?? String(res.status));
+          render();
+          return;
+        }
+        MP.rev = body.rev ?? MP.rev + 1;
+        MP.pending = false;
+        saveMp();
+        render();
+      } catch {
+        MP.pending = false;
+        say('Could not send the move — it is saved locally.');
+        saveMp();
+        render();
+      }
+    }
+
+    function startPostboxPoll() {
+      if (typeof setInterval !== 'function') return;
+      clearInterval(MP.pollTimer);
+      MP.pollTimer = setInterval(() => {
+        if (!document.hidden) syncPostbox();
+      }, 20000);
+      if (typeof addEventListener === 'function') addEventListener('focus', syncPostbox);
+      if (typeof document.addEventListener === 'function') {
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) syncPostbox();
+        });
+      }
+    }
+
+    function stopPostboxPoll() {
+      if (typeof clearInterval === 'function') clearInterval(MP.pollTimer);
+      MP.pollTimer = null;
     }
 
     function hostStart() {
@@ -2378,16 +2552,21 @@
       });
     }
 
-    function connectLobby(room, token, name, url) {
+    function connectLobby(room, token, name, url, mode) {
+      const saved = loadMp(room);
       MP.active = true;
       MP.room = room;
-      MP.token = token;
+      MP.postbox = mode === 'postbox' || (!mode && saved?.mode === 'postbox');
+      MP.token = token || saved?.token || null;
       MP.name = name;
       MP.lobbyUrl = url;
+      MP.rev = saved?.rev ?? 0;
       MP.closed = false;
       MP.retries = 0;
+      MP.syncing = false;
+      MP.synced = false;
       stopLobbyReconnect();
-      const saved = loadMp(room);
+      stopPostboxPoll();
       game = saved ? saved.state : null;
       MP.players = saved ? saved.players : null;
       MP.meColor = null;
@@ -2407,9 +2586,19 @@
       $('crack').style.transform = '';
       $('fx').innerHTML = '';
       $('lobbyBar').hidden = false;
-      $('lobbyState').textContent = 'Connecting to the lobby…';
+      $('lobbyState').textContent = MP.postbox ? 'Loading long game…' : 'Connecting to the lobby…';
       render();
-      openLobbySocket();
+      if (MP.postbox) {
+        if (!MP.token) {
+          MP.closed = true;
+          lobbyOverlay('Missing room token.');
+          return;
+        }
+        syncPostbox();
+        startPostboxPoll();
+      } else {
+        openLobbySocket();
+      }
     }
 
     $('board').addEventListener('click', event => {
@@ -2454,7 +2643,9 @@
       game = validState(saved) ? cloneState(saved) : newChess();
       const link = lobbyParams(location.search, location.hash);
       if (link.room) {
-        connectLobby(link.room, link.token, link.name, safeLobby(link.lobby) || defaultLobbyWs());
+        const saved = loadMp(link.room);
+        connectLobby(link.room, link.token || saved?.token, link.name,
+          safeLobby(link.lobby) || defaultLobbyWs(), link.mode || saved?.mode);
       } else {
         render();
       }
