@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>NoCell</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: ui-rounded, "Avenir Next", system-ui, sans-serif; color: #e9f0e2;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    min-height: 100vh; padding: .7rem .5rem 1rem;
+    user-select: none; -webkit-user-select: none;
+    background:
+      radial-gradient(120% 85% at 50% -10%, rgba(255, 255, 255, .07), transparent 55%),
+      radial-gradient(95% 70% at 50% 112%, rgba(0, 0, 0, .5), transparent 60%),
+      repeating-linear-gradient(31deg, rgba(255, 255, 255, .022) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(-29deg, rgba(0, 0, 0, .035) 0 1px, transparent 1px 4px),
+      radial-gradient(ellipse at 50% 38%, #1b6445, #0e422b 58%, #072a1b 100%);
+    background-attachment: fixed;
+  }
+  #app {
+    width: fit-content; max-width: 100%; display: flex; flex-direction: column;
+    align-items: center; gap: .5rem;
+  }
+  header { width: 100%; display: flex; align-items: center; gap: .45rem; }
+  h1 {
+    display: flex; align-items: center; gap: .42rem; margin: 0 auto 0 0; white-space: nowrap;
+    font-family: Georgia, "Times New Roman", serif; font-weight: 600;
+    font-size: clamp(1rem, 3.2vw, 1.45rem); letter-spacing: .1em; color: #f4e4bd;
+    text-shadow: 0 1px 0 #0009, 0 0 18px rgba(243, 196, 107, .18);
+  }
+  h1 a { display: flex; align-items: center; gap: .42rem; color: inherit; font-size: inherit; text-decoration: none; }
+  .logo {
+    width: 1.3rem; aspect-ratio: 5 / 7; overflow: hidden; border-radius: 2px;
+    box-shadow: 0 1px 4px #000a, 0 0 0 1px #c7a04a55;
+  }
+  .logo img { display: block; width: 100%; height: 100%; }
+  .stat {
+    padding: .1rem .4rem; text-align: center; line-height: 1.15;
+    font-size: .5rem; letter-spacing: .14em; color: #9fc0a1;
+  }
+  .stat b { display: block; font-size: .88rem; letter-spacing: 0; color: #f4e4bd; }
+  .tool {
+    font: inherit; font-size: .63rem; letter-spacing: .06em; padding: .38rem .55rem;
+    border: 1px solid rgba(243, 196, 107, .26); border-radius: 6px; cursor: pointer;
+    background: rgba(4, 30, 19, .55); color: #ecd9ae;
+  }
+  .tool:hover { background: rgba(243, 196, 107, .12); }
+  .tool:active { transform: translateY(1px); }
+  .tool:disabled { opacity: .35; cursor: default; }
+  .tool:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+  .tool, .panel button { display: inline-flex; align-items: center; justify-content: center; gap: .32em; }
+
+  #table {
+    --cw: 72px; --ch: 101px; --gap: 4px; --slow: 1;
+    position: relative; isolation: isolate; display: flex; flex-direction: column; gap: calc(var(--gap) * 1.6);
+    touch-action: manipulation;
+  }
+  body.slow #table { --slow: 10; }
+  #table.dealing { pointer-events: none; }
+  #top { display: flex; justify-content: center; gap: var(--gap); }
+  .group { display: flex; gap: var(--gap); }
+
+  /* Wooden trays for the foundations. */
+  .slot {
+    position: relative; width: var(--cw); height: var(--ch); padding: calc(var(--cw) * .045);
+    border-radius: calc(var(--cw) * .09);
+    background:
+      linear-gradient(90deg, rgba(255, 242, 207, .17), transparent 14% 86%, rgba(40, 20, 4, .3)),
+      linear-gradient(180deg, #ad7b42 0%, #7d5027 17%, #bd8a4f 38%, #704620 62%, #a06e3a 83%, #593718 100%);
+    box-shadow:
+      0 3px 0 #38220f, 0 5px 10px rgba(0, 0, 0, .48),
+      inset 0 0 0 1px rgba(255, 226, 170, .28), inset 0 1px 0 rgba(255, 246, 220, .35);
+    transition: box-shadow .15s;
+  }
+  .slot.valid {
+    box-shadow:
+      0 0 0 2px #f3c46b, 0 0 18px rgba(243, 196, 107, .5),
+      0 3px 0 #38220f, 0 5px 10px rgba(0, 0, 0, .48);
+  }
+  .hole {
+    width: 100%; height: 100%; border-radius: calc(var(--cw) * .055);
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 38%, #0b3523, #062417 72%);
+    box-shadow: inset 0 3px 8px #000c, inset 0 0 0 1px #000a;
+    color: rgba(228, 197, 122, .2); font-size: calc(var(--cw) * .38); line-height: 1;
+  }
+  .slot .card { position: absolute; inset: calc(var(--cw) * .045); width: auto; height: auto; }
+  .slot .card.under { pointer-events: none; }
+
+  #board { display: grid; grid-template-columns: repeat(4, var(--cw)); gap: var(--gap); align-items: start; }
+  .column {
+    position: relative; min-height: var(--ch); border-radius: calc(var(--cw) * .09);
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .column > .hole {
+    height: var(--ch); border: 1px dashed rgba(232, 215, 170, .16);
+    background: rgba(0, 0, 0, .1); box-shadow: inset 0 2px 7px #0008;
+  }
+  .column.valid { outline: 2px solid rgba(243, 196, 107, .55); outline-offset: 2px; }
+  .column .card + .card { margin-top: calc(var(--ch) * -.64); }
+
+  .card {
+    position: relative; width: var(--cw); height: var(--ch); flex: 0 0 auto;
+    border-radius: calc(var(--cw) * .085); transform-style: preserve-3d;
+    transition: transform calc(.38s * var(--slow)) ease, outline-color .15s; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .card:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+  .face {
+    position: absolute; inset: 0; border-radius: inherit; overflow: hidden;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  }
+  .front {
+    background: linear-gradient(150deg, #fffef9, #f3ecd8); color: #1c1b18;
+    box-shadow:
+      inset 0 0 0 1px rgba(0, 0, 0, .16), inset 0 0 0 3px rgba(255, 255, 255, .55),
+      0 2px 4px rgba(0, 0, 0, .42);
+  }
+  .card.red .front { color: #a5231c; }
+  .back {
+    transform: rotateY(180deg);
+    background: #03170e url("card-back.svg") center / 100% 100% no-repeat;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .45);
+  }
+  .dealing .card { transform: rotateY(180deg); }
+  .revealing .card { transition-delay: calc(var(--d, 0) * 6ms * var(--slow)); }
+  .card.sel { transform: translateY(-7px); outline: 2px solid #f3c46b; outline-offset: 1px; }
+  .card.sel .front { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .16), 0 0 16px rgba(243, 196, 107, .55), 0 8px 16px rgba(0, 0, 0, .45); }
+
+  .corner {
+    position: absolute; display: flex; flex-direction: column; align-items: center;
+    line-height: 1; font-family: Georgia, "Times New Roman", serif; font-weight: 700;
+    font-size: calc(var(--cw) * .19);
+  }
+  .corner i { font-style: normal; font-size: calc(var(--cw) * .135); margin-top: .04em; }
+  .corner.tl { top: 3.5%; left: 4.5%; }
+  .corner.br { bottom: 3.5%; right: 4.5%; transform: rotate(180deg); }
+
+  .pips { position: absolute; inset: 0; }
+  .pip {
+    position: absolute; transform: translate(-50%, -50%); line-height: 1;
+    font-size: calc(var(--cw) * .16);
+  }
+  .pips.ace .pip { font-size: calc(var(--cw) * .42); }
+  .court {
+    position: absolute; inset: 15% 17%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: .04em; border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, .16);
+  }
+  .court b { font-family: Georgia, "Times New Roman", serif; font-size: calc(var(--cw) * .46); line-height: 1; font-weight: 600; }
+  .court i { font-style: normal; font-size: calc(var(--cw) * .22); line-height: 1; }
+
+  #hint {
+    width: 100%; min-height: 1.4em; margin: 0; text-align: center;
+    font-size: .68rem; line-height: 1.35; color: #b9d4b7;
+  }
+
+  /* ?debug=true: which animation is running right now. */
+  #debug {
+    position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 30;
+    display: none; padding: .24rem .7rem .3rem; white-space: nowrap;
+    font: 700 .68rem/1 ui-monospace, "SFMono-Regular", Consolas, monospace;
+    letter-spacing: .04em; color: #2b1e0a; background: #f3c46b;
+    border-radius: 0 0 7px 7px; box-shadow: 0 2px 10px #0008;
+  }
+  #debug.show { display: block; }
+  a { color: #f3c46b; font-size: .7rem; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
+
+  #overlay {
+    position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center;
+    padding: 1.2rem; background: radial-gradient(circle at 50% 42%, rgba(10, 40, 26, .5), rgba(2, 11, 7, .9));
+    backdrop-filter: blur(4px);
+  }
+  #overlay.show { display: flex; }
+  .panel {
+    width: min(88vw, 22rem); padding: 1.5rem 1.3rem 1.3rem; text-align: center;
+    border: 1px solid rgba(243, 196, 107, .4); border-radius: 14px;
+    background: linear-gradient(180deg, #0d3826, #062015);
+    box-shadow: 0 24px 70px #000c, inset 0 1px 0 rgba(255, 245, 210, .12);
+  }
+  .panel .eyebrow { margin: 0; font-size: .54rem; letter-spacing: .24em; color: #9d8d71; text-transform: uppercase; }
+  .panel h2 {
+    margin: .35rem 0 .4rem; font-family: Georgia, "Times New Roman", serif;
+    font-weight: 500; font-size: 1.8rem; color: #ffe6b0;
+  }
+  .panel p { margin: 0 0 1.1rem; font-size: .82rem; color: #c5d6c0; }
+  .panel button {
+    font: inherit; font-size: .8rem; font-weight: 700; letter-spacing: .04em;
+    padding: .6rem 1.1rem; border: 0; border-radius: 8px; cursor: pointer;
+    color: #2d2111; background: linear-gradient(180deg, #f8d995, #d9ab55);
+    box-shadow: 0 2px 0 #8b6528, 0 6px 18px rgba(0, 0, 0, .4);
+  }
+  .panel button:active { transform: translateY(1px); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card, .dealing .card { transition: none; }
+  }
+  @media (max-width: 470px) {
+    h1 { letter-spacing: .06em; }
+    .tool { font-size: .58rem; padding: .34rem .44rem; }
+    #hint { font-size: .62rem; }
+  }
+</style>
+</head>
+<body>
+<div id="debug" role="status" aria-live="polite"></div>
+<div id="app">
+  <header>
+    <h1><a href="nocell.html"><span class="logo" aria-hidden="true"><img src="card-back.svg" alt=""></span>NoCell</a></h1>
+    <div class="stat">MOVES<b id="moves">0</b></div>
+    <div class="stat">SCORE<b id="score">0</b></div>
+    <button id="undo" class="tool" disabled><span aria-hidden="true">↺</span> Undo</button>
+    <button id="new" class="tool"><span aria-hidden="true">★</span> New game</button>
+  </header>
+
+  <div id="table">
+    <div id="top">
+      <div class="group" id="founds"></div>
+    </div>
+    <div id="board"></div>
+  </div>
+
+  <p id="hint" aria-live="polite">Tap a card to pick it up, then tap where it goes.</p>
+</div>
+
+<div id="overlay">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+    <p class="eyebrow">Both foundations</p>
+    <h2 id="winTitle">Solved!</h2>
+    <p>You finished the deal in <b id="winMoves">0</b> moves for <b id="winScore">0</b> points.</p>
+    <button id="again"><span aria-hidden="true">★</span> New game</button>
+  </div>
+</div>
+
+<script>
+const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const RANK_NAMES = ['Ace','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Jack','Queen','King'];
+const SUITS = ['♠','♥'];
+const SUIT_NAMES = ['spades','hearts'];
+const $ = id => document.getElementById(id);
+const isRed = s => s === 1;
+const KEY = 'nocell';
+
+// ?debug=true: every animation runs 10x slower and its name shows at the top of the page.
+const DEBUG = typeof location !== 'undefined' && location.search.includes('debug=true');
+const slow = ms => DEBUG ? ms * 10 : ms;
+const FLY_MS = 460;                       // pick up, carry across the table, put down
+const SHIFT_MS = 180;                     // columns closing up after it lands
+const STEP_MS = FLY_MS + SHIFT_MS + 40;   // one autoplay move, landing and closing included
+
+const running = new Map();
+function beginAnim(name) {
+  if (!DEBUG) return () => {};
+  running.set(name, (running.get(name) || 0) + 1);
+  $('debug').textContent = [...running.keys()].join(' · ');
+  let live = true;
+  return () => {
+    if (!live) return;
+    live = false;
+    const left = (running.get(name) || 1) - 1;
+    if (left) running.set(name, left);
+    else running.delete(name);
+    $('debug').textContent = [...running.keys()].join(' · ');
+  };
+}
+if (DEBUG) {
+  $('debug').classList.add('show');
+  document.body.classList.add('slow');
+}
+
+// Pip positions are percentages of the card, so the face scales with any card size.
+const PIPS = {
+  2: [[50,16],[50,84]],
+  3: [[50,16],[50,50],[50,84]],
+  4: [[28,16],[72,16],[28,84],[72,84]],
+  5: [[28,16],[72,16],[50,50],[28,84],[72,84]],
+  6: [[28,16],[72,16],[28,50],[72,50],[28,84],[72,84]],
+  7: [[28,16],[72,16],[50,33],[28,50],[72,50],[28,84],[72,84]],
+  8: [[28,16],[72,16],[50,33],[28,50],[72,50],[50,67],[28,84],[72,84]],
+  9: [[28,16],[72,16],[28,39],[72,39],[50,50],[28,61],[72,61],[28,84],[72,84]],
+  10: [[30,16],[70,16],[50,27],[30,39],[70,39],[30,61],[70,61],[50,73],[30,84],[70,84]],
+};
+
+let cols, found, sel, moves, score, streak, won, dealing, dealTimer, autoTimer;
+let undoStack = [];
+// Cards the player deliberately lifted off a foundation, so autoplay leaves them alone.
+let pinned = new Set();
+// Clones of cards currently in the air: data-focus -> { clone, anim, done }.
+const flights = new Map();
+let dealDone = () => {};
+
+const id = c => c.s * 13 + c.r;
+const cardName = c => RANKS[c.r - 1] + SUITS[c.s];
+
+const alternates = (top, card) => top.r === card.r + 1 && isRed(top.s) !== isRed(card.s);
+const runOk = run => run.every((c, i) => i === 0 || alternates(run[i - 1], c));
+const fitsCol = (col, card) => !col.length || alternates(col[col.length - 1], card);
+const solved = () => found.every(p => p.length === 13);
+
+// Build a deal backwards from the two finished foundations. One clean run is kept
+// aside and spread over the tableau at the end, so no card can go home on its own.
+// Every column move leaves a card behind that can take the run back, so replaying
+// the steps backwards always solves the deal.
+function generateDeal(rng = Math.random) {
+  const take = arr => arr[Math.floor(rng() * arr.length)];
+  const board = [[], [], [], []];
+  const done = [[], []];
+  for (let s = 0; s < 2; s++) for (let r = 1; r <= 13; r++) done[s].push({ s, r });
+  const ops = [];
+
+  // Column 0 holds a clean alternating run, one card per rank.
+  let suit = rng() < .5 ? 0 : 1;
+  const coverFrom = 7 + Math.floor(rng() * 5);
+  for (let r = 13; r >= coverFrom; r--) {
+    board[0].push(done[suit].pop());
+    ops.push({ type: 'found', s: suit, col: 0 });
+    const other = 1 - suit;
+    const col = 1 + Math.floor(rng() * 3);
+    board[col].push(done[other].pop());
+    ops.push({ type: 'found', s: other, col });
+    suit = other;
+  }
+
+  // Drop the rest of the deck into the three body columns.
+  while (done.some(p => p.length)) {
+    const suits = [0, 1].filter(s => done[s].length);
+    const s = take(suits);
+    const col = 1 + Math.floor(rng() * 3);
+    board[col].push(done[s].pop());
+    ops.push({ type: 'found', s, col });
+  }
+
+  // Shuffle the body with reversible run moves.
+  const safeStarts = col => {
+    const len = col.length;
+    let k = len - 1;
+    while (k > 0 && alternates(col[k - 1], col[k])) k--;
+    const starts = [];
+    for (let j = k === 0 ? 0 : k + 1; j < len; j++) starts.push(j);
+    return starts;
+  };
+  const mutations = 10 + Math.floor(rng() * 16);
+  for (let m = 0; m < mutations; m++) {
+    const froms = [1, 2, 3].filter(i => board[i].length);
+    if (!froms.length) break;
+    const from = take(froms);
+    const starts = safeStarts(board[from]);
+    if (!starts.length) continue;
+    const start = take(starts);
+    const run = board[from].slice(start);
+    const to = take([1, 2, 3].filter(i => i !== from));
+    board[from].splice(start);
+    board[to].push(...run);
+    ops.push({ type: 'move', from, to, n: run.length });
+  }
+
+  // Spread the clean run over the three body columns.
+  const targets = [1, 2, 3];
+  for (let i = targets.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [targets[i], targets[j]] = [targets[j], targets[i]];
+  }
+  let left = board[0].length;
+  for (let i = 0; i < targets.length; i++) {
+    const n = i === targets.length - 1
+      ? left
+      : 1 + Math.floor(rng() * (left - (targets.length - 1 - i)));
+    const run = board[0].splice(board[0].length - n);
+    board[targets[i]].push(...run);
+    ops.push({ type: 'move', from: 0, to: targets[i], n });
+    left -= n;
+  }
+
+  return { cols: board, ops };
+}
+
+function selectedRun() {
+  if (!sel) return [];
+  if (sel.kind === 'col') return cols[sel.i].slice(sel.j);
+  return found[sel.i].length ? [found[sel.i][found[sel.i].length - 1]] : [];
+}
+
+function canPlace(run, dest) {
+  if (!run.length) return false;
+  if (dest.kind === 'found') {
+    return run.length === 1 && run[0].s === dest.i && run[0].r === found[dest.i].length + 1;
+  }
+  if (dest.kind === 'col') return fitsCol(cols[dest.i], run[0]);
+  return false;
+}
+
+// Send one exposed card that fits its foundation home. Called again after a pause for the next.
+function autoStep() {
+  if (sel) return false; // never pull a card out from under the player's hand
+  const goes = c => !pinned.has(id(c)) && canPlace([c], { kind: 'found', i: c.s });
+  const j = cols.findIndex(col => col.length && goes(col[col.length - 1]));
+  if (j < 0) return null;
+
+  const c = cols[j].pop();
+  found[c.s].push(c);
+  score += 10 + 10 * streak;
+  streak++;
+  moves++;
+  return c;
+}
+
+const snapshot = () => JSON.stringify({ cols, found, moves, score, streak, pinned: [...pinned] });
+
+const isCard = c => c && Number.isInteger(c.r) && c.r >= 1 && c.r <= 13 &&
+  Number.isInteger(c.s) && c.s >= 0 && c.s <= 1;
+
+function isSaved(s) {
+  if (!s || !Array.isArray(s.cols) || s.cols.length !== 4 || !s.cols.every(Array.isArray)) return false;
+  if (!Array.isArray(s.found) || s.found.length !== 2 || !s.found.every(Array.isArray)) return false;
+  const cards = [...s.cols.flat(), ...s.found.flat()];
+  return cards.length === 26 && cards.every(isCard) &&
+    new Set(cards.map(c => c.s * 13 + c.r)).size === 26 &&
+    Number.isInteger(s.moves) && s.moves >= 0 &&
+    Number.isInteger(s.score) && s.score >= 0 &&
+    Number.isInteger(s.streak) && s.streak >= 0 &&
+    s.found.every((pile, suit) => pile.every((c, i) => c.s === suit && c.r === i + 1));
+}
+
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({
+      cols, found, moves, score, streak, won, undoStack, pinned: [...pinned],
+    }));
+  } catch { /* storage unavailable: keep playing in memory */ }
+}
+
+function load() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(KEY)); } catch { return false; }
+  if (!isSaved(saved)) return false;
+
+  cols = saved.cols;
+  found = saved.found;
+  moves = saved.moves;
+  score = saved.score;
+  streak = saved.streak;
+  won = solved();
+  undoStack = Array.isArray(saved.undoStack) ? saved.undoStack.filter(x => typeof x === 'string') : [];
+  pinned = new Set(Array.isArray(saved.pinned) ? saved.pinned.filter(Number.isInteger) : []);
+  sel = null;
+  dealing = false;
+  draw();
+  if (won) $('again').focus();
+  return true;
+}
+
+function isPos(pos, needJ = false) {
+  return !!pos && ['col', 'found'].includes(pos.kind) &&
+    Number.isInteger(pos.i) && pos.i >= 0 && pos.i < (pos.kind === 'col' ? 4 : 2) &&
+    (!needJ || pos.kind !== 'col' || (Number.isInteger(pos.j) && pos.j >= 0 && pos.j < 13));
+}
+
+function applyMove(from, to) {
+  if (!isPos(from, true) || !isPos(to)) return false;
+  sel = from;
+  const run = selectedRun();
+  if (!canPlace(run, to)) {
+    sel = null;
+    return false;
+  }
+  return place(to);
+}
+
+function place(dest) {
+  if (!sel || (sel.kind === dest.kind && sel.i === dest.i)) return false;
+  const run = selectedRun();
+  if (!canPlace(run, dest)) return false;
+
+  undoStack.push(snapshot());
+  if (undoStack.length > 300) undoStack.shift();
+  const lifted = run[0];
+  if (sel.kind === 'col') cols[sel.i].splice(sel.j);
+  else found[sel.i].pop();
+  if (sel.kind === 'found') pinned.add(id(lifted));
+
+  if (dest.kind === 'found') {
+    found[dest.i].push(run[0]);
+    score += 10 + 10 * streak;
+    streak++;
+  } else {
+    cols[dest.i].push(...run);
+    streak = 0;
+  }
+
+  moves++;
+  sel = null;
+  settle(run);
+  return true;
+}
+
+// Draw the board, then let autoplay send the next fitting card home after a beat.
+function settle(moved = []) {
+  won = solved();
+  draw(moved);
+  save();
+  if (won) {
+    $('again').focus();
+    return;
+  }
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(() => {
+    const c = autoStep();
+    if (c) settle([c]);
+  }, slow(STEP_MS));
+}
+
+function selectCard(kind, i, j = null) {
+  if (kind === 'col') {
+    const run = cols[i].slice(j);
+    if (!run.length || !runOk(run)) {
+      draw();
+      say('That card is buried under a mixed run.');
+      return;
+    }
+    sel = { kind, i, j };
+  } else {
+    if (!found[i].length) return;
+    sel = { kind, i };
+  }
+  draw();
+}
+
+function notice(msg) {
+  draw();
+  say(msg);
+}
+
+function say(text) {
+  const hint = $('hint');
+  if (hint.textContent !== text) hint.textContent = text;
+}
+
+function tapCard(el) {
+  const kind = el.dataset.kind, i = +el.dataset.i;
+  const j = el.dataset.j === undefined ? null : +el.dataset.j;
+  const same = sel && sel.kind === kind && sel.i === i && (kind !== 'col' || sel.j === j);
+  if (same) { sel = null; draw(); return; }
+
+  if (sel) {
+    if (kind === 'col') {
+      if (j === cols[i].length - 1 && applyMove(sel, { kind, i })) return;
+    } else if (applyMove(sel, { kind, i })) return;
+  }
+  selectCard(kind, i, j);
+}
+
+function tapSlot(el) {
+  const kind = el.dataset.slot, i = +el.dataset.i;
+  if (sel) {
+    if (!applyMove(sel, { kind, i })) notice("That card doesn't fit there.");
+    return;
+  }
+  if (kind === 'found' && found[i].length) selectCard('found', i);
+}
+
+function tapColumn(i) {
+  if (sel && !applyMove(sel, { kind: 'col', i })) notice("That card doesn't fit there.");
+}
+
+function activate(el) {
+  if (dealing || won) return;
+  if (el.classList.contains('card')) return tapCard(el);
+  if (el.classList.contains('slot')) return tapSlot(el);
+  if (el.classList.contains('column')) return tapColumn(+el.dataset.col);
+}
+
+function isSelected(kind, i, j) {
+  if (!sel || sel.kind !== kind || sel.i !== i) return false;
+  return kind !== 'col' || j >= sel.j;
+}
+
+function faceHTML(c) {
+  const sym = SUITS[c.s], rank = RANKS[c.r - 1];
+  const corner = at => `<span class="corner ${at}"><b>${rank}</b><i>${sym}</i></span>`;
+  let middle;
+  if (c.r === 1) {
+    middle = `<div class="pips ace"><span class="pip" style="left:50%;top:50%">${sym}</span></div>`;
+  } else if (c.r <= 10) {
+    middle = `<div class="pips">${PIPS[c.r].map(([x, y]) =>
+      `<span class="pip" style="left:${x}%;top:${y}%">${sym}</span>`).join('')}</div>`;
+  } else {
+    middle = `<div class="court"><b>${rank}</b><i>${sym}</i></div>`;
+  }
+  return corner('tl') + middle + corner('br');
+}
+
+function cardHTML(c, kind, i, j, under = false) {
+  const pos = j == null ? '' : ` data-j="${j}" style="z-index:${j};--d:${j * 8 + i}"`;
+  const selClass = isSelected(kind, i, j) ? ' sel' : '';
+  // "under" is the card beneath a flying card in a one-card slot: drawn, but not tappable.
+  const attrs = under
+    ? ' aria-hidden="true"'
+    : ` role="button" tabindex="0" data-focus="c${id(c)}"`;
+  return `<div class="card${isRed(c.s) ? ' red' : ''}${selClass}${under ? ' under' : ''}"
+    ${attrs} data-kind="${kind}" data-i="${i}"${pos}
+    aria-label="${RANK_NAMES[c.r - 1]} of ${SUIT_NAMES[c.s]}">
+    <div class="face front">${faceHTML(c)}</div>
+    <div class="face back" aria-hidden="true"></div>
+  </div>`;
+}
+
+const cardRects = () => new Map([...$('table').querySelectorAll('.card:not(.flying)')]
+  .filter(el => el.dataset.focus) // the card drawn under a foundation top is scenery, not a mover
+  .map(el => [el.dataset.focus, el.getBoundingClientRect()]));
+
+const calm = () => !DEBUG && typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// A soft card flip, synthesised so the game stays a single file with no assets.
+let actx;
+function moveSound() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    actx = actx || new Ctx();
+    if (actx.state === 'suspended') actx.resume();
+    const t = actx.currentTime, dur = .09, len = Math.floor(actx.sampleRate * dur);
+    const buf = actx.createBuffer(1, len, actx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const fade = 1 - i / len;
+      data[i] = (Math.random() * 2 - 1) * fade * fade; // noise with a smooth tail
+    }
+    const src = actx.createBufferSource();
+    src.buffer = buf;
+    const lp = actx.createBiquadFilter();
+    lp.type = 'lowpass'; // no piercing highs: this is paper, not a shot
+    lp.frequency.value = 1100;
+    lp.Q.value = .6;
+    const gain = actx.createGain();
+    gain.gain.setValueAtTime(.0001, t);
+    gain.gain.exponentialRampToValueAtTime(.1, t + .012); // soft attack, no click
+    gain.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    src.connect(lp).connect(gain).connect(actx.destination);
+    src.start(t);
+  } catch { /* no audio support: stay silent */ }
+}
+
+function land(key) {
+  const f = flights.get(key);
+  if (!f) return;
+  flights.delete(key);
+  f.done();
+  f.clone.remove();
+  const live = $('table').querySelector(`.card:not(.flying)[data-focus="${key}"]`);
+  if (live) live.style.visibility = '';
+}
+
+function landAll() {
+  for (const key of [...flights.keys()]) land(key);
+}
+
+// A clone on top of the table does the flying, so it crosses over every other card.
+function takeOff(el, from, to, name) {
+  const key = el.dataset.focus;
+  const dx = from.left - to.left, dy = from.top - to.top;
+  const lift = Math.min(60, Math.hypot(dx, dy) / 3);
+  const clone = el.cloneNode(true);
+  clone.classList.add('flying');
+  clone.setAttribute('aria-hidden', 'true');
+  clone.tabIndex = -1;
+  clone.style.cssText = `position:fixed;left:${to.left}px;top:${to.top}px;` +
+    `width:${to.width}px;height:${to.height}px;z-index:1000;pointer-events:none;margin:0;`;
+  $('table').appendChild(clone);
+
+  const p = 'perspective(900px)';
+  // Pick the card up (turn it over), carry it face down, then turn it face up again.
+  const anim = clone.animate([
+    { transform: `${p} translate(${dx}px, ${dy}px) rotateY(0deg)`, offset: 0 },
+    { transform: `${p} translate(${dx}px, ${dy - 16}px) rotateY(180deg)`, offset: .2 },
+    { transform: `${p} translate(${dx / 2}px, ${dy / 2 - lift}px) rotateY(180deg)`, offset: .5 },
+    { transform: `${p} translate(0px, 0px) rotateY(180deg)`, offset: .84 },
+    { transform: `${p} translate(0px, 0px) rotateY(360deg)`, offset: 1 },
+  ], { duration: slow(FLY_MS), easing: 'ease-in-out', fill: 'backwards' });
+
+  flights.set(key, { clone, anim, done: beginAnim(`fly ${name}`) });
+  el.style.visibility = 'hidden';
+  anim.onfinish = () => land(key);
+}
+
+// FLIP: every card is at its new spot. Lifted cards fly; the rest wait for them to land.
+function slide(before, moved = []) {
+  if (!before || !before.size) return;
+  const still = calm();
+  const lifted = new Map(moved.map(c => [`c${id(c)}`, cardName(c)]));
+  const shoved = [];
+  let flew = false, sound = false;
+
+  for (const el of $('table').querySelectorAll('.card:not(.flying)')) {
+    const from = before.get(el.dataset.focus);
+    if (!from || !el.animate || el.classList.contains('sel')) continue;
+    const to = el.getBoundingClientRect();
+    const dx = from.left - to.left, dy = from.top - to.top;
+    if (!dx && !dy) continue;
+
+    const name = lifted.get(el.dataset.focus);
+    if (still) {
+      if (name) sound = true;
+      el.animate([{ opacity: .35 }, { opacity: 1 }], { duration: slow(200), easing: 'ease' });
+      continue;
+    }
+    if (name && !flights.has(el.dataset.focus)) {
+      takeOff(el, from, to, name);
+      flew = sound = true;
+    } else {
+      shoved.push([el, dx, dy]);
+    }
+  }
+
+  for (const [el, dx, dy] of shoved) {
+    const wait = flew ? slow(FLY_MS) : 0; // hold the board still until the card lands
+    const anim = el.animate([
+      { transform: `translate(${dx}px, ${dy}px)` },
+      { transform: 'none' },
+    ], { duration: slow(SHIFT_MS), delay: wait, easing: 'ease', fill: 'backwards' });
+    let done = () => {};
+    if (DEBUG) {
+      setTimeout(() => { done = beginAnim('shift'); }, wait);
+      setTimeout(() => done(), wait + slow(SHIFT_MS) + 40); // backstop: the badge always clears
+    }
+    anim.onfinish = () => done();
+  }
+
+  if (sound) moveSound(); // one sound per move, even when a whole run takes off
+}
+
+function hideFlying() {
+  if (!flights.size) return;
+  for (const el of $('table').querySelectorAll('.card:not(.flying)'))
+    if (flights.has(el.dataset.focus)) el.style.visibility = 'hidden';
+}
+
+function draw(moved = []) {
+  const active = document.activeElement && document.activeElement.dataset
+    ? document.activeElement.dataset.focus
+    : null;
+  const before = dealing ? null : cardRects();
+  const held = sel ? selectedRun() : [];
+  const valid = (kind, i) => !!sel && canPlace(held, { kind, i });
+
+  let founds = '';
+  for (let i = 0; i < 2; i++) {
+    const pile = found[i], c = pile[pile.length - 1], below = pile[pile.length - 2];
+    const on = c ? '' : ` role="button" tabindex="0" data-focus="o${i}"`;
+    founds += `<div class="slot${valid('found', i) ? ' valid' : ''}" data-slot="found" data-i="${i}"
+      aria-label="${SUIT_NAMES[i]} foundation"${on}>
+      <div class="hole" aria-hidden="true">${SUITS[i]}</div>${
+        below ? cardHTML(below, 'found', i, null, true) : ''}${c ? cardHTML(c, 'found', i) : ''}
+    </div>`;
+  }
+
+  let board = '';
+  for (let i = 0; i < 4; i++) {
+    const col = cols[i];
+    const on = col.length ? '' : ` role="button" tabindex="0" data-focus="col${i}"`;
+    board += `<div class="column${valid('col', i) ? ' valid' : ''}" data-col="${i}"
+      aria-label="Column ${i + 1}"${on}>
+      ${col.length ? col.map((c, j) => cardHTML(c, 'col', i, j)).join('') : '<div class="hole" aria-hidden="true"></div>'}
+    </div>`;
+  }
+
+  $('founds').innerHTML = founds;
+  $('board').innerHTML = board;
+  hideFlying();
+  slide(before, moved);
+  $('moves').textContent = moves;
+  $('score').textContent = score;
+  $('undo').disabled = !undoStack.length;
+  $('overlay').classList.toggle('show', won);
+  $('winMoves').textContent = moves;
+  $('winScore').textContent = score;
+
+  if (held.length) {
+    say(`In hand: ${held.map(cardName).join(' ')}` +
+      (held.length > 1 ? ` (${held.length} cards)` : '') + '. Tap a destination.');
+  } else {
+    say(won ? `Solved in ${moves} moves for ${score} points.` : 'Tap a card to pick it up, then tap where it goes.');
+  }
+
+  if (active) {
+    const el = $('table').querySelector(`[data-focus="${active}"]`);
+    if (el) el.focus({ preventScroll: true });
+  }
+}
+
+function animateDeal() {
+  const t = $('table');
+  t.classList.remove('revealing');
+  t.classList.add('dealing');
+  const frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : f => setTimeout(f, 0);
+  frame(() => frame(() => {
+    t.classList.add('revealing');
+    t.classList.remove('dealing');
+  }));
+  clearTimeout(dealTimer);
+  dealDone();
+  dealDone = beginAnim('deal');
+  dealTimer = setTimeout(() => {
+    dealing = false;
+    t.classList.remove('revealing');
+    t.classList.remove('dealing');
+    dealDone();
+  }, slow(900));
+}
+
+function newGame() {
+  clearTimeout(autoTimer);
+  landAll();
+  cols = generateDeal().cols;
+  found = [[], []];
+  sel = null;
+  moves = 0;
+  score = 0;
+  streak = 0;
+  won = false;
+  undoStack = [];
+  pinned = new Set();
+  dealing = true;
+  const fromWin = document.activeElement === $('again');
+  draw();
+  save();
+  if (fromWin) $('new').focus();
+  animateDeal();
+}
+
+function undo() {
+  clearTimeout(autoTimer);
+  landAll();
+  const saved = undoStack[undoStack.length - 1];
+  if (!saved) return;
+  let state;
+  try { state = JSON.parse(saved); } catch { return; }
+  if (!isSaved(state)) return;
+  undoStack.pop();
+  ({ cols, found, moves, score, streak } = state);
+  if (Array.isArray(state.pinned)) pinned = new Set(state.pinned);
+  sel = null;
+  won = solved();
+  draw();
+  save();
+}
+
+function fit() {
+  const gap = Math.max(2, Math.min(8, innerWidth * .007));
+  const wide = Math.min(innerWidth - 16, 760);
+  const tall = Math.max(300, innerHeight - 130);
+  const cw = Math.max(30, Math.min((wide - gap * 3) / 4, tall / 6.1, 150));
+  const t = $('table');
+  t.style.setProperty('--gap', gap.toFixed(2) + 'px');
+  t.style.setProperty('--cw', cw.toFixed(2) + 'px');
+  t.style.setProperty('--ch', (cw * 1.4).toFixed(2) + 'px');
+}
+
+$('table').addEventListener('click', e => {
+  const el = e.target.closest('.card, .slot, .column');
+  if (el) activate(el);
+});
+$('table').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target.closest('.card, .slot, .column');
+  if (!el) return;
+  e.preventDefault();
+  activate(el);
+});
+$('new').addEventListener('click', newGame);
+$('again').addEventListener('click', newGame);
+$('undo').addEventListener('click', undo);
+addEventListener('resize', fit);
+
+fit();
+if (!load()) newGame();
+</script>
+</body>
+</html>
