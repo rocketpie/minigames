@@ -45,8 +45,9 @@ const setup = ({ cols = [], free = [null, null, null, null], found = empty() }) 
     free = ${JSON.stringify(free)};
     found = ${JSON.stringify(found)};
     sel = null; moves = 0; won = false; undoStack = []; dealing = false; pinned = new Set();
-    MP.active = false; MP.host = false; MP.players = null; MP.turn = 0; MP.pending = false;
-    MP.socket = null; MP.hostId = null; MP.you = null;
+    MP.active = false; MP.host = false; MP.players = null; MP.pending = false;
+    MP.socket = null; MP.hostId = null; MP.you = null; MP.postbox = false;
+    MP.dealId = null; MP.deal = null; MP.others = {}; MP.queued = false;
     draw();
   `);
 };
@@ -167,7 +168,7 @@ test('tapping the held card again puts it back down', () => {
   assert.equal(run('sel'), null);
 });
 
-test('undo puts the card back and restores the move count', () => {
+test('undo puts the card back and costs one extra move', () => {
   const all = deck();
   const rest = all.filter(x => !(x.r === 1 && x.s === 0));
   const cols = Array.from({ length: 8 }, () => []);
@@ -179,7 +180,7 @@ test('undo puts the card back and restores the move count', () => {
   assert.equal(run('found[0].length'), 1);
 
   run('undo()');
-  assert.equal(run('moves'), 0);
+  assert.equal(run('moves'), 2, 'the move plus the undo');
   assert.equal(run('found[0].length'), 0);
   assert.equal(run('free[0].r'), 1);
 });
@@ -224,7 +225,7 @@ test('undo history also survives a reload', () => {
   run('undo()');
   assert.equal(run('found[0].length'), 0);
   assert.equal(run('free[0].r'), 1);
-  assert.equal(run('moves'), 0);
+  assert.equal(run('moves'), 2);
 });
 
 test('a corrupt save is ignored', () => {
@@ -413,57 +414,65 @@ test('a moved card makes a sound, and the game stays silent without audio', () =
   assert.doesNotThrow(() => run('moveSound()'), 'no AudioContext, no crash');
 });
 
-test('multiplayer state round-trips with the turn and rejects a bad turn', () => {
+test('multiplayer state keeps the deal and each player\'s own board', () => {
   run('newGame()');
-  run('MP.active = true; MP.host = true; MP.you = "a"; MP.turn = 1;' +
-    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }]');
+  run('MP.active = true; MP.host = true; MP.you = "a";' +
+    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }];' +
+    'MP.dealId = "deal1"; MP.deal = JSON.parse(snapshot()); MP.others = { b: JSON.parse(snapshot()) }');
   const saved = run('JSON.stringify(mpState())');
-  assert.equal(JSON.parse(saved).turn, 1);
+  const state = JSON.parse(saved);
+  assert.equal(state.dealId, 'deal1');
+  assert.ok(state.boards.a && state.boards.b, 'both boards travel with the state');
+  assert.equal(state.boards.a.moves, 0);
+  assert.equal(run(`isMpState(${saved})`), true);
 
-  run('MP.turn = 0; cols = [[],[],[],[],[],[],[],[]]; free = [null,null,null,null]; found = [[],[],[],[]];');
-  assert.equal(run(`mpRestore(${saved})`), true);
-  assert.equal(run('MP.turn'), 1);
+  run('cols = [[],[],[],[],[],[],[],[]]; free = [null,null,null,null]; found = [[],[],[],[]];');
+  assert.equal(run(`mpRestore(${saved}, "a")`), true);
+  assert.equal(run('MP.dealId'), 'deal1');
   assert.equal(run('MP.players[0].name'), 'Alice');
   assert.equal(JSON.parse(run('JSON.stringify(cols.flat())')).length, 52);
+  assert.ok(run('Object.keys(MP.others).includes("b")'));
 
   const bad = JSON.parse(saved);
-  bad.turn = 9;
-  assert.equal(run(`mpRestore(${JSON.stringify(bad)})`), false, 'turn outside the table');
+  bad.boards.a.cols = [[]];
+  assert.equal(run(`mpRestore(${JSON.stringify(bad)}, "a")`), false, 'a broken board is rejected');
 });
 
-test('the host applies a move, then hands the turn on', () => {
+test('every player moves their own board without waiting for a turn', () => {
   setup({ cols: [[c(10, 0)], [c(9, 1)]] });
-  run('MP.active = true; MP.host = true; MP.you = "a"; MP.turn = 0;' +
-    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }]');
+  run('MP.active = true; MP.host = false; MP.you = "b"; MP.players = ' +
+    '[{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }];' +
+    'MP.dealId = "d1"; MP.deal = JSON.parse(snapshot())');
   assert.equal(run('submitMove({ kind: "col", i: 1, j: 0 }, { kind: "col", i: 0 })'), true);
-  assert.deepEqual(Array.from(run('cols[0].map(c => c.r)')), [10, 9]);
-  assert.equal(run('MP.turn'), 1);
+  assert.deepEqual(Array.from(run('cols[0].map(c => c.r)')), [10, 9], 'applied locally right away');
+  assert.equal(run('MP.pending'), false);
 });
 
-test('a guest sends its move to the host and waits for the new board', () => {
+test('a player broadcasts their own moved board', () => {
   setup({ cols: [[c(10, 0)], [c(9, 1)]] });
-  run('var sent = null; MP.active = true; MP.host = false; MP.you = "b"; MP.hostId = "a"; MP.turn = 1;' +
-    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }];' +
+  run('var sent = null; MP.active = true; MP.host = false; MP.you = "b"; MP.players = ' +
+    '[{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }];' +
+    'MP.dealId = "d1"; MP.deal = JSON.parse(snapshot());' +
     'MP.socket = { readyState: 1, send(s) { sent = s; } }');
   assert.equal(run('submitMove({ kind: "col", i: 1, j: 0 }, { kind: "col", i: 0 })'), true);
 
   const msg = JSON.parse(run('sent'));
   assert.equal(msg.t, 'msg');
-  assert.equal(msg.data.type, 'move');
-  assert.equal(msg.data.to, 'a');
-  assert.deepEqual(JSON.parse(JSON.stringify(msg.data.move)),
-    { from: { kind: 'col', i: 1, j: 0 }, to: { kind: 'col', i: 0 } });
-  assert.deepEqual(Array.from(run('cols[1].map(c => c.r)')), [9], 'the guest waits for the host');
-  assert.equal(run('MP.pending'), true);
+  assert.equal(msg.data.type, 'state');
+  assert.equal(msg.data.dealId, 'd1');
+  assert.deepEqual(Array.from(msg.data.board.cols[0].map(c => c.r)), [10, 9]);
+  assert.equal(msg.data.board.moves, 1);
+  assert.equal(run('MP.pending'), false);
 });
 
-test('postbox mode applies the move locally and posts the next state', async () => {
+test('postbox mode applies the move locally and posts both boards', async () => {
   setup({ cols: [[c(10, 0)], [c(9, 1)]] });
   run(`
     MP.active = true; MP.postbox = true; MP.host = true; MP.room = 'long'; MP.token = 't';
-    MP.rev = 0; MP.you = 'a'; MP.hostId = 'a'; MP.turn = 0; MP.pending = false;
+    MP.rev = 0; MP.you = 'a'; MP.hostId = 'a'; MP.pending = false;
     MP.peers = [{ id: 'a', name: 'Alice', host: true }, { id: 'b', name: 'Bob', host: false }];
     MP.players = playersFromPeers(MP.peers);
+    MP.dealId = 'd1'; MP.deal = JSON.parse(snapshot());
   `);
   let sent = null;
   ctx.location = {
@@ -477,11 +486,12 @@ test('postbox mode applies the move locally and posts the next state', async () 
   try {
     assert.equal(run('submitMove({ kind: "col", i: 1, j: 0 }, { kind: "col", i: 0 })'), true);
     assert.deepEqual(Array.from(run('cols[0].map(c => c.r)')), [10, 9]);
-    assert.equal(run('MP.turn'), 1);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(sent.body.rev, 0);
-    assert.equal(sent.body.state.turn, 1);
+    assert.equal(sent.body.state.dealId, 'd1');
     assert.equal(sent.body.state.players.length, 2);
+    assert.deepEqual(Array.from(sent.body.state.boards.a.cols[0].map(c => c.r)), [10, 9]);
+    assert.equal(sent.body.state.boards.a.moves, 1);
     assert.equal(run('MP.rev'), 1);
     assert.equal(run('MP.pending'), false);
   } finally {
@@ -500,4 +510,55 @@ test('sending every king home wins the game', () => {
   assert.equal(run('won'), true);
   assert.equal(run('moves'), 4);
   assert.equal(run('found.every(p => p.length === 13)'), true);
+});
+
+test('high scores keep the fewest moves, best first', () => {
+  store.delete('freecell-scores');
+  const twelve = s => Array.from({ length: 12 }, (_, i) => c(i + 1, s));
+  setup({ found: [twelve(0), twelve(1), twelve(2), twelve(3)], free: [c(13, 0), c(13, 1), c(13, 2), c(13, 3)] });
+
+  run('sel = {kind:"free", i:0}; place({kind:"found", i:0})');
+  assert.equal(run('moves'), 4, 'the solved game cost four moves');
+
+  run('moves = 9; recordScore(); moves = 2; recordScore()');
+  const list = JSON.parse(store.get('freecell-scores'));
+  assert.deepEqual(list.map(s => s.moves), [2, 4, 9]);
+
+  run('renderScores()');
+  assert.match(ctx.document.getElementById('scoreList').innerHTML, /2 moves/);
+});
+
+test('the other board is drawn separately above the local table', () => {
+  setup({ cols: [[c(10, 0)], [c(9, 1)]] });
+  run('MP.active = true; MP.you = "a"; MP.dealId = "d1";' +
+    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }];' +
+    'MP.others = { b: { cols: [[{r:1,s:0}]], free: [null,null,null,null],' +
+    'found: [[],[],[],[]], moves: 3, pinned: [] } }; draw()');
+
+  assert.equal(ctx.document.getElementById('rivalWrap').hidden, false);
+  assert.match(ctx.document.getElementById('rivalLabel').textContent, /Bob/);
+  assert.match(ctx.document.getElementById('rivalLabel').textContent, /3 moves/);
+  assert.match(ctx.document.getElementById('rival').innerHTML, /r-board/);
+  assert.equal(run('mpOpponent().name'), 'Bob');
+
+  run('won = true; moves = 5; MP.others.b.won = true; MP.others.b.moves = 2');
+  const result = run('winText()');
+  assert.match(result, /Bob wins/);
+  assert.match(result, /You: 5 moves/);
+  assert.match(result, /Bob: 2 moves/);
+});
+
+test('a live deal resets the local board but keeps the sender as the rival', () => {
+  run('newGame()');
+  const board = JSON.parse(run('JSON.stringify(JSON.parse(snapshot()))'));
+  const msg = { v: 2, type: 'state', dealId: 'fresh', deal: board, board };
+  run('MP.active = true; MP.you = "b"; MP.dealId = null; MP.deal = null;' +
+    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }]');
+  run(`handleGameMessage("a", ${JSON.stringify(msg)})`);
+
+  assert.equal(run('MP.dealId'), 'fresh');
+  assert.equal(run('moves'), 0, 'the local player starts from the deal');
+  assert.equal(JSON.parse(run('JSON.stringify(cols.flat())')).length, 52);
+  assert.equal(run('MP.others.a.moves'), 0, 'the sender board is shown as the rival');
+  assert.equal(run('mpOpponent().name'), 'Alice');
 });

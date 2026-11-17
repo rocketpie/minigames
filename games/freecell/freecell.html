@@ -61,8 +61,28 @@
     line-height: 1.35; color: #b9d4b7;
   }
   .lobby-bar b { color: #f4e4bd; font-weight: 600; }
-  #lobbyTurn { color: #f4e4bd; font-weight: 600; white-space: nowrap; }
+  #lobbyTurn { color: #f4e4bd; font-weight: 600; white-space: normal; }
   #lobbyPeers { text-align: right; color: #9fc0a1; margin-left: auto; }
+
+  #rivalWrap {
+    width: 100%; display: flex; flex-direction: column; align-items: center; gap: .2rem;
+  }
+  #rivalWrap[hidden] { display: none; }
+  #rivalLabel {
+    align-self: flex-end; font-size: .55rem; letter-spacing: .12em;
+    text-transform: uppercase; color: #9fc0a1;
+  }
+  #rival {
+    --cw: 40px; --ch: 56px; --gap: 3px;
+    display: flex; flex-direction: column; gap: calc(var(--gap) * 1.6);
+    transform: rotate(180deg); pointer-events: none; opacity: .85;
+  }
+  #rival .r-top { display: flex; justify-content: space-between; gap: var(--gap); }
+  #rival .r-board {
+    display: grid; grid-template-columns: repeat(8, var(--cw));
+    gap: var(--gap); align-items: start;
+  }
+  #rival .column { min-height: var(--ch); }
 
   .lobby-overlay {
     position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column;
@@ -203,12 +223,12 @@
   a:hover { text-decoration: underline; }
   a:focus-visible { outline: 2px solid #f3c46b; outline-offset: 2px; }
 
-  #overlay {
+  #overlay, #scoresOverlay {
     position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center;
     padding: 1.2rem; background: radial-gradient(circle at 50% 42%, rgba(10, 40, 26, .5), rgba(2, 11, 7, .9));
     backdrop-filter: blur(4px);
   }
-  #overlay.show { display: flex; }
+  #overlay.show, #scoresOverlay.show { display: flex; }
   .panel {
     width: min(88vw, 22rem); padding: 1.5rem 1.3rem 1.3rem; text-align: center;
     border: 1px solid rgba(243, 196, 107, .4); border-radius: 14px;
@@ -228,6 +248,18 @@
     box-shadow: 0 2px 0 #8b6528, 0 6px 18px rgba(0, 0, 0, .4);
   }
   .panel button:active { transform: translateY(1px); }
+  #scoreList {
+    list-style: none; max-height: 15rem; overflow: auto; margin: 0 0 1.1rem; padding: 0;
+    text-align: left; font-size: .78rem; color: #d7e4d2;
+  }
+  #scoreList li {
+    display: flex; justify-content: space-between; gap: 1rem;
+    padding: .28rem .1rem; border-bottom: 1px solid rgba(243, 196, 107, .12);
+  }
+  #scoreList b { color: #f4e4bd; }
+  #scoreList span { color: #9fc0a1; font-size: .7rem; }
+  #winCompare { min-height: 1.2em; }
+
 
   @media (prefers-reduced-motion: reduce) {
     .card, .dealing .card { transition: none; }
@@ -247,6 +279,7 @@
     <div class="stat">MOVES<b id="moves">0</b></div>
     <button id="multi" class="tool"><span aria-hidden="true">⚔</span> Multiplayer</button>
     <button id="undo" class="tool" disabled><span aria-hidden="true">↺</span> Undo</button>
+    <button id="scores" class="tool"><span aria-hidden="true">☰</span> Scores</button>
     <button id="new" class="tool"><span aria-hidden="true">★</span> New game</button>
   </header>
 
@@ -254,6 +287,11 @@
     <span id="lobbyState">Connecting…</span>
     <span id="lobbyTurn"></span>
     <span id="lobbyPeers"></span>
+  </div>
+
+  <div id="rivalWrap" hidden>
+    <div id="rivalLabel"></div>
+    <div id="rival"></div>
   </div>
 
   <div id="table">
@@ -277,8 +315,18 @@
   <div class="panel" role="dialog" aria-modal="true" aria-labelledby="winTitle">
     <p class="eyebrow">All four foundations</p>
     <h2 id="winTitle">Solved!</h2>
-    <p>You finished the deal in <b id="winMoves">0</b> moves.</p>
+    <p id="winSummary">You finished the deal in <b id="winMoves">0</b> moves.</p>
+    <p id="winCompare"></p>
     <button id="again"><span aria-hidden="true">★</span> New game</button>
+  </div>
+</div>
+
+<div id="scoresOverlay">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="scoresTitle">
+    <p class="eyebrow">Least moves</p>
+    <h2 id="scoresTitle">High scores</h2>
+    <ol id="scoreList"></ol>
+    <button id="scoresClose">Close</button>
   </div>
 </div>
 
@@ -290,8 +338,10 @@ const SUIT_NAMES = ['spades','hearts','diamonds','clubs'];
 const $ = id => document.getElementById(id);
 const isRed = s => s === 1 || s === 2;
 const KEY = 'freecell';
-const MAX_PLAYERS = 4;
-const DATA_VERSION = 1;
+const SCORE_KEY = 'freecell-scores';
+const MAX_SCORES = 10;
+const MAX_PLAYERS = 2;
+const DATA_VERSION = 2;
 const isLocal = () => location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const isProd = () => location.hostname === 'co3d.eu' || location.hostname === 'www.co3d.eu';
 const gameUrl = () => location.origin + location.pathname;
@@ -390,10 +440,11 @@ const flights = new Map();
 let dealDone = () => {};
 
 const MP = {
-  active: false, host: false, you: null, hostId: null, room: null, peers: [],
-  players: null, turn: 0, pending: false, timer: null, socket: null,
+  active: false, host: false, you: null, room: null, peers: [],
+  players: null, pending: false, queued: false, timer: null, socket: null,
   token: null, name: null, lobbyUrl: null, retries: 0, reconnectTimer: null, closed: false,
   postbox: false, rev: 0, syncing: false, pollTimer: null, synced: false,
+  dealId: null, deal: null, others: {},
 };
 
 const id = c => c.s * 13 + c.r;
@@ -449,6 +500,47 @@ function autoStep() {
 }
 
 const snapshot = () => JSON.stringify({ cols, free, found, moves, pinned: [...pinned] });
+const boardState = () => ({ cols, free, found, moves, pinned: [...pinned], won });
+
+const readScores = () => {
+  try {
+    const list = JSON.parse(localStorage.getItem(SCORE_KEY) || '[]');
+    return Array.isArray(list)
+      ? list.filter(s => s && Number.isInteger(s.moves) && s.moves >= 0 && Number.isFinite(s.at))
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+function recordScore() {
+  const list = readScores();
+  list.push({ moves, at: Date.now() });
+  list.sort((a, b) => a.moves - b.moves || a.at - b.at);
+  try { localStorage.setItem(SCORE_KEY, JSON.stringify(list.slice(0, MAX_SCORES))); } catch { /* storage unavailable */ }
+}
+
+function renderScores() {
+  const list = readScores();
+  $('scoreList').innerHTML = list.length
+    ? list.map((s, i) => `<li><b>${s.moves} moves</b><span>#${i + 1} · ${new Date(s.at).toLocaleDateString()}</span></li>`).join('')
+    : '<li><span>No solved games yet.</span></li>';
+}
+
+// Keep the win overlay honest as an opponent's async state arrives.
+function winText() {
+  if (!MP.active || !MP.dealId) return '';
+  const rival = mpOpponent();
+  const mine = `You: ${moves} moves`;
+  if (!rival) return `${mine}. Waiting for an opponent…`;
+  if (!rival.board) return `${mine}. Waiting for ${rival.name}…`;
+  const theirs = `${rival.name}: ${rival.board.moves} moves`;
+  if (!rival.board.won) return `${mine} · ${theirs}, still playing.`;
+  if (moves < rival.board.moves) return `${mine} · ${theirs}. You win.`;
+  if (moves > rival.board.moves) return `${mine} · ${theirs}. ${rival.name} wins.`;
+  return `${mine} · ${theirs}. A tie.`;
+}
+
 
 const isCard = c => c && Number.isInteger(c.r) && c.r >= 1 && c.r <= 13 &&
   Number.isInteger(c.s) && c.s >= 0 && c.s <= 3;
@@ -465,7 +557,7 @@ function isSaved(s) {
 }
 
 function save() {
-  if (MP.active) return; // multiplayer state lives with the host, never in the solo save
+  if (MP.active) return; // each multiplayer player owns their board, never the solo save
   try {
     localStorage.setItem(KEY, JSON.stringify({ cols, free, found, moves, won, undoStack, pinned: [...pinned] }));
   } catch { /* storage unavailable: keep playing in memory */ }
@@ -477,6 +569,7 @@ function saveMp() {
     localStorage.setItem(`${KEY}-mp`, JSON.stringify({
       room: MP.room,
       token: MP.token,
+      you: MP.you,
       rev: MP.rev,
       mode: MP.postbox ? 'postbox' : 'live',
       state: mpState(),
@@ -491,6 +584,7 @@ function loadMp(room) {
     return {
       state: saved.state,
       token: typeof saved.token === 'string' ? saved.token : null,
+      you: typeof saved.you === 'string' ? saved.you : null,
       rev: Number.isInteger(saved.rev) ? saved.rev : 0,
       mode: saved.mode === 'postbox' ? 'postbox' : 'live',
     };
@@ -537,24 +631,6 @@ function applyMove(from, to) {
 
 function submitMove(from, to) {
   if (!MP.active) return applyMove(from, to);
-  if (!mpIsMyTurn()) {
-    say(mpWaitText());
-    return false;
-  }
-  if (MP.postbox && (!MP.players || MP.peers.length < 2)) {
-    say('Waiting for an opponent…');
-    return false;
-  }
-  if (!MP.postbox && !MP.host) {
-    if (!sendLobby({ v: DATA_VERSION, type: 'move', to: MP.hostId, move: { from, to } })) {
-      say('The lobby is not connected.');
-      return false;
-    }
-    MP.pending = true;
-    sel = null;
-    draw();
-    return true;
-  }
   if (!applyMove(from, to)) {
     draw();
     return false;
@@ -562,11 +638,11 @@ function submitMove(from, to) {
   if (MP.postbox) {
     clearTimeout(autoTimer);
     while (autoStep()) { /* fold autoplay into the same posted state */ }
+    checkWin();
   }
-  mpNextTurn();
   draw();
   if (MP.postbox) mpPost();
-  else mpBroadcast(true);
+  else mpBroadcast();
   return true;
 }
 
@@ -593,9 +669,16 @@ function place(dest) {
   return true;
 }
 
+function checkWin() {
+  const wasWon = won;
+  won = found.every(p => p.length === 13);
+  if (won && !wasWon) recordScore();
+  return won;
+}
+
 // Draw the board, then let autoplay send the next fitting card home after a beat.
 function settle(moved = []) {
-  won = found.every(p => p.length === 13);
+  checkWin();
   draw(moved);
   save();
   if (won) {
@@ -606,7 +689,7 @@ function settle(moved = []) {
   autoTimer = setTimeout(() => {
     const c = autoStep();
     if (c) {
-      if (MP.host && !MP.postbox) mpBroadcast(false);
+      if (MP.active && !MP.postbox) mpBroadcast();
       settle([c]);
     }
   }, slow(STEP_MS));
@@ -671,10 +754,6 @@ function tapColumn(i) {
 
 function activate(el) {
   if (dealing || won) return;
-  if (MP.active && (!MP.players || !mpIsMyTurn())) {
-    say(mpWaitText());
-    return;
-  }
   if (el.classList.contains('card')) return tapCard(el);
   if (el.classList.contains('slot')) return tapSlot(el);
   if (el.classList.contains('column')) return tapColumn(+el.dataset.col);
@@ -889,33 +968,68 @@ function draw(moved = []) {
   hideFlying();
   slide(before, moved);
   $('moves').textContent = moves;
-  $('undo').disabled = MP.active || !undoStack.length;
-  $('lobbyTurn').textContent = !MP.active || !MP.players ? ''
-    : MP.pending ? 'sending…' : mpIsMyTurn() ? 'your turn' : `${mpName(MP.turn)}'s turn`;
-  $('overlay').classList.toggle('show', won);
+  $('undo').disabled = !undoStack.length;
+  $('lobbyTurn').textContent = mpScoreText();
+  $('overlay').classList.toggle('show', won && (!MP.active || !!MP.dealId));
   $('winMoves').textContent = moves;
+  $('winSummary').hidden = MP.active && !!MP.dealId;
+  $('winCompare').textContent = won ? winText() : '';
+  renderRival();
   saveMp();
 
-  if (MP.active && MP.postbox && !MP.players) {
+  if (MP.active && !MP.players) {
     say('Waiting for the host to deal…');
-  } else if (MP.active && MP.players) {
-    if (MP.pending) say('Waiting for the host…');
-    else if (!mpIsMyTurn()) say(mpWaitText());
-    else if (held.length) {
-      say(`In hand: ${held.map(cardName).join(' ')}` +
-        (held.length > 1 ? ` (${held.length} cards)` : '') + '. Tap a destination.');
-    } else say(won ? `Solved in ${moves} moves.` : 'Your turn — tap a card, then where it goes.');
   } else if (held.length) {
     say(`In hand: ${held.map(cardName).join(' ')}` +
       (held.length > 1 ? ` (${held.length} cards)` : '') + '. Tap a destination.');
+  } else if (won) {
+    say(`Solved in ${moves} moves.`);
   } else {
-    say(won ? `Solved in ${moves} moves.` : 'Tap a card to pick it up, then tap where it goes.');
+    const rival = MP.active ? mpOpponent() : null;
+    if (rival?.board?.won) say(`${rival.name} solved in ${rival.board.moves} moves — beat that.`);
+    else say('Tap a card to pick it up, then tap where it goes.');
   }
 
   if (active) {
     const el = $('table').querySelector(`[data-focus="${active}"]`);
     if (el) el.focus({ preventScroll: true });
   }
+}
+
+function miniCard(c) {
+  return `<div class="card${isRed(c.s) ? ' red' : ''}" aria-hidden="true">
+    <div class="face front">${faceHTML(c)}</div>
+    <div class="face back" aria-hidden="true"></div>
+  </div>`;
+}
+
+function rivalHTML(s) {
+  const slot = (c, hole) => `<div class="slot"><div class="hole" aria-hidden="true">${hole}</div>${
+    c ? miniCard(c) : ''}</div>`;
+  const frees = s.free.map(c => slot(c, '✦')).join('');
+  const founds = s.found.map((pile, suit) => slot(pile[pile.length - 1], SUITS[suit])).join('');
+  const cols = s.cols.map(col => `<div class="column">${
+    col.length ? col.map(miniCard).join('') : '<div class="hole" aria-hidden="true"></div>'
+  }</div>`).join('');
+  return `<div class="r-top"><div class="group">${frees}</div><div class="group">${founds}</div></div>
+    <div class="r-board">${cols}</div>`;
+}
+
+let rivalSig = '';
+function renderRival() {
+  const rival = MP.active ? mpOpponent() : null;
+  const board = rival?.board;
+  $('rivalWrap').hidden = !board;
+  if (!board) {
+    rivalSig = '';
+    $('rival').innerHTML = '';
+    return;
+  }
+  const sig = `${rival.name}\n${JSON.stringify(board)}`;
+  if (sig === rivalSig) return;
+  rivalSig = sig;
+  $('rivalLabel').textContent = `${rival.name}${board.won ? ' · solved' : ''} · ${board.moves} moves`;
+  $('rival').innerHTML = rivalHTML(board);
 }
 
 function animateDeal() {
@@ -960,7 +1074,6 @@ function newGame() {
 }
 
 function undo() {
-  if (MP.active) return;
   clearTimeout(autoTimer);
   landAll();
   const saved = undoStack[undoStack.length - 1];
@@ -969,23 +1082,33 @@ function undo() {
   try { state = JSON.parse(saved); } catch { return; }
   if (!isSaved(state)) return;
   undoStack.pop();
-  ({ cols, free, found, moves } = state);
+  ({ cols, free, found } = state);
   if (Array.isArray(state.pinned)) pinned = new Set(state.pinned);
+  moves++; // undo costs a move, so the score still rewards clean play
   sel = null;
   won = found.every(p => p.length === 13);
   draw();
   save();
+  if (MP.active) {
+    if (MP.postbox) mpPost();
+    else mpBroadcast(true);
+  }
 }
 
 function fit() {
   const gap = Math.max(2, Math.min(8, innerWidth * .007));
   const wide = Math.min(innerWidth - 16, 1120);
   const tall = Math.max(300, innerHeight - 130);
-  const cw = Math.max(30, Math.min((wide - gap * 7) / 8, tall / 6.1, 132));
+  const share = MP.active ? .7 : 1;
+  const cw = Math.max(26, Math.min((wide - gap * 7) / 8, (tall * share) / 6.1, 132));
   const t = $('table');
   t.style.setProperty('--gap', gap.toFixed(2) + 'px');
   t.style.setProperty('--cw', cw.toFixed(2) + 'px');
   t.style.setProperty('--ch', (cw * 1.4).toFixed(2) + 'px');
+  const r = $('rival');
+  r.style.setProperty('--gap', (gap * .7).toFixed(2) + 'px');
+  r.style.setProperty('--cw', (cw * .52).toFixed(2) + 'px');
+  r.style.setProperty('--ch', (cw * .52 * 1.4).toFixed(2) + 'px');
 }
 
 let lobbyMax = MAX_PLAYERS;
@@ -997,62 +1120,108 @@ function renderLobbyPeers(peers) {
 }
 
 function mpState() {
-  return { cols, free, found, moves, pinned: [...pinned], turn: MP.turn, players: MP.players };
+  return {
+    dealId: MP.dealId,
+    deal: MP.deal,
+    players: MP.players,
+    boards: { ...MP.others, ...(MP.you ? { [MP.you]: boardState() } : {}) },
+  };
 }
 
-function mpMeIndex() {
-  return MP.players ? MP.players.findIndex(p => p.id === MP.you) : -1;
+function mpName(playerId) {
+  return MP.players?.find(p => p.id === playerId)?.name ?? 'Player';
 }
 
-function mpIsMyTurn() {
-  return MP.active && !!MP.players && !MP.pending && MP.turn === mpMeIndex();
+function mpOpponent() {
+  if (!MP.active) return null;
+  const playerId = Object.keys(MP.others).find(key => key !== MP.you);
+  if (!playerId) return null;
+  return { id: playerId, name: mpName(playerId), board: MP.others[playerId] };
 }
 
-function mpName(index) {
-  return MP.players?.[index]?.name ?? 'Player';
-}
-
-function mpWaitText() {
-  if (!MP.players) return 'Waiting for the host to deal…';
-  if (MP.pending) return 'Waiting for the host…';
-  return `${mpName(MP.turn)}'s turn…`;
-}
-
-function mpNextTurn() {
-  if (MP.players?.length) MP.turn = (MP.turn + 1) % MP.players.length;
+function mpScoreText() {
+  if (!MP.active || !MP.dealId || !MP.players) return '';
+  return MP.players.map(p => {
+    const board = p.id === MP.you ? boardState() : MP.others[p.id];
+    if (!board) return `${p.name}: —`;
+    const done = p.id === MP.you ? won : board.won;
+    return `${p.name}: ${board.moves}${done ? ' ✓' : ''}`;
+  }).join(' · ');
 }
 
 function isMpState(s) {
-  return isSaved(s) &&
+  return !!s && typeof s.dealId === 'string' && s.dealId.length > 0 &&
+    isSaved(s.deal) &&
     Array.isArray(s.players) && s.players.length > 0 &&
     s.players.every(p => p && typeof p.id === 'string' && typeof p.name === 'string') &&
-    Number.isInteger(s.turn) && s.turn >= 0 && s.turn < s.players.length &&
-    Array.isArray(s.pinned) && s.pinned.every(Number.isInteger);
+    !!s.boards && typeof s.boards === 'object' && !Array.isArray(s.boards) &&
+    Object.entries(s.boards).every(([playerId, board]) =>
+      typeof playerId === 'string' && isSaved(board));
 }
 
-function mpRestore(s) {
-  if (!isMpState(s)) return false;
-  cols = s.cols;
-  free = s.free;
-  found = s.found;
-  moves = s.moves;
-  pinned = new Set(s.pinned);
-  MP.players = s.players.map(p => ({ id: p.id, name: p.name }));
-  MP.turn = s.turn;
-  MP.pending = false;
+function applyBoard(board) {
+  const b = JSON.parse(JSON.stringify(board));
+  cols = b.cols;
+  free = b.free;
+  found = b.found;
+  moves = b.moves;
+  pinned = new Set(Array.isArray(b.pinned) ? b.pinned : []);
   sel = null;
   dealing = false;
   won = found.every(p => p.length === 13);
+}
+
+function adoptDeal(dealId, deal, players) {
+  if (!dealId || dealId === MP.dealId || !isSaved(deal)) return false;
+  MP.dealId = dealId;
+  MP.deal = JSON.parse(JSON.stringify(deal));
+  if (Array.isArray(players) && players.length) {
+    MP.players = players.map(p => ({ id: p.id, name: p.name }));
+  }
+  MP.others = {};
+  applyBoard(MP.deal);
+  undoStack = [];
+  draw();
+  saveMp();
+  return true;
+}
+
+function mpNewDeal() {
+  MP.dealId = null;
+  MP.deal = null;
+  MP.others = {};
+  newGame();
+  MP.dealId = Math.random().toString(36).slice(2);
+  MP.deal = JSON.parse(JSON.stringify(boardState()));
+  draw();
+}
+
+function mpRestore(s, ownId = MP.you) {
+  if (!isMpState(s)) return false;
+  MP.dealId = s.dealId;
+  MP.deal = JSON.parse(JSON.stringify(s.deal));
+  MP.players = s.players.map(p => ({ id: p.id, name: p.name }));
+  MP.others = {};
+  for (const [playerId, board] of Object.entries(s.boards)) {
+    if (playerId !== ownId) MP.others[playerId] = board;
+  }
+  const own = ownId ? s.boards[ownId] : null;
+  if (own) {
+    applyBoard(own);
+  } else {
+    applyBoard(MP.deal);
+    undoStack = [];
+  }
+  MP.pending = false;
   draw();
   return true;
 }
 
-// shortcut: the host keeps the only live deal; a host reload starts a fresh one.
+// Each player owns one board; the host only supplies the opening deal.
 function mpHostStart(peers) {
-  if (!MP.host || MP.players || !peers.length) return;
-  MP.players = peers.map(p => ({ id: p.id, name: p.name }));
-  MP.turn = 0;
-  newGame();
+  if (!MP.host || !peers.length) return;
+  MP.players = playersFromPeers(peers) ?? peers.map(p => ({ id: p.id, name: p.name }));
+  if (!MP.dealId) mpNewDeal();
   mpBroadcast(true);
 }
 
@@ -1063,13 +1232,15 @@ function sendLobby(data) {
 }
 
 function mpBroadcast(now = false) {
-  if (!MP.players) return;
+  if (!MP.active || !MP.dealId || !MP.players) return;
   if (MP.postbox) return mpPost();
-  if (!MP.host) return;
   clearTimeout(MP.timer);
   const send = () => {
     MP.timer = null;
-    sendLobby({ v: DATA_VERSION, type: 'state', state: mpState() });
+    sendLobby({
+      v: DATA_VERSION, type: 'state',
+      dealId: MP.dealId, deal: MP.deal, board: boardState(),
+    });
   };
   if (now) send();
   else MP.timer = setTimeout(send, 250);
@@ -1095,38 +1266,45 @@ function handlePostboxError(code) {
   }
 }
 
+function applyMpSnapshot(s) {
+  if (!isMpState(s)) return false;
+  MP.players = s.players.map(p => ({ id: p.id, name: p.name }));
+  const freshDeal = s.dealId !== MP.dealId;
+  if (freshDeal) {
+    MP.dealId = s.dealId;
+    MP.deal = JSON.parse(JSON.stringify(s.deal));
+    MP.others = {};
+    applyBoard(MP.deal);
+    undoStack = [];
+  }
+  for (const [playerId, board] of Object.entries(s.boards)) {
+    if (playerId !== MP.you) MP.others[playerId] = board;
+  }
+  draw();
+  if (freshDeal && MP.postbox && !MP.host) mpPost();
+  return true;
+}
+
 function applyPostboxSnapshot(snap) {
   if (!snap || typeof snap !== 'object') return;
   MP.rev = Number.isInteger(snap.rev) ? snap.rev : MP.rev;
   MP.host = !!snap.host;
   MP.you = snap.you ?? MP.you;
   MP.peers = Array.isArray(snap.peers) ? snap.peers : MP.peers;
-  MP.hostId = MP.peers.find(p => p.host)?.id ?? MP.hostId;
   $('lobbyBar').hidden = false;
   $('lobbyState').textContent =
     `Room ${String(MP.room).slice(0, 8)} · ${MP.host ? 'host' : 'player'} · long game`;
   renderLobbyPeers(MP.peers);
   if (snap.state) {
-    if (isMpState(snap.state)) mpRestore(snap.state);
-  } else if (!MP.pending) {
-    if (MP.host && snap.started && MP.peers.length >= 2) {
-      if (!MP.synced || !MP.players) {
-        MP.players = playersFromPeers(MP.peers);
-        MP.turn = 0;
-        newGame();
-      }
-    } else {
-      MP.players = null;
-      if (!MP.synced) {
-        cols = Array.from({ length: 8 }, () => []);
-        free = [null, null, null, null];
-        found = [[], [], [], []];
-        moves = 0;
-        won = false;
-        sel = null;
-      }
+    applyMpSnapshot(snap.state);
+  } else if (snap.started && MP.peers.length >= 2) {
+    if (MP.host) mpHostStart(MP.peers);
+    else if (!MP.players) {
+      MP.players = playersFromPeers(MP.peers);
       draw();
     }
+  } else if (!MP.players) {
+    draw();
   }
   MP.synced = true;
   saveMp();
@@ -1152,39 +1330,52 @@ async function syncPostbox() {
 }
 
 async function mpPost() {
-  if (!MP.active || !MP.postbox || !MP.token) return;
+  if (!MP.active || !MP.postbox || !MP.token || !MP.players || !MP.dealId) return;
+  if (MP.pending) {
+    MP.queued = true;
+    return;
+  }
   MP.pending = true;
   draw();
-  try {
-    const res = await fetch(`${postboxUrl(MP.room)}/state`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${MP.token}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ rev: MP.rev, state: mpState() }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (res.status === 409) {
+  let sent = false;
+  for (let attempt = 0; attempt <= 2 && !sent; attempt++) {
+    try {
+      const res = await fetch(`${postboxUrl(MP.room)}/state`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${MP.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ rev: MP.rev, state: mpState() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        MP.pending = false;
+        await syncPostbox();
+        MP.pending = true;
+        continue;
+      }
+      if (!res.ok) {
+        MP.pending = false;
+        handlePostboxError(body.code ?? String(res.status));
+        draw();
+        break;
+      }
+      MP.rev = body.rev ?? MP.rev + 1;
+      sent = true;
+    } catch {
       MP.pending = false;
-      await syncPostbox();
-      say('The table moved on — reloaded the latest position.');
-      return;
-    }
-    if (!res.ok) {
-      MP.pending = false;
-      handlePostboxError(body.code ?? String(res.status));
+      say('Could not send the state — it is saved locally.');
       draw();
-      return;
+      break;
     }
-    MP.rev = body.rev ?? MP.rev + 1;
-    MP.pending = false;
-    draw();
-  } catch {
-    MP.pending = false;
-    say('Could not send the move — it is saved locally.');
-    draw();
   }
+  MP.pending = false;
+  if (MP.queued) {
+    MP.queued = false;
+    return mpPost();
+  }
+  draw();
 }
 
 function startPostboxPoll() {
@@ -1208,38 +1399,17 @@ function stopPostboxPoll() {
 
 function isGameMessage(data) {
   return !!data && typeof data === 'object' && !Array.isArray(data) &&
-    data.v === DATA_VERSION && ['state', 'move', 'reject'].includes(data.type);
+    data.v === DATA_VERSION && data.type === 'state';
 }
 
 function handleGameMessage(from, data) {
-  if (!MP.active || !isGameMessage(data)) return;
-
-  if (MP.host) {
-    if (data.type !== 'move' || data.to !== MP.you || !MP.players) return;
-    const index = MP.players.findIndex(p => p.id === from);
-    if (index < 0) return;
-    if (index !== MP.turn) {
-      sendLobby({ v: DATA_VERSION, type: 'reject', to: from, reason: 'It is not your turn.' });
-      return;
-    }
-    if (!applyMove(data.move?.from, data.move?.to)) {
-      sendLobby({ v: DATA_VERSION, type: 'reject', to: from, reason: "That move doesn't fit." });
-      return;
-    }
-    mpNextTurn();
-    draw();
-    mpBroadcast(true);
-    return;
+  if (!MP.active || !isGameMessage(data) || from === MP.you) return;
+  if (data.dealId !== MP.dealId && data.deal) {
+    adoptDeal(data.dealId, data.deal);
+    mpBroadcast(true); // answer the deal so the sender can see our board too
   }
-
-  if (from !== MP.hostId) return;
-  if (data.type === 'state') {
-    mpRestore(data.state);
-  } else if (data.type === 'reject' && data.to === MP.you) {
-    MP.pending = false;
-    draw();
-    say(typeof data.reason === 'string' ? data.reason : 'Move rejected.');
-  }
+  if (isSaved(data.board)) MP.others[from] = data.board;
+  draw();
 }
 
 function handleLobby(msg) {
@@ -1250,7 +1420,6 @@ function handleLobby(msg) {
     MP.you = msg.you;
     MP.room = msg.room;
     MP.peers = Array.isArray(msg.peers) ? msg.peers : [];
-    MP.hostId = MP.peers.find(p => p.host)?.id ?? null;
     MP.closed = false;
     MP.retries = 0;
     stopLobbyReconnect();
@@ -1261,6 +1430,7 @@ function handleLobby(msg) {
       `Room ${String(msg.room).slice(0, 8)} · ${msg.host ? 'host' : 'player'}${msg.started ? ' · started' : ''}`;
     $('lobbyState').title = msg.room;
     renderLobbyPeers(MP.peers);
+    fit();
     if (msg.started) {
       if (MP.host) mpHostStart(MP.peers);
       else draw();
@@ -1270,15 +1440,17 @@ function handleLobby(msg) {
     }
   } else if (msg.t === 'peers') {
     MP.peers = Array.isArray(msg.peers) ? msg.peers : MP.peers;
-    MP.hostId = MP.peers.find(p => p.host)?.id ?? MP.hostId;
     lobbyMax = msg.maxPlayers ?? lobbyMax;
     renderLobbyPeers(MP.peers);
-    if (MP.host && MP.players) mpBroadcast(true);
+    MP.players = playersFromPeers(MP.peers) ?? MP.players;
+    if (msg.started && MP.host && !MP.dealId) mpHostStart(MP.peers);
+    else if (msg.started && MP.dealId) mpBroadcast(true);
     draw();
   } else if (msg.t === 'started') {
     $('lobbyState').textContent = MP.room
       ? `Room ${String(MP.room).slice(0, 8)} · ${MP.host ? 'host' : 'player'} · started`
       : 'The game has started.';
+    fit();
     if (MP.host) mpHostStart(MP.peers);
     else draw();
   } else if (msg.t === 'msg') {
@@ -1372,13 +1544,15 @@ function connectLobby(room, token, name, url, mode) {
   MP.synced = false;
   stopLobbyReconnect();
   stopPostboxPoll();
-  const useSaved = saved && (MP.postbox || saved.mode === 'postbox');
+  const useSaved = !!saved;
   MP.players = useSaved ? saved.state.players : null;
-  MP.turn = useSaved ? saved.state.turn : 0;
+  MP.you = useSaved ? saved.you : null;
   MP.pending = false;
-  if (useSaved) mpRestore(saved.state);
+  MP.queued = false;
+  if (useSaved) mpRestore(saved.state, saved.you);
   $('lobbyBar').hidden = false;
   $('lobbyState').textContent = MP.postbox ? 'Loading long game…' : 'Connecting to the lobby…';
+  fit();
   draw();
   if (MP.postbox) {
     if (!MP.token) {
@@ -1413,6 +1587,11 @@ $('again').addEventListener('click', () => {
   else newGame();
 });
 $('undo').addEventListener('click', undo);
+$('scores').addEventListener('click', () => {
+  renderScores();
+  $('scoresOverlay').classList.add('show');
+});
+$('scoresClose').addEventListener('click', () => $('scoresOverlay').classList.remove('show'));
 $('multi').addEventListener('click', () => { location.href = lobbyUrl(); });
 $('lobbyOverlayExit').addEventListener('click', () => { location.href = lobbyUrl(); });
 addEventListener('resize', fit);
