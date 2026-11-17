@@ -7,7 +7,8 @@
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; min-height: 100%; }
+  html { scrollbar-gutter: stable; }
+  html, body { margin: 0; min-height: 100%; overflow-anchor: none; }
   body {
     font-family: ui-rounded, "Avenir Next", system-ui, sans-serif; color: #e9f0e2;
     display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
@@ -437,6 +438,9 @@ let cols, free, found, sel, moves, won, dealing, dealTimer, autoTimer;
 let undoStack = [];
 // Cards the player deliberately lifted off a foundation, so autoplay leaves them alone.
 let pinned = new Set();
+// Scroll offset captured on a tap, before the browser can focus-scroll the tapped card.
+let tapScroll = null;
+let tapPoint = null;
 // Clones of cards currently in the air: data-focus -> { clone, anim, done }.
 const flights = new Map();
 let dealDone = () => {};
@@ -446,7 +450,7 @@ const MP = {
   players: null, pending: false, queued: false, timer: null, socket: null,
   token: null, name: null, lobbyUrl: null, retries: 0, reconnectTimer: null, closed: false,
   postbox: false, rev: 0, syncing: false, pollTimer: null, synced: false,
-  dealId: null, deal: null, others: {},
+  dealId: null, deal: null, others: {}, rematch: false,
 };
 
 const id = c => c.s * 13 + c.r;
@@ -610,14 +614,15 @@ function load() {
   sel = null;
   dealing = false;
   draw();
-  if (won) $('again').focus();
+  if (won) $('again').focus({ preventScroll: true });
   return true;
 }
 
 function isPos(pos, needJ = false) {
   return !!pos && ['col', 'free', 'found'].includes(pos.kind) &&
     Number.isInteger(pos.i) && pos.i >= 0 && pos.i < (pos.kind === 'col' ? 8 : 4) &&
-    (!needJ || pos.kind !== 'col' || (Number.isInteger(pos.j) && pos.j >= 0 && pos.j < 13));
+    (!needJ || pos.kind !== 'col' ||
+      (Number.isInteger(pos.j) && pos.j >= 0 && pos.j < cols[pos.i].length));
 }
 
 function applyMove(from, to) {
@@ -684,7 +689,7 @@ function settle(moved = []) {
   draw(moved);
   save();
   if (won) {
-    $('again').focus();
+    $('again').focus({ preventScroll: true });
     return;
   }
   clearTimeout(autoTimer);
@@ -927,6 +932,9 @@ function hideFlying() {
 }
 
 function draw(moved = []) {
+  const sx = tapScroll ? tapScroll[0] : typeof scrollX === 'number' ? scrollX : 0;
+  const sy = tapScroll ? tapScroll[1] : typeof scrollY === 'number' ? scrollY : 0;
+  tapScroll = null;
   const active = document.activeElement && document.activeElement.dataset
     ? document.activeElement.dataset.focus
     : null;
@@ -996,6 +1004,12 @@ function draw(moved = []) {
     const el = $('table').querySelector(`[data-focus="${active}"]`);
     if (el) el.focus({ preventScroll: true });
   }
+  // Never let focus or reflow move the page under the player's thumb.
+  const keepScroll = () => {
+    if (typeof scrollTo === 'function' && (scrollX !== sx || scrollY !== sy)) scrollTo(sx, sy);
+  };
+  keepScroll();
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(keepScroll);
 }
 
 function miniCard(c) {
@@ -1071,7 +1085,7 @@ function newGame() {
   const fromWin = document.activeElement === $('again');
   draw();
   save();
-  if (fromWin) $('new').focus();
+  if (fromWin) $('new').focus({ preventScroll: true });
   animateDeal();
 }
 
@@ -1097,7 +1111,12 @@ function undo() {
   }
 }
 
+let fitKey = '';
 function fit() {
+  // Width and mode decide the size; a mobile URL bar changing the height must not resize the board.
+  const key = `${innerWidth}:${MP.active ? 1 : 0}`;
+  if (key === fitKey) return;
+  fitKey = key;
   const gap = Math.max(2, Math.min(8, innerWidth * .007));
   const wide = Math.min(innerWidth - 16, 1120);
   const tall = Math.max(300, innerHeight - 130);
@@ -1127,6 +1146,7 @@ function mpState() {
     deal: MP.deal,
     players: MP.players,
     boards: { ...MP.others, ...(MP.you ? { [MP.you]: boardState() } : {}) },
+    rematch: MP.rematch,
   };
 }
 
@@ -1177,6 +1197,7 @@ function adoptDeal(dealId, deal, players) {
   if (!dealId || dealId === MP.dealId || !isSaved(deal)) return false;
   MP.dealId = dealId;
   MP.deal = JSON.parse(JSON.stringify(deal));
+  MP.rematch = false;
   if (Array.isArray(players) && players.length) {
     MP.players = players.map(p => ({ id: p.id, name: p.name }));
   }
@@ -1192,10 +1213,31 @@ function mpNewDeal() {
   MP.dealId = null;
   MP.deal = null;
   MP.others = {};
+  MP.rematch = false;
   newGame();
   MP.dealId = Math.random().toString(36).slice(2);
   MP.deal = JSON.parse(JSON.stringify(boardState()));
   draw();
+}
+
+function mpRematch() {
+  if (!MP.active || !MP.host) return;
+  mpNewDeal();
+  mpBroadcast(true);
+}
+
+function startRematch() {
+  if (!MP.active) return newGame();
+  if (MP.host) return mpRematch();
+  if (!MP.dealId) return;
+  if (MP.postbox) {
+    MP.rematch = true;
+    mpPost();
+  } else if (!sendLobby({ v: DATA_VERSION, type: 'rematch' })) {
+    say('The lobby is not connected.');
+    return;
+  }
+  say('Waiting for the host to deal a new round…');
 }
 
 function mpRestore(s, ownId = MP.you) {
@@ -1276,6 +1318,7 @@ function applyMpSnapshot(s) {
     MP.dealId = s.dealId;
     MP.deal = JSON.parse(JSON.stringify(s.deal));
     MP.others = {};
+    MP.rematch = false;
     applyBoard(MP.deal);
     undoStack = [];
   }
@@ -1283,7 +1326,8 @@ function applyMpSnapshot(s) {
     if (playerId !== MP.you) MP.others[playerId] = board;
   }
   draw();
-  if (freshDeal && MP.postbox && !MP.host) mpPost();
+  if (s.rematch && MP.host) mpRematch();
+  else if (freshDeal && MP.postbox && !MP.host) mpPost();
   return true;
 }
 
@@ -1401,11 +1445,15 @@ function stopPostboxPoll() {
 
 function isGameMessage(data) {
   return !!data && typeof data === 'object' && !Array.isArray(data) &&
-    data.v === DATA_VERSION && data.type === 'state';
+    data.v === DATA_VERSION && ['state', 'rematch'].includes(data.type);
 }
 
 function handleGameMessage(from, data) {
   if (!MP.active || !isGameMessage(data) || from === MP.you) return;
+  if (data.type === 'rematch') {
+    if (MP.host) mpRematch();
+    return;
+  }
   if (data.dealId !== MP.dealId && data.deal) {
     adoptDeal(data.dealId, data.deal);
     mpBroadcast(true); // answer the deal so the sender can see our board too
@@ -1569,9 +1617,26 @@ function connectLobby(room, token, name, url, mode) {
   }
 }
 
+$('table').addEventListener('pointerdown', e => {
+  tapScroll = [typeof scrollX === 'number' ? scrollX : 0, typeof scrollY === 'number' ? scrollY : 0];
+  tapPoint = [e.clientX, e.clientY];
+}, true);
+$('table').addEventListener('pointermove', e => {
+  if (!tapPoint) return;
+  if (Math.hypot(e.clientX - tapPoint[0], e.clientY - tapPoint[1]) > 8) {
+    tapScroll = null;
+    tapPoint = null;
+  }
+}, true);
+$('table').addEventListener('pointercancel', () => {
+  tapScroll = null;
+  tapPoint = null;
+}, true);
 $('table').addEventListener('click', e => {
   const el = e.target.closest('.card, .slot, .column');
   if (el) activate(el);
+  tapScroll = null;
+  tapPoint = null;
 });
 $('table').addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -1580,14 +1645,8 @@ $('table').addEventListener('keydown', e => {
   e.preventDefault();
   activate(el);
 });
-$('new').addEventListener('click', () => {
-  if (MP.active) location.href = lobbyUrl();
-  else newGame();
-});
-$('again').addEventListener('click', () => {
-  if (MP.active) location.href = lobbyUrl();
-  else newGame();
-});
+$('new').addEventListener('click', startRematch);
+$('again').addEventListener('click', startRematch);
 $('undo').addEventListener('click', undo);
 $('scores').addEventListener('click', () => {
   renderScores();

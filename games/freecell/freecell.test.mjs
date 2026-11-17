@@ -47,7 +47,7 @@ const setup = ({ cols = [], free = [null, null, null, null], found = empty() }) 
     sel = null; moves = 0; won = false; undoStack = []; dealing = false; pinned = new Set();
     MP.active = false; MP.host = false; MP.players = null; MP.pending = false;
     MP.socket = null; MP.hostId = null; MP.you = null; MP.postbox = false;
-    MP.dealId = null; MP.deal = null; MP.others = {}; MP.queued = false;
+    MP.dealId = null; MP.deal = null; MP.others = {}; MP.queued = false; MP.rematch = false;
     draw();
   `);
 };
@@ -502,6 +502,75 @@ test('postbox mode applies the move locally and posts both boards', async () => 
   }
 });
 
+test('a width change resizes the board, a mobile height change does not', () => {
+  const table = ctx.document.getElementById('table');
+  const calls = [];
+  table.style.setProperty = (key, value) => calls.push(`${key}:${value}`);
+  try {
+    ctx.innerWidth = 800;
+    ctx.innerHeight = 700;
+    run('fit()');
+    const sized = calls.length;
+    assert.ok(sized > 0, 'the first width fit sizes the table');
+
+    ctx.innerHeight = 500;
+    run('fit()');
+    assert.equal(calls.length, sized, 'a URL bar changing the height leaves the board alone');
+
+    ctx.innerWidth = 700;
+    run('fit()');
+    assert.ok(calls.length > sized, 'a real width change still refits');
+  } finally {
+    table.style.setProperty = () => {};
+    ctx.innerWidth = 900;
+    ctx.innerHeight = 900;
+    run('fit()');
+  }
+});
+
+test('a redraw leaves the page where the player scrolled', () => {
+  setup({ cols: [[c(10, 0)]] });
+  const table = ctx.document.getElementById('table');
+  const target = { focus: () => { ctx.scrollY = 0; } };
+  ctx.document.activeElement = { dataset: { focus: 'c10' } };
+  table.querySelector = () => target;
+  ctx.scrollX = 40;
+  ctx.scrollY = 300;
+  let restored = null;
+  ctx.scrollTo = (x, y) => { restored = [x, y]; };
+  try {
+    run('draw()');
+    assert.deepEqual(restored, [40, 300]);
+  } finally {
+    delete ctx.scrollTo;
+    delete ctx.scrollX;
+    delete ctx.scrollY;
+    ctx.document.activeElement = null;
+    table.querySelector = () => null;
+  }
+});
+
+test('a card past the 13th slot of a long column still moves', () => {
+  const filler = [
+    c(4, 0), c(5, 1), c(6, 2), c(7, 3), c(8, 0), c(9, 1), c(10, 2),
+    c(11, 3), c(12, 0), c(13, 1), c(1, 2), c(4, 1), c(5, 2),
+  ];
+  const long = [...filler, c(3, 3), c(2, 2)];
+
+  setup({ cols: [long, [c(3, 0)]] });
+  run('selectCard("col", 0, 14)');
+  assert.equal(run('sel.j'), 14);
+  assert.equal(run('submitMove({ kind: "col", i: 0, j: 14 }, { kind: "free", i: 0 })'), true);
+  assert.equal(run('free[0].r'), 2);
+  assert.equal(run('free[0].s'), 2, 'the diamond two reaches the free cell');
+
+  setup({ cols: [long, [c(3, 0)]] });
+  run('selectCard("col", 0, 14)');
+  assert.equal(run('submitMove({ kind: "col", i: 0, j: 14 }, { kind: "col", i: 1 })'), true);
+  assert.equal(run('cols[1][cols[1].length - 1].r'), 2);
+  assert.equal(run('cols[1][cols[1].length - 1].s'), 2);
+});
+
 test('sending every king home wins the game', () => {
   const twelve = s => Array.from({ length: 12 }, (_, i) => c(i + 1, s));
   setup({ found: [twelve(0), twelve(1), twelve(2), twelve(3)], free: [c(13, 0), c(13, 1), c(13, 2), c(13, 3)] });
@@ -561,4 +630,30 @@ test('a live deal resets the local board but keeps the sender as the rival', () 
   assert.equal(JSON.parse(run('JSON.stringify(cols.flat())')).length, 52);
   assert.equal(run('MP.others.a.moves'), 0, 'the sender board is shown as the rival');
   assert.equal(run('mpOpponent().name'), 'Alice');
+});
+
+test('the host deals a new round when a guest asks for a rematch', () => {
+  run('newGame()');
+  run('MP.active = true; MP.host = true; MP.you = "a"; MP.dealId = "old";' +
+    'MP.deal = JSON.parse(snapshot()); MP.others = { b: JSON.parse(snapshot()) };' +
+    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }]');
+  run('moves = 7');
+
+  run('handleGameMessage("b", { v: 2, type: "rematch" })');
+  assert.notEqual(run('MP.dealId'), 'old', 'a fresh deal');
+  assert.equal(run('moves'), 0, 'the new round starts at zero');
+  assert.equal(run('Object.keys(MP.others).length'), 0, 'old boards are cleared');
+  assert.equal(run('MP.rematch'), false);
+});
+
+test('a guest asks the host for a new round instead of dealing one itself', () => {
+  setup({ cols: [[c(10, 0)]] });
+  run('var sent = null; MP.active = true; MP.host = false; MP.you = "b"; MP.dealId = "d1";' +
+    'MP.players = [{ id: "a", name: "Alice" }, { id: "b", name: "Bob" }];' +
+    'MP.socket = { readyState: 1, send(s) { sent = s; } }');
+  run('startRematch()');
+
+  const msg = JSON.parse(run('sent'));
+  assert.equal(msg.data.type, 'rematch');
+  assert.equal(run('MP.dealId'), 'd1', 'the guest does not deal on its own');
 });
