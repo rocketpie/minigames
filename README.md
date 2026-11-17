@@ -46,6 +46,8 @@ And that's pretty cool!
 | [chess](games/chess/chess.html) | tap a figure, then a glowing square. Classic rules: castling, en passant, promotion, stalemate and material/fifty-move draws. Every capture is a piece-specific spell — beams, arcing missiles or a spectral horse — and leaves a burn, crack or crater for the rest of the duel. At seventeen losses the board splits with a great crack; a checkmated king topples and burns. Two players can share one screen, or join through the lobby (host is Gold, guest Emerald). |
 | [Beweg (Kjell's Chess)](games/beweg/beweg.html) | chess with two new figures. A teleporter (a crownless queen) replaces the outer pawns and teleports anywhere; landing on a rival figure explodes it, but the teleporter dies with it and rival kings and queens are untouchable. A trebuchet on the second-outer pawns cannot move but hurls a huge boulder up to four squares along a rank, file or diagonal at the first figure in line. Pawns run one or two squares, strike two diagonally and may promote to a teleporter. Otherwise standard chess, with a cracking board and a burning king when the duel ends. |
 
+Not a game: [QR scanner](games/qr/qr.html) opens the camera and decodes QR codes locally; nothing is uploaded. Needs https or localhost.
+
 
 Deploy: `./deploy.ps1` builds and ships two images – `homelab/website` (this page, nginx,
 built from `games/` with `games/Dockerfile`) and `homelab/lobby` (see
