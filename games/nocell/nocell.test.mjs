@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-// Run the page's <script> with a stub DOM so we can drive the real move/deal code.
+// Run the page's <script> with a stub DOM so we can drive the real move/select code.
 const code = readFileSync(new URL('./nocell.html', import.meta.url), 'utf8').match(/<script>([\s\S]*)<\/script>/)[1];
 const el = () => ({
   style: { setProperty() {} }, dataset: {}, textContent: '', innerHTML: '', disabled: false,
@@ -37,10 +37,11 @@ const run = expression => vm.runInContext(expression, ctx);
 const c = (r, s) => ({ r, s });
 const empty = n => Array.from({ length: n }, () => []);
 const cols4 = cols => Array.from({ length: 4 }, (_, i) => cols[i] || []);
-const setup = ({ cols = [], found = empty(2) } = {}) => {
+const setup = ({ cols = [], free = [null, null], found = empty(2) } = {}) => {
   store.delete('nocell');
   run(`
     cols = ${JSON.stringify(cols4(cols))};
+    free = ${JSON.stringify(free)};
     found = ${JSON.stringify(found)};
     sel = null; moves = 0; score = 0; streak = 0; won = false; undoStack = [];
     dealing = false; pinned = new Set();
@@ -52,17 +53,45 @@ const deck = () => {
   for (let s = 0; s < 2; s++) for (let r = 1; r <= 13; r++) cards.push(c(r, s));
   return cards;
 };
-const alternates = (top, card) => top.r === card.r + 1 && (top.s === 1) !== (card.s === 1);
-const runOk = run => run.every((card, i) => i === 0 || alternates(run[i - 1], card));
+const take = () => JSON.parse(run('JSON.stringify(sel ? selectedRun().map(c => [c.r, c.s]) : null)'));
 
-test('the deck is half a pack: spades and hearts only', () => {
+test('a new game deals all 26 cards into four non-empty columns and two free cells', () => {
   run('newGame()');
-  const cards = JSON.parse(run('JSON.stringify(cols.flat())'));
-  assert.equal(cards.length, 26);
-  assert.ok(cards.every(card => card.s === 0 || card.s === 1));
-  assert.equal(new Set(cards.map(card => card.s * 13 + card.r)).size, 26);
   assert.equal(run('cols.length'), 4);
+  assert.ok(run('cols.every(c => c.length)'), 'all four columns are used');
+  assert.equal(run('free.length'), 2);
+  assert.equal(run('free.every(c => c === null)'), true);
   assert.equal(run('found.length'), 2);
+
+  const cards = JSON.parse(run('JSON.stringify([...cols.flat(), ...free.filter(Boolean), ...found.flat()])'));
+  assert.equal(cards.length, 26);
+  assert.equal(new Set(cards.map(card => card.s * 13 + card.r)).size, 26);
+  assert.ok(cards.every(card => card.s === 0 || card.s === 1));
+});
+
+test('generated deals need a move before any card can go home', () => {
+  for (let deal = 0; deal < 50; deal++) {
+    const { cols } = JSON.parse(run('JSON.stringify(generateDeal())'));
+    run(`
+      cols = ${JSON.stringify(cols)};
+      free = [null, null];
+      found = [[], []];
+      sel = null; won = false;
+      score = 0; streak = 0; moves = 0; pinned = new Set();
+    `);
+    let steps = 0;
+    while (run('autoStep()')) steps++;
+    assert.equal(steps, 0, `deal ${deal} does not autosolve`);
+  }
+});
+
+test('covers are dealt one card at a time, so unearthing the body takes many moves', () => {
+  for (let deal = 0; deal < 30; deal++) {
+    const { ops } = JSON.parse(run('JSON.stringify(generateDeal())'));
+    const coverMoves = ops.filter(op => op.type === 'move' && op.from === 0);
+    assert.ok(coverMoves.length >= 8, `deal ${deal} has several cover cards`);
+    assert.ok(coverMoves.every(op => op.n === 1), 'cover cards do not move as runs');
+  }
 });
 
 test('generated deals can be solved by reversing their construction', () => {
@@ -71,7 +100,6 @@ test('generated deals can be solved by reversing their construction', () => {
     const board = cols.map(pile => pile.map(card => ({ ...card })));
     const done = [[], []];
 
-    // Replay the build steps backwards: each one is the legal forward move that solves it.
     for (let i = ops.length - 1; i >= 0; i--) {
       const op = ops[i];
       if (op.type === 'found') {
@@ -84,8 +112,10 @@ test('generated deals can be solved by reversing their construction', () => {
         const pile = board[op.to];
         const moved = pile.splice(pile.length - op.n, op.n);
         assert.equal(moved.length, op.n);
-        assert.ok(runOk(moved), 'only clean runs are moved');
-        assert.ok(!board[op.from].length || alternates(board[op.from].at(-1), moved[0]));
+        assert.ok(moved.every((card, j) => j === 0 || (moved[j - 1].r === card.r + 1 && moved[j - 1].s !== card.s)),
+          'only clean runs are moved');
+        const below = board[op.from].at(-1);
+        assert.ok(!below || (below.r === moved[0].r + 1 && below.s !== moved[0].s));
         board[op.from].push(...moved);
       }
     }
@@ -95,39 +125,108 @@ test('generated deals can be solved by reversing their construction', () => {
   }
 });
 
-test('generated deals need a move before any card can go home', () => {
-  for (let deal = 0; deal < 50; deal++) {
-    const { cols } = JSON.parse(run('JSON.stringify(generateDeal())'));
-    run(`
-      cols = ${JSON.stringify(cols)};
-      found = [[], []];
-      sel = null; won = false;
-      score = 0; streak = 0; moves = 0; pinned = new Set();
-    `);
-    let steps = 0;
-    while (run('autoStep()')) steps++;
-    assert.equal(steps, 0, `deal ${deal} does not autosolve`);
-  }
+test('tableau takes descending cards of alternating colour only', () => {
+  setup({ cols: [[c(10, 0)]] });
+  run('free[0] = {r:9, s:1}; sel = {kind:"free", i:0}');
+  assert.equal(run('place({kind:"col", i:0})'), true);
+  assert.deepEqual(Array.from(run('cols[0].map(c => c.r)')), [10, 9]);
+
+  setup({ cols: [[c(10, 0)]] });
+  run('free[0] = {r:9, s:0}; sel = {kind:"free", i:0}');
+  assert.equal(run('place({kind:"col", i:0})'), false, 'same colour');
+
+  setup({ cols: [[c(10, 0)]] });
+  run('free[0] = {r:8, s:1}; sel = {kind:"free", i:0}');
+  assert.equal(run('place({kind:"col", i:0})'), false, 'wrong rank');
 });
 
-test('there are no free cells; cards move only between the four columns and foundations', () => {
-  setup({ cols: [[c(1, 0)]] });
-  run('sel = {kind:"col", i:0, j:0}');
+test('a single card fills a free cell; a run cannot', () => {
+  setup({ cols: [[c(9, 1), c(8, 0)]] });
+  run('selectCard("col", 0, 0)');
+  assert.deepEqual(take(), [[9, 1], [8, 0]]);
   assert.equal(run('place({kind:"free", i:0})'), false);
-  assert.equal(run('place({kind:"found", i:0})'), true);
-  assert.equal(run('found[0].length'), 1);
+
+  run('selectCard("col", 0, 1)');
+  assert.deepEqual(take(), [[8, 0]]);
+  assert.equal(run('place({kind:"free", i:0})'), true);
+  assert.equal(run('free[0].r'), 8);
+  assert.equal(run('place({kind:"free", i:0})'), false, 'cell is full');
 });
 
 test('foundations count up by suit, starting with the ace', () => {
-  setup({ cols: [[c(1, 0)], [c(1, 1)], [c(2, 0)]] });
-  run('sel = {kind:"col", i:1, j:0}; place({kind:"found", i:0})');
-  assert.equal(run('found[0].length'), 0, 'wrong suit');
+  setup({ free: [c(1, 0), null] });
+  run('sel = {kind:"free", i:0}');
+  assert.equal(run('place({kind:"found", i:0})'), true);
 
-  run('sel = {kind:"col", i:0, j:0}; place({kind:"found", i:0})');
+  run('free[0] = {r:2, s:0}; sel = {kind:"free", i:0}');
+  assert.equal(run('place({kind:"found", i:0})'), true);
+
+  run('free[0] = {r:1, s:1}; sel = {kind:"free", i:0}');
+  assert.equal(run('place({kind:"found", i:0})'), false, 'wrong suit');
+
+  run('free[0] = {r:13, s:0}; sel = {kind:"free", i:0}');
+  assert.equal(run('place({kind:"found", i:0})'), false, 'must start at the ace');
+});
+
+test('a long clean run moves as one group', () => {
+  const long = [c(9, 1), c(8, 0), c(7, 1), c(6, 0), c(5, 1), c(4, 0), c(3, 1)];
+  setup({ cols: [long, [c(10, 0)], [c(13, 0)], [c(13, 1)]] });
+  run('selectCard("col", 0, 0)');
+  assert.deepEqual(take(), long.map(x => [x.r, x.s]));
+  assert.equal(run('place({kind:"col", i:1})'), true);
+  assert.deepEqual(Array.from(run('cols[1].map(c => c.r)')), [10, 9, 8, 7, 6, 5, 4, 3]);
+  assert.equal(run('cols[0].length'), 0);
+});
+
+test('only a clean alternating run can be picked up from a column', () => {
+  setup({ cols: [[c(8, 0), c(7, 0)]] });
+  run('selectCard("col", 0, 0)');
+  assert.equal(run('sel'), null);
+  run('selectCard("col", 0, 1)');
+  assert.equal(run('sel.j'), 1);
+});
+
+test('tapping a card picks it up, and tapping the destination places it', () => {
+  setup({ cols: [[c(10, 0)], [c(9, 1)]] });
+  run('tapCard({dataset:{kind:"col", i:"1", j:"0"}})');
+  assert.deepEqual(take(), [[9, 1]]);
+
+  run('tapCard({dataset:{kind:"col", i:"0", j:"0"}})');
+  assert.equal(run('sel'), null);
+  assert.deepEqual(Array.from(run('cols[0].map(c => c.r)')), [10, 9]);
+});
+
+test('tapping a free cell and a foundation places the held card', () => {
+  setup({ cols: [[c(9, 1)]] });
+  run('tapCard({dataset:{kind:"col", i:"0", j:"0"}})');
+  run('tapSlot({dataset:{slot:"free", i:"1"}})');
+  assert.equal(run('free[1].r'), 9);
+
+  setup({ free: [c(1, 0), null] });
+  run('tapCard({dataset:{kind:"free", i:"0"}})');
+  run('tapSlot({dataset:{slot:"found", i:"0"}})');
   assert.equal(run('found[0].length'), 1);
+  assert.equal(run('free[0]'), null);
+});
 
-  run('sel = {kind:"col", i:2, j:0}; place({kind:"found", i:0})');
+test('tapping the held card again puts it back down', () => {
+  setup({ cols: [[c(9, 1)]] });
+  run('tapCard({dataset:{kind:"col", i:"0", j:"0"}})');
+  assert.equal(run('sel.j'), 0);
+  run('tapCard({dataset:{kind:"col", i:"0", j:"0"}})');
+  assert.equal(run('sel'), null);
+});
+
+test('autoplay sends cards from free cells and columns home, chaining upward', () => {
+  setup({ free: [c(1, 0), c(2, 0)], cols: [[c(3, 0)]] });
+  run('autoStep()');
+  assert.equal(run('found[0].length'), 1);
+  run('autoStep()');
   assert.equal(run('found[0].length'), 2);
+  run('autoStep()');
+  assert.equal(run('found[0].length'), 3);
+  assert.equal(run('free.every(c => c === null)'), true);
+  assert.equal(run('cols[0].length'), 0);
 });
 
 test('consecutive foundation cards score 10, 20, 30; any other move resets the streak', () => {
@@ -152,22 +251,23 @@ test('consecutive foundation cards score 10, 20, 30; any other move resets the s
   assert.equal(run('score'), 60);
 });
 
-test('autoplay cards also build the score chain', () => {
+test('moving a card into a free cell also breaks the score chain', () => {
   setup({ cols: [[c(1, 0)], [c(2, 0)]] });
-  run('autoStep()');
+  run('sel = {kind:"col", i:0, j:0}; place({kind:"found", i:0})');
+  run('sel = {kind:"col", i:1, j:0}; place({kind:"free", i:0})');
   assert.equal(run('score'), 10);
-  run('autoStep()');
-  assert.equal(run('score'), 30);
+  assert.equal(run('streak'), 0);
+  assert.equal(run('free[0].r'), 2);
 });
 
-test('undo restores the score and streak from before the move', () => {
+test('undo restores the score, streak and the free cell', () => {
   const rest = deck().filter(card => !(card.r === 1 && card.s === 0) && !(card.r === 2 && card.s === 0));
-  const cols = [[c(1, 0)], [c(2, 0)], [], []];
-  rest.forEach((card, i) => cols[2 + (i % 2)].push(card));
+  const cols = [[c(2, 0)], [], [], []];
+  rest.forEach((card, i) => cols[1 + (i % 3)].push(card));
 
-  setup({ cols });
+  setup({ cols, free: [c(1, 0), null] });
+  run('sel = {kind:"free", i:0}; place({kind:"found", i:0})');
   run('sel = {kind:"col", i:0, j:0}; place({kind:"found", i:0})');
-  run('sel = {kind:"col", i:1, j:0}; place({kind:"found", i:0})');
   assert.equal(run('score'), 30);
 
   run('undo()');
@@ -179,28 +279,30 @@ test('undo restores the score and streak from before the move', () => {
   assert.equal(run('score'), 0);
   assert.equal(run('streak'), 0);
   assert.equal(run('found[0].length'), 0);
+  assert.equal(run('free[0].r'), 1);
 });
 
-test('the score survives a reload', () => {
+test('the free cells and score survive a reload', () => {
   const rest = deck().filter(card => !(card.r === 1 && card.s === 0));
-  const cols = [[c(1, 0)], [], [], []];
-  rest.forEach((card, i) => cols[1 + (i % 3)].push(card));
+  const cols = [[], [], [], []];
+  rest.forEach((card, i) => cols[i % 4].push(card));
 
-  setup({ cols });
-  run('sel = {kind:"col", i:0, j:0}; place({kind:"found", i:0})');
+  setup({ cols, free: [c(1, 0), null] });
+  run('sel = {kind:"free", i:0}; place({kind:"found", i:0})');
   assert.equal(run('score'), 10);
 
-  run('cols = [[],[],[],[]]; found = [[],[]]; score = 0; streak = 0; moves = 0; undoStack = [];');
+  run('cols = [[],[],[],[]]; free = [null,null]; found = [[],[]]; score = 0; streak = 0; moves = 0; undoStack = [];');
   assert.equal(run('load()'), true);
   assert.equal(run('score'), 10);
   assert.equal(run('streak'), 1);
   assert.equal(run('found[0].length'), 1);
+  assert.equal(run('free[0]'), null);
 });
 
-test('the old full-deck save shape is rejected', () => {
+test('a save without the two free cells is rejected', () => {
   const cards = deck();
-  const bad = { cols: Array.from({ length: 8 }, () => []), free: [null, null, null, null], found: empty(4), moves: 0, score: 0, streak: 0 };
-  cards.forEach((card, i) => bad.cols[i % 8].push(card));
+  const bad = { cols: Array.from({ length: 4 }, () => []), found: empty(2), moves: 0, score: 0, streak: 0 };
+  cards.forEach((card, i) => bad.cols[i % 4].push(card));
   ctx.localStorage.setItem('nocell', JSON.stringify(bad));
   assert.equal(run('load()'), false);
   store.delete('nocell');

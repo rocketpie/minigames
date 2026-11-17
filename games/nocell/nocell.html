@@ -61,10 +61,10 @@
   }
   body.slow #table { --slow: 10; }
   #table.dealing { pointer-events: none; }
-  #top { display: flex; justify-content: center; gap: var(--gap); }
+  #top { display: flex; justify-content: space-between; gap: var(--gap); }
   .group { display: flex; gap: var(--gap); }
 
-  /* Wooden trays for the foundations. */
+  /* Wooden trays for the free cells and foundations. */
   .slot {
     position: relative; width: var(--cw); height: var(--ch); padding: calc(var(--cw) * .045);
     border-radius: calc(var(--cw) * .09);
@@ -221,6 +221,7 @@
 
   <div id="table">
     <div id="top">
+      <div class="group" id="frees"></div>
       <div class="group" id="founds"></div>
     </div>
     <div id="board"></div>
@@ -287,7 +288,7 @@ const PIPS = {
   10: [[30,16],[70,16],[50,27],[30,39],[70,39],[30,61],[70,61],[50,73],[30,84],[70,84]],
 };
 
-let cols, found, sel, moves, score, streak, won, dealing, dealTimer, autoTimer;
+let cols, free, found, sel, moves, score, streak, won, dealing, dealTimer, autoTimer;
 let undoStack = [];
 // Cards the player deliberately lifted off a foundation, so autoplay leaves them alone.
 let pinned = new Set();
@@ -303,10 +304,10 @@ const runOk = run => run.every((c, i) => i === 0 || alternates(run[i - 1], c));
 const fitsCol = (col, card) => !col.length || alternates(col[col.length - 1], card);
 const solved = () => found.every(p => p.length === 13);
 
-// Build a deal backwards from the two finished foundations. One clean run is kept
-// aside and spread over the tableau at the end, so no card can go home on its own.
-// Every column move leaves a card behind that can take the run back, so replaying
-// the steps backwards always solves the deal.
+// Build a deal backwards from the two finished foundations. A clean high run is
+// kept aside and spread over the tableau at the end, so every column is covered
+// and no card can go home on its own. Replaying the construction backwards is a
+// legal solution, so every deal is guaranteed solvable.
 function generateDeal(rng = Math.random) {
   const take = arr => arr[Math.floor(rng() * arr.length)];
   const board = [[], [], [], []];
@@ -316,7 +317,7 @@ function generateDeal(rng = Math.random) {
 
   // Column 0 holds a clean alternating run, one card per rank.
   let suit = rng() < .5 ? 0 : 1;
-  const coverFrom = 7 + Math.floor(rng() * 5);
+  const coverFrom = 4 + Math.floor(rng() * 2); // 4..5, plenty of cover cards
   for (let r = 13; r >= coverFrom; r--) {
     board[0].push(done[suit].pop());
     ops.push({ type: 'found', s: suit, col: 0 });
@@ -360,21 +361,24 @@ function generateDeal(rng = Math.random) {
     ops.push({ type: 'move', from, to, n: run.length });
   }
 
-  // Spread the clean run over the three body columns.
-  const targets = [1, 2, 3];
-  for (let i = targets.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [targets[i], targets[j]] = [targets[j], targets[i]];
-  }
-  let left = board[0].length;
-  for (let i = 0; i < targets.length; i++) {
-    const n = i === targets.length - 1
-      ? left
-      : 1 + Math.floor(rng() * (left - (targets.length - 1 - i)));
-    const run = board[0].splice(board[0].length - n);
-    board[targets[i]].push(...run);
-    ops.push({ type: 'move', from: 0, to: targets[i], n });
-    left -= n;
+  // Cover the three body columns one card at a time. The cover cards deliberately
+  // do not form runs, so unearthing the body takes several separate moves.
+  const body = [1, 2, 3];
+  const covered = [0, 0, 0];
+  while (board[0].length > 1) {
+    const card = board[0][board[0].length - 1];
+    const safe = body.filter(to => !board[to].length ||
+      !alternates(board[to][board[to].length - 1], card));
+    const bare = body.filter(to => covered[to - 1] < 2);
+    const safeBare = safe.filter(to => covered[to - 1] < 2);
+    const to = safeBare.length ? take(safeBare)
+      : safe.length ? take(safe)
+      : bare.length ? take(bare)
+      : take(body);
+    board[0].pop();
+    board[to].push(card);
+    covered[to - 1]++;
+    ops.push({ type: 'move', from: 0, to, n: 1 });
   }
 
   return { cols: board, ops };
@@ -383,11 +387,13 @@ function generateDeal(rng = Math.random) {
 function selectedRun() {
   if (!sel) return [];
   if (sel.kind === 'col') return cols[sel.i].slice(sel.j);
+  if (sel.kind === 'free') return free[sel.i] ? [free[sel.i]] : [];
   return found[sel.i].length ? [found[sel.i][found[sel.i].length - 1]] : [];
 }
 
 function canPlace(run, dest) {
   if (!run.length) return false;
+  if (dest.kind === 'free') return run.length === 1 && !free[dest.i];
   if (dest.kind === 'found') {
     return run.length === 1 && run[0].s === dest.i && run[0].r === found[dest.i].length + 1;
   }
@@ -399,10 +405,13 @@ function canPlace(run, dest) {
 function autoStep() {
   if (sel) return false; // never pull a card out from under the player's hand
   const goes = c => !pinned.has(id(c)) && canPlace([c], { kind: 'found', i: c.s });
-  const j = cols.findIndex(col => col.length && goes(col[col.length - 1]));
-  if (j < 0) return null;
+  const i = free.findIndex(c => c && goes(c));
+  const j = i < 0 ? cols.findIndex(col => col.length && goes(col[col.length - 1])) : -1;
+  if (i < 0 && j < 0) return null;
 
-  const c = cols[j].pop();
+  const c = i >= 0 ? free[i] : cols[j][cols[j].length - 1];
+  if (i >= 0) free[i] = null;
+  else cols[j].pop();
   found[c.s].push(c);
   score += 10 + 10 * streak;
   streak++;
@@ -410,15 +419,17 @@ function autoStep() {
   return c;
 }
 
-const snapshot = () => JSON.stringify({ cols, found, moves, score, streak, pinned: [...pinned] });
+const snapshot = () => JSON.stringify({ cols, free, found, moves, score, streak, pinned: [...pinned] });
 
 const isCard = c => c && Number.isInteger(c.r) && c.r >= 1 && c.r <= 13 &&
   Number.isInteger(c.s) && c.s >= 0 && c.s <= 1;
 
 function isSaved(s) {
   if (!s || !Array.isArray(s.cols) || s.cols.length !== 4 || !s.cols.every(Array.isArray)) return false;
+  if (!Array.isArray(s.free) || s.free.length !== 2) return false;
+  if (!s.free.every(c => c === null || isCard(c))) return false;
   if (!Array.isArray(s.found) || s.found.length !== 2 || !s.found.every(Array.isArray)) return false;
-  const cards = [...s.cols.flat(), ...s.found.flat()];
+  const cards = [...s.cols.flat(), ...s.free.filter(Boolean), ...s.found.flat()];
   return cards.length === 26 && cards.every(isCard) &&
     new Set(cards.map(c => c.s * 13 + c.r)).size === 26 &&
     Number.isInteger(s.moves) && s.moves >= 0 &&
@@ -430,7 +441,7 @@ function isSaved(s) {
 function save() {
   try {
     localStorage.setItem(KEY, JSON.stringify({
-      cols, found, moves, score, streak, won, undoStack, pinned: [...pinned],
+      cols, free, found, moves, score, streak, won, undoStack, pinned: [...pinned],
     }));
   } catch { /* storage unavailable: keep playing in memory */ }
 }
@@ -441,6 +452,7 @@ function load() {
   if (!isSaved(saved)) return false;
 
   cols = saved.cols;
+  free = saved.free;
   found = saved.found;
   moves = saved.moves;
   score = saved.score;
@@ -456,7 +468,7 @@ function load() {
 }
 
 function isPos(pos, needJ = false) {
-  return !!pos && ['col', 'found'].includes(pos.kind) &&
+  return !!pos && ['col', 'free', 'found'].includes(pos.kind) &&
     Number.isInteger(pos.i) && pos.i >= 0 && pos.i < (pos.kind === 'col' ? 4 : 2) &&
     (!needJ || pos.kind !== 'col' || (Number.isInteger(pos.j) && pos.j >= 0 && pos.j < 13));
 }
@@ -481,6 +493,7 @@ function place(dest) {
   if (undoStack.length > 300) undoStack.shift();
   const lifted = run[0];
   if (sel.kind === 'col') cols[sel.i].splice(sel.j);
+  else if (sel.kind === 'free') free[sel.i] = null;
   else found[sel.i].pop();
   if (sel.kind === 'found') pinned.add(id(lifted));
 
@@ -489,7 +502,8 @@ function place(dest) {
     score += 10 + 10 * streak;
     streak++;
   } else {
-    cols[dest.i].push(...run);
+    if (dest.kind === 'free') free[dest.i] = run[0];
+    else cols[dest.i].push(...run);
     streak = 0;
   }
 
@@ -524,6 +538,9 @@ function selectCard(kind, i, j = null) {
       return;
     }
     sel = { kind, i, j };
+  } else if (kind === 'free') {
+    if (!free[i]) return;
+    sel = { kind, i };
   } else {
     if (!found[i].length) return;
     sel = { kind, i };
@@ -561,6 +578,7 @@ function tapSlot(el) {
     if (!applyMove(sel, { kind, i })) notice("That card doesn't fit there.");
     return;
   }
+  if (kind === 'free' && free[i]) selectCard('free', i);
   if (kind === 'found' && found[i].length) selectCard('found', i);
 }
 
@@ -748,6 +766,15 @@ function draw(moved = []) {
   const held = sel ? selectedRun() : [];
   const valid = (kind, i) => !!sel && canPlace(held, { kind, i });
 
+  let frees = '';
+  for (let i = 0; i < 2; i++) {
+    const c = free[i], on = c ? '' : ` role="button" tabindex="0" data-focus="f${i}"`;
+    frees += `<div class="slot${valid('free', i) ? ' valid' : ''}" data-slot="free" data-i="${i}"
+      aria-label="Free cell ${i + 1}"${on}>
+      <div class="hole" aria-hidden="true">✦</div>${c ? cardHTML(c, 'free', i) : ''}
+    </div>`;
+  }
+
   let founds = '';
   for (let i = 0; i < 2; i++) {
     const pile = found[i], c = pile[pile.length - 1], below = pile[pile.length - 2];
@@ -769,6 +796,7 @@ function draw(moved = []) {
     </div>`;
   }
 
+  $('frees').innerHTML = frees;
   $('founds').innerHTML = founds;
   $('board').innerHTML = board;
   hideFlying();
@@ -817,6 +845,7 @@ function newGame() {
   clearTimeout(autoTimer);
   landAll();
   cols = generateDeal().cols;
+  free = [null, null];
   found = [[], []];
   sel = null;
   moves = 0;
@@ -842,7 +871,7 @@ function undo() {
   try { state = JSON.parse(saved); } catch { return; }
   if (!isSaved(state)) return;
   undoStack.pop();
-  ({ cols, found, moves, score, streak } = state);
+  ({ cols, free, found, moves, score, streak } = state);
   if (Array.isArray(state.pinned)) pinned = new Set(state.pinned);
   sel = null;
   won = solved();
